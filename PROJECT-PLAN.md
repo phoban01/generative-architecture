@@ -1,302 +1,225 @@
-# Project plan: generated architecture and behavioural verification
+# Project plan: generated architecture for Kubernetes systems
 
-## Purpose
+Status: draft 2 (2026-10-13). Supersedes the pilot-oriented plan kept in git history.
 
-Build a reusable Go library and CLI that turns a collection of existing controller repositories into a maintained system architecture and an executable behavioural model. Engineers should express constraints against that generated model, explore it with Quint, and replay useful executions against the actual controllers.
+## 1. Product definition
 
-The architecture must follow implementation changes. A second, manually maintained description of each controller's flow would defeat the purpose. Human input remains appropriate for system selection, domain bounds, requirements, unresolved business semantics and abstractions of external systems.
+A Go library and CLI that **generates architecture artifacts for a system powered by Kubernetes**. The system is a set of controller-runtime projects, owned and upstream, that interact only through the Kubernetes API. The toolchain:
 
-This plan focuses on work, dependencies, deliverables and priorities.
+1. **Captures** controllers, resources, watches, client effects and reconcile behaviour from Go source and Kubernetes schemas into one shared, versioned intermediate representation (IR).
+2. **Composes** those projects into a system model, joining them by resource identity, watches and references.
+3. **Generates** executable models (Quint) and diagrams (LikeC4) from the IR.
+4. **Checks** independently authored invariants, structural contracts and behavioural contracts against the generated model.
+5. **Replays** model executions and counterexamples against the real controllers for conformance evidence.
+6. **Reports** support coverage, evidence and architecture diffs in CI.
 
-## What “over the line” means
+The architecture follows the implementation. Human input is limited to: selecting projects and bounds, writing constraints and contracts, describing systems that cannot be extracted (boundary models), and resolving ambiguity. Adopting the toolchain must not require restructuring a controller.
 
-The first usable release should support a real end-to-end slice of the machine-vendor system from a central architecture repository:
+### Non-goals
 
-1. Select pinned versions of MAC, the claim/lease controller and a CAPI infrastructure provider.
-2. Discover their resources, selected processes, client operations and watch registrations.
-3. Generate the connections between those processes, including object-key mappings.
-4. Compose them with a versioned controller-runtime model and explicit upstream abstractions.
-5. Generate Quint and LikeC4 from the same intermediate representation.
-6. Evaluate independently authored constraints and replay counterexamples or sampled executions against Go.
-7. Regenerate on source changes and present architecture changes, unsupported constructs and verification evidence in CI.
+- Proving arbitrary Go programs correct. A documented, fail-closed Go and controller-runtime subset is extracted; everything else is reported as unsupported or summarized with provenance.
+- Replacing Kubernetes testing. envtest and clusters supply evidence for behaviour the model cannot establish.
+- A domain-specific product. No business domain appears in the library, CLI or reference system.
 
-The pilot should work with the existing organisation of the production code. Subsystems may span packages and controllers; adopting the tool must not require an architectural refactor.
+## 2. Principles
 
-A first release will cover a documented Go/controller-runtime subset. Supporting any repository without selection, bounds or semantic summaries is a longer-term aspiration, not a credible first-release promise.
+| Principle | Meaning |
+| --- | --- |
+| Generated, not described | Relationships and behaviour come from code and schemas. A hand-maintained second description of a controller is a defect. |
+| Independent constraints | Invariants, contracts and assumptions are authored separately and never rewritten by extraction. |
+| Evidence kinds | Every fact in the IR is `extracted`, `observed`, `declared`, `assumed` or `unresolved`. A passing run never upgrades a declaration to an extraction. |
+| Fail closed | Unsupported syntax, unknown resources, ambiguous joins and version mismatches produce precise diagnostics, never silent omissions. |
+| Bounded and honest | Finite domains and sampled exploration are stated in every report. No report claims exhaustive verification or liveness without a model-checking run and explicit fairness. |
+| Pinned inputs | Repositories, modules, CRDs, discovery snapshots, tool versions and generator versions are pinned and hashed into receipts. |
 
-## System assumptions to retain
+## 3. Users and workflows
 
-MAC watches InfraMachines, determines whether a provider satisfies its machine-assignment contract, creates/reuses a MachineClaim, waits for fulfillment, then publishes the assigned machine ID to InfraMachine status. MachineClaim events map back to the associated InfraMachine's reconcile key.
+| User | Workflow |
+| --- | --- |
+| Platform architect | `arch init` a system repository; pin projects; run `arch extract`, `arch generate`, `arch render`; review diagrams and the support report; author constraints and boundary models. |
+| Controller author | Add minimal markers only where discovery is ambiguous; run `arch support` locally; see which constructs are unsupported before CI does. |
+| CI | `arch extract → generate → check → replay → diff`; publish diagrams, evidence receipts and the semantic architecture diff as artifacts; fail on constraint violations or invalidated evidence. |
 
-The claim/lease subsystem assigns physical machines. The infrastructure controller receives a machine ID and makes the provisioning call; it does not interpret lease semantics. MAC clears or changes the assignment when a lease is revoked. There is currently no independent provisioning-time lease check. The model must retain that fact and explore the resulting races, rather than assume an unimplemented fencing guarantee.
+## 4. Requirements index
 
-The reserve pool is a dedicated Kubernetes cluster. The wider system includes reservations, priority preemption, replacement after failure and diagnostics/repair. These are later domain slices, built on the same generation pipeline.
+Each requirement has an ID, an acceptance test and a status measured against the current code. Issues on GitHub reference these IDs. Status values: **Met**, **Partial**, **Missing**.
 
-## Current position
+### ARCH: capture architecture from code
 
-| Area | Present in the prototype | Main gap |
-| --- | --- | --- |
-| Model core | Typed state/actions, CEL evaluation, Quint generation, trace replay | One shared representation for discovery, behaviour, runtime and diagrams |
-| Go extraction | Restricted branches, assignments, returns and explicit subreconciler composition | More robust symbol/data-flow analysis and less example-specific mapping |
-| Contracts | Structural declarations on owned types; selectors for upstream types | Joining behavioural interactions automatically across real projects |
-| Watches | Selected `For`/`Watches`, predicates, reference-field mapper, explicit unstructured GVKs | General runtime registration discovery, additional mapper patterns and composition |
-| Dynamic clients | Selected GVR-based access extraction; unstructured objects; observed Get/Create/Update/UpdateStatus | Discovery/CRD ingestion, additional operations and general behaviour lowering |
-| Runtime | Real workers/FIFO queues, multiple controllers/keys/workers, controlled retries and cache fixtures | A fully integrated generated model of real controller setup and informer behaviour |
-| Composition | Versioned ports, shared-state bindings, unique-provider automatic linking | Deriving those ports and joins from the discovered implementation |
-| Conformance | Saved/fresh traces, independent observation, source and adapter mutations | More generated adapters and API-server-backed evidence |
-| Packaging | Public Go packages, separate-module consumer, KRM documents and examples | Stable APIs/module path, one CLI workflow and CI integration |
+| ID | Requirement | Acceptance test | Status |
+| --- | --- | --- | --- |
+| ARCH-1 | Discover reconcilers, setup functions and owned API types from a Go module using type information, with no per-controller Go integration code. | `arch extract` on `examples/refsystem` lists every controller without `+arch:controller` markers. | Partial. `pkg/sourcegen` uses `go/packages` but requires markers; `pkg/goflow` matches statements by source text. |
+| ARCH-2 | Build a resource catalog (GVK, GVR, scope, served versions) from Scheme registrations, CRD manifests and discovery snapshots. Plural names are never guessed. | Catalog for the reference system is loaded from its CRD YAML with no hand-written bindings. | Partial. `KubernetesResourceCatalog` binds expressions by hand. |
+| ARCH-3 | Represent cluster, GVK, namespace/name and UID as distinct identity parts; make served-version conversion explicit. | Two objects with the same GVK and name in different clusters are distinct IR objects. | Missing. |
+| ARCH-4 | Extract watch registrations: `For`, `Owns`, `Watches`, `WatchesRawSource`, `Named`, `WithOptions`, `WithEventFilter`, standard handlers and predicates including `And`/`Or`/`Not`. Unsupported forms produce a `file:line` diagnostic. | Reference-system setup functions extract with zero diagnostics; a custom `predicate.Funcs` yields one located diagnostic. | Partial. `pkg/watchgen` supports `For`, `Watches` with a local map func and two predicates. |
+| ARCH-5 | Extract client effects for typed, unstructured and dynamic clients: Get, List, Create, Update, Patch, Delete, DeleteAllOf, Apply, Status and subresources, with options and read consistency. | Every client call in the reference system maps to an IR effect with operation, resource, consistency and options. | Partial. Observer supports Get, Update, status.Update (typed) plus Create (dynamic). |
+| ARCH-6 | Extract reconcile control flow: branches, early returns, error idioms (`IsNotFound`, `IsConflict`), `switch`, bounded iteration, helper calls resolved by symbol, inlined subreconcilers. | Reference-system reconcilers extract with no statement-text mapping callbacks. | Partial. Branches, assignments and returns only; calls matched by text. |
+| ARCH-7 | Ship a built-in effect summary library for the controller-runtime and client-go client surface. Business summaries are exceptional, pinned to a source hash and listed in the support report. | `examples/configmirror/system.yaml` behaviour is generated from the summary library, not hand-written. | Missing. |
+| ARCH-8 | One shared, versioned IR with stable IDs, source locations, provenance and evidence kind for every fact. All frontends and generators use it. | No generator reads frontend-specific structs; the IR schema has a version and migration policy. | Missing. Five ad hoc result types exist. |
+| ARCH-9 | Model controller-runtime scheduling per pinned version: FIFO and priority queues, cache delivery, deduplication, dirty keys, retries, `RequeueAfter`, startup sync and deletion. | Both queue profiles replay against the native queue; a controller using the default priority queue is modelled without configuration. | Partial. FIFO only; no startup or deletion events. |
+| ARCH-10 | Compose projects into a system by deriving ports and joins from reads, writes, watches and references, cluster-aware. Ambiguous joins require one explicit binding. | Reference-system projects compose from a `Project` document with no hand-written port list. | Partial. Ports are declared; auto-link joins unique providers. |
+| ARCH-11 | Generation is deterministic and incremental; a semantic diff between two IRs reports added, removed and changed controllers, watches, effects and assumptions. | `arch diff` on two commits prints the changed watch. | Partial. Outputs are deterministic; no diff. |
 
-The dynamic-client slice has been integrated into the walkthrough and generated architecture. Its baseline checks include the full repository verification, targeted race tests and 40 fresh Quint traces replayed against Go. These are bounded conformance results, not an exhaustive system proof.
+### VIS: visualize the architecture
 
-The assignment example still contains handwritten operation summaries, finite resource bindings, event/queue composition and fixture projection. Dynamic access extraction currently produces dependency facts and checks their association with declared effects; it does not derive every branch inside the API helper. These are the principal seams to generalize, not proof that the entire system is already generated.
+| ID | Requirement | Acceptance test | Status |
+| --- | --- | --- | --- |
+| VIS-1 | Generate LikeC4 from the IR: system context, component, resource/watch, process, runtime and execution (counterexample) views. | `arch generate` writes one LikeC4 workspace covering all six views for the reference system. | Partial. Five separate emitters with separate specifications. |
+| VIS-2 | One command renders and serves every view of a project. | `arch render && arch serve` shows all views. | Partial. `arch render` covers one example. |
+| VIS-3 | Presentation hints (titles, grouping, layout) are authored in KRM and never add or remove relationships. | A hint referencing an unknown element fails validation; hints change layout only. | Missing. |
+| VIS-4 | Every diagram element and relationship carries its evidence kind and a source link. | Hovering any edge shows `extracted`/`declared`/`assumed` and `file:line`. | Partial. |
 
-## Intended architecture
+### CON: constraints, invariants and contracts
 
-The central architecture repository selects inputs and owns requirements. The library interprets implementation facts and composes models. Domain repositories retain their existing code layout.
+| ID | Requirement | Acceptance test | Status |
+| --- | --- | --- | --- |
+| CON-1 | Constraints are authored independently as KRM/CEL and never rewritten by extraction. | Mutating source changes the model, not the constraint files. | Met. |
+| CON-2 | Safety invariants are expressed over composed system state and events using stable identities, not process node indices. | A constraint referencing an effect survives a source edit that renumbers nodes. | Partial. Events are `node<N>_<kind>`. |
+| CON-3 | Structural contracts (`InteractionContract`) are checked against Go types in owned or upstream modules via markers or external selectors. | An upstream type from the module cache is checked without annotation. | Met. |
+| CON-4 | Behavioural contracts are versioned ports; unique providers join automatically. | Two providers of one contract fail until bound explicitly. | Met. |
+| CON-5 | The CEL subset is documented and extended (`exists`, `has`, lists, nested records) only with a sound Quint translation and a differential check. | Each new construct has a CEL-versus-Quint differential test. | Partial. |
+| CON-6 | Temporal properties (eventually, leads-to) are supported with explicit fairness assumptions, or the report states they are unchecked. | A liveness property either runs under `quint verify` with stated fairness or is reported as unchecked. | Missing. |
+| CON-7 | Counterexamples are minimized, source-linked and replayed against Go. | A violation report lists the shortest trace found, each step's source location and the replay result. | Partial. |
+| CON-8 | The mutation suite is data: every constraint has at least one mutation it detects. | `arch check --mutations` reports a detection matrix. | Partial. Mutations live in example tests. |
+| CON-9 | Every generated model is checked by evaluating the original CEL against Quint traces. | Differential check runs for any `TransitionModel`, not one example. | Partial. |
+
+### ADOPT: adoption by any controller-runtime project
+
+| ID | Requirement | Acceptance test | Status |
+| --- | --- | --- | --- |
+| ADOPT-1 | The supported subset needs zero per-project Go integration code. Inputs are markers, one `Project` document, a catalog source and constraints. | The reference system has no `example.go`, `adapter.go` or `watches.go` equivalents. | Missing. |
+| ADOPT-2 | The marker set is minimal; kubebuilder markers are reused; markers are needed only for ambiguity. | `+kubebuilder:object:root=true` types are resources without `+arch:resource`. | Partial. |
+| ADOPT-3 | Replay adapters (client instrumentation, key routing, projection, boundary gating) are generated from the IR and catalog. | `examples/assignment` runs with its handwritten adapter deleted. | Missing. |
+| ADOPT-4 | A support report lists included, summarized and unsupported constructs with locations. | `arch support` output for the reference system is empty of unsupported items. | Missing. |
+| ADOPT-5 | One CLI: `init`, `extract`, `generate`, `render`, `serve`, `check`, `replay`, `diff`, `support`. | `arch` imports nothing under `examples/`. | Missing. |
+| ADOPT-6 | The library is embeddable and published under a stable module path with a compatibility policy. | `go get github.com/phoban01/generative-architecture@v0.1.0` works. | Partial. |
+| ADOPT-7 | External tools are version ranges, not exact pins. | Quint 0.33.x and later patch releases are accepted. | Missing. |
+| ADOPT-8 | Two execution environments: the fast fake harness and envtest. | The envtest job runs when `KUBEBUILDER_ASSETS` is set and is skipped otherwise. | Partial. |
+| ADOPT-9 | A neutral multi-controller reference system is exercised end to end by the CLI; domain examples become regression fixtures. | `examples/refsystem` is the walkthrough in README. | Missing. |
+
+### EXT: external and upstream projects
+
+| ID | Requirement | Acceptance test | Status |
+| --- | --- | --- | --- |
+| EXT-1 | A `BoundaryModel` document describes an unmodified upstream project: pinned version, contracts, assumptions with evidence kind, and a conformance hook. | A boundary model with an `assumed` fact appears in diagrams as assumed. | Missing. |
+| EXT-2 | Source in dependency modules can be selected from the module cache without annotations. | A selector for a type in `k8s.io/api` resolves and hashes its source. | Partial. |
+| EXT-3 | Cluster API: provider contracts ship as `InteractionContract`s; infrastructure and bootstrap providers extract through the standard frontends; the multi-cluster cache is a boundary. | The InfrastructureMachine contract checks a provider type from the module cache. | Missing. |
+| EXT-4 | Flux: source, kustomize and helm controllers have boundary models; server-side apply and patch effects, `interval` and `dependsOn` are modelled. | A system containing a Flux `Kustomization` composes with an owned controller that watches its outputs. | Missing. |
+| EXT-5 | No implicit fetching; every input is pinned and receipted. | Receipts list every file and module hash used. | Met. |
+
+### EVID: evidence and CI
+
+| ID | Requirement | Acceptance test | Status |
+| --- | --- | --- | --- |
+| EVID-1 | Evidence receipts are immutable and invalidated when any input changes. | Editing a watched file fails replay until regenerated. | Met. |
+| EVID-2 | Reports distinguish safety violations, conformance mismatches, unsupported constructs and tool failures. | Each failure has a category field. | Partial. |
+| EVID-3 | Inventory mode reports unresolved facts; verification mode refuses incomplete semantics for the selected scope. | `arch check --strict` fails on an `unresolved` fact in scope. | Missing. |
+| EVID-4 | A CI template runs the pipeline and publishes diagrams, receipts and the diff. | The template runs green on the reference system. | Missing. |
+
+## 5. Target architecture
 
 ```text
-Pinned repositories, Go modules, CRDs, deployment configuration
-                          |
-              Source and resource discovery
-                          |
-       Typed architecture/behaviour representation
-                /                         \
-     Versioned semantic summaries      Independent constraints
-                \                         /
-                  Composed system model
-                    /              \
-             LikeC4 views        Quint exploration
-                                      |
-                            Execution / counterexample
-                                      |
-                            Actual-controller replay
-                                      |
-                         Evidence, source links and CI diff
+Project document (KRM)         CRDs / discovery / Scheme        Pinned modules
+        |                               |                            |
+        +-------------- Frontends: sourcegen, watchgen, effectgen, flowgen --------+
+                                        |
+                             Shared IR (pkg/ir) + provenance + evidence kinds
+                                        |
+                 +----------------------+----------------------+
+                 |                      |                      |
+          Composition            Summary library         Boundary models
+      (ports, joins, clusters)  (client semantics)      (upstream, assumed)
+                 |                      |                      |
+                 +----------------------+----------------------+
+                                        |
+                              System model (TransitionModel)
+                            /            |              \
+                      LikeC4          Quint          Generated adapters
+                    (6 views)    (sample / verify)   (instrument, route, project)
+                                        |                     |
+                                 Counterexamples  ---->  Go replay (fake / envtest)
+                                        |
+                        Reports: support, evidence, diff, categories
 ```
 
-The representation should distinguish facts extracted from source, facts observed in an execution, declared summaries/assumptions, and unresolved behaviour. A successful sample run must not turn a declared assumption into an extracted fact.
+Package map (target):
 
-## Phase 0 — Consolidate the prototype
-
-Make the existing work a clear starting point before extending the extraction surface.
-
-- Establish the MAC assignment walkthrough as the main example. Keep the larger publication/runtime examples as focused references and regression fixtures.
-- Retain the newly integrated dynamic-client example, generated artifacts and verification evidence as part of the baseline. Keep the supported API operations explicit.
-- Consolidate generation, diagram rendering, fresh exploration and saved-trace replay into one CLI workflow. Today `walkthrough`, `arch`, `make generate` and the rendered site cover different slices.
-- Produce one coverage report showing which source selections and runtime behaviours are included, summarized or unsupported.
-- Preserve a baseline of meaningful mutations: missing watch, wrong key, filtered status update, wrong GVR/GVK, wrong publication ID and stale assignment.
-- Record the current boundaries: fake APIs, controlled informer delivery, finite object domains and sampled exploration.
-
-**Deliverables:** coherent walkthrough and commands, current evidence, support matrix, baseline mutation suite and a short record of architectural decisions.
-
-## Phase 1 — Establish the shared representation and resource catalog
-
-This is the foundation for automatic composition. Extend the existing model types rather than creating another unrelated model format.
-
-### Resource and object identity
-
-Represent cluster identity, API group/version/kind, group/version/resource, namespace scope and object identity separately. Names alone are insufficient across clusters or object deletion/recreation. Include UID and resource-version abstractions where those affect behaviour.
-
-Management-cluster CRs, customer-cluster Nodes and reserve-cluster Nodes must remain distinct even when they share a GVK or a name. Model API version conversion explicitly when joining different served versions.
-
-### Resource catalog
-
-Combine information from Go Scheme registrations, CRD schemas and captured API discovery. Use explicit GVR/GVK mappings and resource scope; do not derive plural resource names by guessing from a kind.
-
-For dynamic clients, resolve resource expressions to a finite set of catalog entries. Retain the selection expression and its provenance. Discovery-dependent choices that cannot be resolved statically should become bounded model inputs or remain visibly unresolved.
-
-### Common records
-
-Define reusable records for controllers, processes, effects, watches, predicates, event-to-key mappings, object references, contract implementations, runtime profiles and constraints. Give them stable IDs and source locations.
-
-Store effect semantics separately from source identity. A Get call establishes a read dependency; its cache consistency, possible outcomes and state projection require additional semantics.
-
-### Provenance
-
-Track repository revisions, module versions, selected source hashes, CRD/discovery snapshots, configuration, summary versions, generator versions and model bounds. Propagate these into generated diagrams and evidence receipts.
-
-**Deliverables:** shared versioned representation, catalog loaders, provenance records and schema migration policy.
-
-**Dependency:** Phase 0. Later phases should consume this representation rather than inventing new joins.
-
-## Phase 2 — Expand source discovery and behavioural extraction
-
-Replace fragile example-specific syntax matching with reusable analysis, while retaining a clearly bounded language subset.
-
-### Controller and process discovery
-
-Use `go/packages` and type information to identify manager setup, reconciler implementations, resource schemas, dependencies and selected subreconcilers. Resolve imported aliases, helper functions and constructor-injected clients by symbol identity.
-
-Use small annotations or external selectors for ambiguous entrypoints and contract declarations. Do not require annotations that repeat every API call, watch or branch already visible in Go.
-
-### Behaviour analysis
-
-Use typed control-flow and, where useful, SSA/data-flow analysis to track conditions, return values, assignments, error propagation, object snapshots and object aliases across supported helper calls.
-
-Make subreconcilers first-class processes. Preserve their inputs, retained snapshots, effects, errors and continuation policy when composed into a parent controller. API calls inside a helper must remain observable interleaving points.
-
-Handle ordinary controller patterns incrementally: early returns, not-found handling, explicit conflict retries, finite iteration over selected resources and status updates. Unsupported reflection, unrestricted loops, indirect calls and concurrency must produce a precise diagnostic or require a reviewed summary.
-
-### Client effects
-
-Use a common effect representation for typed controller-runtime clients, unstructured controller-runtime clients and `dynamic.Interface`. Extend beyond the current operations according to the pilot's actual usage: List/selectors, Patch, Delete/finalizers, Apply and relevant subresources.
-
-Include request options, patch contents, field ownership and status/spec distinctions in semantics where needed. Missing fields, wrong JSON types and schema changes are particularly important for unstructured access.
-
-Reuse summaries for Kubernetes/library primitives. Business helper summaries should be exceptional, source-bound and visible in the coverage report. Add an independent check when a summary is claimed to match a real helper.
-
-**Deliverables:** reusable source frontends, subreconciler call graph, operation summaries, source-linked diagnostics and a versioned support matrix.
-
-**Dependency:** shared identities and representation from Phase 1. Start with constructs present in the real MAC slice rather than broad language coverage.
-
-## Phase 3 — Generate watch and runtime connections
-
-Unify watch discovery with the existing scheduler model so a resource write leads to the appropriate future reconciliation without hand-authored queue transitions for each example.
-
-### Registration and key routing
-
-Support the pilot's `For`, `Owns`, `Watches` and selected source registrations. Extract per-watch/global predicates, owner-reference semantics, explicit reference fields, indexed lookups and bounded fan-out to reconcile keys.
-
-Include old and new objects for update mappings. References can change, causing both old and new target keys to need reconciliation. Preserve namespace, cluster and UID distinctions where relevant.
-
-For runtime-selected resource types, instantiate watch rules from the bounded resource catalog. Analyze supported registration loops and conditional setup, retaining their conditions. A dynamic client alone does not imply that runtime watch registration has been discovered.
-
-Add optional instrumented manager/setup execution to capture registrations and compare them with static extraction. Runtime capture supplies evidence for the configurations executed; it cannot establish that all possible registrations were observed.
-
-### Runtime semantics
-
-Version runtime profiles against controller-runtime/client-go. Compose cache snapshots and delivery, pending events, predicate evaluation, queue deduplication, dirty/processing keys, worker invocation, errors, requeue delays and rate limiting.
-
-Add startup/cache-sync, deletion/tombstone and restart/relist behaviour in the order required by the pilot. Do not force the existing FIFO model onto deployments using a different queue policy.
-
-Keep environment assumptions explicit: delivery fairness, scheduler fairness, watch interruptions and retry limits affect eventual-progress claims. Safety checking can proceed with a weaker set of assumptions than liveness checking.
-
-**Deliverables:** generated event-to-key graph, reusable runtime composition, registration comparison and profiles for the pinned runtime versions.
-
-**Dependencies:** Phases 1 and 2; existing queue/worker work is reusable.
-
-## Phase 4 — Compose projects and contracts automatically
-
-Make the central architecture repository assemble the model from implementation-derived identities and interactions.
-
-- Pin project revisions, Go module replacements/build tags, CRDs, deployment configuration and selected controllers in KRM input documents.
-- Generate resource ports and data dependencies from discovered reads, writes, watches and reference mappings.
-- Match contract implementations using structural declarations or external schemas/selectors. Retain the actual code's capability/discovery checks as behaviour.
-- Join compatible ports using resource identity, cluster context, object-key relations, contract versions and configuration. Two components mentioning the same kind is only a candidate interaction.
-- Automatically connect unambiguous relationships. Surface ambiguous providers and require a small explicit binding for those cases.
-- Preserve private snapshots, resource ownership and effect ordering. Avoid accidentally aliasing a cached observation to current API state.
-- Describe external systems through versioned boundary models and independently recorded assumptions. Do not silently substitute desired behaviour for unavailable implementation.
-
-For upstream CAPI, begin with the chosen infrastructure provider and the assignment/provisioning boundary. Prefer source extraction where feasible and observable boundary conformance elsewhere. Use a controlled test checkout or injectable public dependencies when upstream internals are inaccessible; avoid requiring production forks solely for architecture annotations.
-
-For cert-manager, initially include the relevant resources and controller boundary. Extract or summarize certificate behaviour only if it affects a property being investigated. The architecture inventory can include a component before its complete behavioural model exists.
-
-**Deliverables:** multi-project system loader, generated ports/bindings, resolution diagnostics and pinned upstream boundary packages.
-
-**Dependencies:** resource catalog, source effects and watch/runtime connections. This phase removes the central example-specific composition code.
-
-## Phase 5 — Strengthen model-based testing against actual controllers
-
-Move from useful fake-based conformance to a repeatable testing workflow for real implementations.
-
-### Reusable adapter generation
-
-Generate supported client instrumentation, key routing and projection scaffolding from the common representation and resource schemas. Supply domain-specific observations only where they cannot be derived reliably.
-
-Keep the implementation independent of the expected trace state. The scheduler controls permitted interleavings and environment changes; it must not prescribe branch outcomes or fill API objects with the model's expected result.
-
-Capture API requests/responses, snapshots, return values and queue behaviour. Make the distinction between control-flow steps and observable effects explicit, including allowed stuttering between observations.
-
-### Two execution environments
-
-Keep the fast controlled worker/fake-API harness for schedule exploration and mutation tests. Add envtest coverage for real CRD validation, status subresources, resource versions, conflicts, finalizers and informer behaviour relevant to the pilot.
-
-Use a fuller cluster test only for behaviours envtest does not provide, such as external controllers or cluster lifecycle interactions. Treat each environment's limits as part of its evidence.
-
-### Exploration and failure reporting
-
-Provide deterministic regressions, seeded Quint sampling and bounded exhaustive/model-checking workflows where tractable. Control state growth through subsystem slicing, finite identities, domain abstraction and process composition.
-
-Minimize counterexamples and link each step to source and an observed effect. Preserve the exact source/runtime/profile configuration needed to reproduce a failure. Revalidate minimized executions against Go.
-
-Maintain deliberate mutations across extraction, composition and implementation so a passing test is evidence that relevant disagreements can be found. Keep safety violations, conformance mismatches, unsupported behaviour and tool failures distinct in reports.
-
-**Deliverables:** reusable adapter generation, envtest harness, reproducible counterexamples and layered evidence reports.
-
-**Dependencies:** Phases 2–4. API-backed probes can begin earlier to inform the runtime summaries.
-
-## Phase 6 — Integrate the real machine-vendor pilot
-
-Use a narrow real slice to challenge the abstractions before expanding the system model.
-
-### First slice: assignment and provisioning
-
-Map the actual MAC setup/subreconcilers, machine-assignment contract discovery, claim/lease fulfillment, provider status publication and provisioning call. Add the relevant customer and reserve-cluster context.
-
-Replace the miniature's `fulfillClaim` environment action with the real claim subsystem process. Replace fixture contract annotations with the actual discovery mechanism. Retain temporary summaries only with explicit provenance and scope.
-
-Investigate constraints such as incompatible resources never receiving assignments, at most one effective claim per consumer, publication matching the observed fulfilled claim, correct key routing, and no incompatible simultaneous ownership of a physical machine. Define retry, stale-cache and deletion scenarios alongside normal allocation.
-
-Treat “provisioning cannot proceed after lease revocation” as a question to investigate under the current design. If the model exposes a race, record it and the relevant assumptions. Changing the production protocol is a separate decision; the architecture work does not require a refactor to conceal or fix every finding.
-
-### Subsequent slices
-
-Add priority preemption and release/handoff, failure replacement, diagnostics/repair and return to reserve, then reservation/capacity guarantees. Each slice should reuse the established primitives and compose with the assignment model.
-
-Compare the discovered architecture with the team's understanding to find missing relationships, implicit contracts and scattered responsibilities. Preserve those findings as source-linked architecture information.
-
-**Deliverables:** a useful central architecture repository for the real system, documented findings and a prioritized queue of additional domain slices.
-
-**Dependencies:** Phases 1–5. Reading the real repositories should start early; the full pilot integration comes after the shared pipeline is usable.
-
-## Phase 7 — Make generation part of normal development
-
-Package the prototype into a tool teams can use without maintaining a custom demo runner.
-
-- Choose and publish the Go module path; document the extension interfaces and compatibility policy.
-- Provide one CLI with project selection, extraction, composition, diagram generation, checking and replay. Label proposed command names before they are implemented.
-- Add a small library API for embedding generation in existing tooling; avoid requiring an npm application. Quint and LikeC4 can remain external pinned tools.
-- Generate LikeC4 context/component, process, resource/watch and execution views from the common representation. Allow stable presentation hints without duplicating behavioural connections manually.
-- Run incremental generation on source/configuration changes. Produce a semantic architecture diff with source links and distinguish changes to implementation, assumptions and constraints.
-- Publish immutable evidence and diagrams as CI artifacts. Invalidate evidence when relevant code, runtime versions, schemas, configuration, summaries or bounds change.
-- Keep an inventory mode that reports unresolved parts and a verification mode that refuses incomplete semantics for the selected verification scope.
-- Document adoption for both owned repositories and unmodified upstream dependencies, using the machine-vendor pilot plus a second unrelated controller as examples.
-
-**Deliverables:** versioned library/CLI release, CI template, generated architecture review and concise adoption documentation.
-
-**Dependencies:** the pilot should inform the public interfaces; publishing too early would freeze the current example-specific seams.
-
-## Sequence and workstreams
-
-| Workstream | Start with | Then |
-| --- | --- | --- |
-| Core representation | Phase 0 consolidation and Phase 1 identities/catalog | Composition, provenance and architecture diffs |
-| Source analysis | Real-repository inventory and selected Go processes | Typed/dynamic effects, watch mappings and subreconcilers |
-| Runtime and conformance | Existing queue harness plus targeted API-server probes | Generated runtime composition, adapters and replay |
-| System integration | MAC/claim/provider dependency map | Real assignment slice, upstream boundaries and domain expansion |
-
-The main dependency chain is **shared identities → extracted effects/watches → generated joins → actual-controller conformance → pilot-informed release**. Workstreams can overlap, but expanding the language frontend without a real-system inventory risks supporting the wrong patterns.
-
-Roles are responsibilities, not staffing assumptions. One person may cover several. Scheduling estimates should follow the repository inventory and the first API-backed integration spike; no calendar commitment is implied by this plan.
-
-## Immediate next work
-
-1. Inventory the actual MAC, claim/lease and provider repositories: setup patterns, subreconcilers, client forms, schemas, configuration and upstream versions.
-2. Write the shared resource/object identity and provenance design, including management/customer/reserve cluster boundaries.
-3. Import CRD/discovery data into the resource catalog so GVR/GVK bindings stop being manually repeated for each provider.
-4. Move the miniature's handwritten watch/queue composition into reusable library code driven by the common representation.
-5. Add one real API-server-backed assignment experiment to expose which existing summaries need adjustment.
-6. Use the findings to choose the first source-analysis extensions and consolidate the CLI entrypoints.
-
-## Main risks and how the plan addresses them
-
-| Risk | Approach |
+| Package | Responsibility |
 | --- | --- |
-| The generated model merely repeats its own assumptions | Separate requirements and observations; track summary provenance; use implementation/source mutations and API-backed checks |
-| Source extraction silently misses behaviour | Typed analysis, precise unsupported diagnostics, scoped coverage reports and strict verification mode |
-| Dynamic resource discovery makes the model unbounded | CRD/discovery catalogs, explicit finite selections and visible unresolved resource choices |
-| Models become too large to explore usefully | Slice by property and subsystem; bound identities; reuse abstractions and compose incrementally |
-| Runtime summaries drift from dependencies | Version profiles and run conformance against the pinned controller-runtime/client-go versions |
-| Upstream internals resist instrumentation | Observable boundary models, injected public dependencies and controlled test checkouts |
-| The architecture becomes another manual specification | Generate relationships and behaviour from code; reserve handwritten input for requirements, bounds and unresolved semantics |
-| Teams cannot tell which example or artifact is current | One workflow, source-linked artifacts, immutable receipts and a single maintained walkthrough |
+| `pkg/ir` | Identity, records, provenance, evidence kinds, schema version |
+| `pkg/catalog` | Resource catalog from CRDs, discovery and Scheme |
+| `pkg/sourcegen`, `pkg/watchgen`, `pkg/effectgen`, `pkg/flowgen` | Typed frontends emitting IR (`goflow` and `dynamicgen` are folded in) |
+| `pkg/summaries` | Built-in effect semantics |
+| `pkg/composition`, `pkg/boundary` | System composition and upstream boundary models |
+| `pkg/model`, `pkg/expr`, `pkg/process` | TransitionModel, CEL subset, process lowering |
+| `pkg/controllerruntime`, `pkg/adaptergen`, `pkg/conformance` | Runtime profiles, generated adapters, replay |
+| `pkg/likec4`, `pkg/quint`, `pkg/report` | Generators and reports |
+| `cmd/arch` | The CLI; `cmd/machinevendor` keeps the legacy demos |
+| `examples/refsystem` | Neutral reference system: three owned controllers and one Flux boundary |
+
+## 6. Milestones and exit criteria
+
+Milestones are ordered by dependency. Each has an exit criterion that is a test in the repository, and each GitHub issue carries its milestone and requirement IDs.
+
+| Milestone | Scope | Exit criterion | Requirements |
+| --- | --- | --- | --- |
+| **M0 Foundations** | Public repo, CI, generic CLI namespace, structured diagnostics, toolchain ranges, ADRs, reference-system skeleton | CI green on GitHub; `cmd/arch` imports nothing from `examples/`; `arch support` runs on `examples/refsystem` | ADOPT-5, ADOPT-7, EVID-2 |
+| **M1 Shared IR and catalog** | `pkg/ir`, `pkg/catalog`, provenance, evidence kinds; existing frontends emit IR | All frontends return IR records; the reference-system catalog loads from CRD YAML | ARCH-2, ARCH-3, ARCH-8 |
+| **M2 Typed frontends and summaries** | Type-resolved control flow, effects and watches; summary library; marker reduction | ConfigMirror's model is generated; reference-system reconcilers extract with no statement-text callbacks | ARCH-1, ARCH-4, ARCH-5, ARCH-6, ARCH-7, ADOPT-2, EXT-2 |
+| **M3 Watch and runtime composition** | Event-to-key graph from IR; priority-queue profile; startup and deletion | `examples/assignment/watches.go` is deleted; a priority-queue controller replays | ARCH-9, CON-2 |
+| **M4 System composition and boundaries** | Derived ports and joins; `BoundaryModel`; CAPI contracts; Flux boundary | Reference system plus Flux boundary composes from one `Project` document | ARCH-10, EXT-1, EXT-3, EXT-4 |
+| **M5 Generated adapters and evidence** | `adaptergen`; envtest harness; report categories; mutation registry; minimization | `examples/assignment` handwritten adapter deleted; envtest job runs; detection matrix printed | ADOPT-3, ADOPT-8, CON-7, CON-8, CON-9, EVID-2, EVID-3 |
+| **M6 Visualization** | LikeC4 workspace from IR; six views; hints; evidence labels | `arch render` builds every view of the reference system | VIS-1 to VIS-4 |
+| **M7 CLI, CI and release** | Full CLI, diff, strict mode, CI template, module path, v0.1.0, adoption guides | Tag v0.1.0; adoption guide validated on an external controller | ARCH-11, ADOPT-1, ADOPT-4, ADOPT-5, ADOPT-6, ADOPT-9, CON-5, CON-6, EVID-4 |
+
+## 7. Work breakdown
+
+The backlog lives in GitHub issues. Every issue is sized for an autonomous agent to implement in a few minutes: one package, one behaviour, one test. Issue titles carry a key `[M<milestone>-<n>]`, labels carry the area and requirement IDs, and bodies list dependencies by issue number. Larger pieces of work (the typed frontend, adapter generation) are decomposed into chains of such issues rather than single tasks.
+
+Counts at plan time:
+
+| Milestone | Issues |
+| --- | --- |
+| M0 | 13 |
+| M1 | 11 |
+| M2 | 30 |
+| M3 | 11 |
+| M4 | 10 |
+| M5 | 12 |
+| M6 | 9 |
+| M7 | 16 |
+
+## 8. Risks
+
+| Risk | Mitigation |
+| --- | --- |
+| The model repeats its own assumptions | Evidence kinds on every fact; constraints authored separately; mutation registry; envtest evidence |
+| Extraction silently misses behaviour | Typed analysis; fail-closed diagnostics; support report; strict mode in CI |
+| Real projects use patterns outside the subset | Support report drives the frontend backlog; summary library absorbs standard helpers; boundary models absorb the rest with `assumed` evidence |
+| Models become too large to explore | Slice by property and subsystem; finite identities; compose incrementally; `quint verify` only on slices |
+| Runtime semantics drift from controller-runtime | Profiles pinned per version; native queue replay in tests; priority queue modelled because it is the default |
+| Upstream internals resist instrumentation | Boundary models; module-cache selectors; envtest against pinned releases |
+| Tool pins break adopters | Version ranges; CI matrix for Go, Quint, LikeC4 |
+| Example-specific seams freeze into the public API | Reference system replaces domain examples before v0.1.0; domain examples kept only as fixtures |
+
+## 9. Decisions
+
+Architectural decisions are recorded in `docs/adr/`. Decisions taken by this plan:
+
+- ADR-0001: `TransitionModel` is the canonical model schema; the `Contract`/`System` schema under `contracts/` and `system.yaml` is legacy and confined to `cmd/machinevendor`.
+- ADR-0002: One shared IR (`pkg/ir`) is the only input to generators; frontends never talk to generators directly.
+- ADR-0003: External tools (Quint, LikeC4) stay external and are invoked by version range; no npm project in the repository.
+- ADR-0004: A neutral reference system under `examples/refsystem` is the walkthrough and the source of exit criteria.
+
+## 10. Glossary
+
+| Term | Meaning |
+| --- | --- |
+| Project | A Go module containing one or more controller-runtime controllers, selected by a `Project` document |
+| System | The composition of several projects and boundary models sharing Kubernetes APIs |
+| IR | The shared intermediate representation of extracted and declared facts |
+| Effect | An observable API operation with resource, operation, consistency and options |
+| Summary | Declared semantics for an operation or helper, with provenance |
+| Boundary model | A declared model of an upstream project that is not extracted |
+| Receipt | A hash record of every input to a generated artifact or evidence report |
+| Evidence kind | `extracted`, `observed`, `declared`, `assumed` or `unresolved` |

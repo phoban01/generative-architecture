@@ -10,7 +10,7 @@ go run ./cmd/walkthrough          # no Kubernetes or Quint required
 
 The goal is **implementation → generated system model → independent constraints → counterexamples and Go replay**. Public packages in `pkg/` support restricted source extraction, structural contract declarations, process/model composition and controller-runtime scheduling. See [Using the library](LIBRARY.md) for APIs and limits. The MAC walkthrough now extracts supported `For`/`Watches` registrations, reference-field key mappings and common predicates from Go setup, and feeds event delivery into the native queue harness. Automatic discovery of arbitrary controller wiring remains unfinished.
 
-The MAC walkthrough also extracts bounded dynamic-client resource accesses and replays them against an unstructured fake API. See [the project plan](PROJECT-PLAN.md) for the path to a usable first release.
+The MAC walkthrough also extracts bounded dynamic-client resource accesses and replays them against an unstructured fake API. See [the project plan](PROJECT-PLAN.md) for the requirements index, milestones and decision records.
 
 ConfigMirror is a handwritten-model integration reference, not the automatic-generation example. The larger machine-vendor example exercises the source-derived Kubernetes process and runtime layers. A separate-module test demonstrates external imports.
 
