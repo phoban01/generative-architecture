@@ -1,0 +1,65 @@
+apiVersion: architecture.local/v1alpha1
+kind: VerificationReport
+metadata:
+  name: config-mirror
+status:
+  coverage:
+    advance: 463
+    begin: 126
+    changeSource: 495
+    commit: 16
+    deliverCache: 453
+    enqueue: 479
+    finish: 106
+    fire: 55
+    readSource: 68
+    readSourceError: 56
+    readTarget: 36
+    readTargetError: 28
+    writeError: 19
+  modelSha256: f3ba9fd7af459be92c36851e2b50aaa8a7bc2082be8d17e07bf35695739ca905
+  result: passed
+  scope: bounded simulation; real worker/FIFO; fake API; controlled cache; declared behavior
+  traceHashes:
+    trace-000.itf.json: d82ec44823ffa34469c2e53796980c9babc22a6dc36b3b4571e9767e2675a42e
+    trace-001.itf.json: 41f2a7b5465bcb1e8aaf723e3dc21709857358ab640ce4ba4648ad91ec28e454
+    trace-002.itf.json: c14a8441d0f6785258a5d7b8c858c6e3e6548a99984c6bc1f91acf2a318ff9e7
+    trace-003.itf.json: 2ee0386d24c56e46b72dfa6639414c6e2e66a3a8075ba85b4998213ad93fefdb
+    trace-004.itf.json: 4ccfffde87b81ebe40286afae3a5a21c7c66d07a222ebfc3629bfc21e79e191b
+    trace-005.itf.json: d0c2c8d50e1754d3e8fc0ffd82c15c93faf7b189c3aa6e1984f56896f96016e4
+    trace-006.itf.json: 0f2e4732623c46898f55194222397b902d88d84b2f9162d310ba2f07e84ae2d8
+    trace-007.itf.json: 76ed3d56510d16ca33fe21521d74cab033161b089daa18828429961fcac5d1cb
+    trace-008.itf.json: 335f4aca35df76c4232af37a53c82811d19dcd94359084ad0329fe08b95eb7a2
+    trace-009.itf.json: 31fa78ba071222bcab5eaf55bea84838e866371abcf4d69f98e23159571d0368
+    trace-010.itf.json: 38c3d3664bd213ffef397899006ddaffc9e3ed57f8064b410f0dfe92b2c8ccdf
+    trace-011.itf.json: e488348fd1f0f38a0394fd08205c330579040cffbad41be7d4dd495972b6ba0b
+    trace-012.itf.json: 0b20d3f9aee5e25ad2f80dbf07651ba4c517cb3a30012480e4a9451ad5b06302
+    trace-013.itf.json: 1354d6aee4e247801af3e3c2f6932e00decfbea19291152c1135724ed28c2fbd
+    trace-014.itf.json: a31bdbc9f45f7e91dcd43856ea159c41b6a113c9b188883ff3a5f25cb26fc22a
+    trace-015.itf.json: f010185643c2260a99184f754a2ce7f2b0be22ab708f002a6c9dab76b05c9da9
+    trace-016.itf.json: 02fcef4bed73911edfc8bd35928217866bc5a44fd3e30982ba1c1e80debb0a4a
+    trace-017.itf.json: 949e645c8a2a8d1f8a79301277fdb8f83c1bc4ffbfdf5723eed523fbbfe586af
+    trace-018.itf.json: ba599dab2c4dd03858b66e984f95c929178b7ce9b0f8a948195ac7c5ccd1b1fa
+    trace-019.itf.json: 28bbf8b07c20bdac341328d14c1f6c492e28a8cc82e8b0eab6286cdb4049fa99
+    trace-020.itf.json: 29e7f28bdb4866b5744ffe9da2697505919115b2ec7419209d8b288d640f1bd8
+    trace-021.itf.json: b70c9fce181b798a2675b4c90a3ebca26162aee0e11ee6a831e861b0651bc168
+    trace-022.itf.json: e3d7f5a4bccdd19891f4d5e24f360de88029e92dab54cf89413d1fa2ef3bbd8c
+    trace-023.itf.json: f77dc4d1301d8a43e23bc3522b6bee16b39307ec5f6cb7b79f6ed3f16ab9833c
+    trace-024.itf.json: e9f7fb2ec2422ec7c3c9d2a4fe847c7210208bebbf28d5e81f096d653e763c42
+    trace-025.itf.json: 6b52fce1a9bf7b0d67301d5ebb21f5f35aa2ec2522f532669d8a9c19c184b918
+    trace-026.itf.json: 41c4f88e03a28b8114d34efc32e64966bd22d52d64ba6f8e71c4b9088560af85
+    trace-027.itf.json: 7288ae32b159094b60a195ca6a765231fbc918aefcd313403da32c90c67bbea1
+    trace-028.itf.json: cab338fd6dec4f83b32bb4e0a69c266fdacaae5663370f9c4ee35628b0a90e76
+    trace-029.itf.json: 5f94f9dd326a72d8ccd5e37119e282769f3b160184b8aa99cfba44e65ef4ebb0
+    trace-030.itf.json: 01eeb4430aaf3c6c59272e352d8d158ff5a8dc698508597801d8bb7f9e918bc8
+    trace-031.itf.json: c4af6377181015048e2c9de493f0cd3b233194ae4498e7be7b43a9b20d8e596f
+    trace-032.itf.json: baa65eaa8374ab7b899655c51fa77fee17fbb3db20847b2cc8016bf084f1df2f
+    trace-033.itf.json: b3872ec2c200f7f794f7ad85f48eebc17c27498b81a4a1ac0f73d1a0c6f6dd9a
+    trace-034.itf.json: 664761dbb566149a4a20a033282ca4b57987b765acf7e43d2161b2f292993640
+    trace-035.itf.json: bba64269b4b9decc519f682ab8ae674287d6fbb402101916754c6cde2942d3a1
+    trace-036.itf.json: 39379fb6162930ce2bdeb5fb5923b4e48b9c4a6c4509df4f15b3d88d0c9426bd
+    trace-037.itf.json: a712e0f3c435e2e04c85ff42952f6fae27c8eba0e07e179e0e2bbb970aef387b
+    trace-038.itf.json: 1d46ac9124fc3555f1b4f358c639669fed6ef6b02522e8ad5f1659b8a7c25f29
+    trace-039.itf.json: cd2eb3349eae66540654f2e8cda028cd538437b0d449c761af548275f2a85ac5
+  traces: 40
+  transitions: 2400

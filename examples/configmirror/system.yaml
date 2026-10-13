@@ -1,0 +1,90 @@
+apiVersion: architecture.local/v1alpha1
+kind: TransitionModel
+metadata:
+  name: config-mirror
+spec:
+  name: ConfigMirror
+  effects:
+    - id: readSource
+      resource: {group: "", version: v1, kind: ConfigMap}
+      operation: get
+      consistency: cached
+    - id: readTarget
+      resource: {group: "", version: v1, kind: ConfigMap}
+      operation: get
+      consistency: direct
+    - id: writeTarget
+      resource: {group: "", version: v1, kind: ConfigMap}
+      operation: update
+      consistency: direct
+  state:
+    source: {type: string, initial: '"a"'}
+    cached: {type: string, initial: '"a"'}
+    snapshot: {type: string, initial: '""'}
+    target: {type: string, initial: '""'}
+    pc: {type: int, initial: '0'}
+    failed: {type: bool, initial: 'false'}
+    ready: {type: bool, initial: 'false'}
+    dirty: {type: bool, initial: 'false'}
+    processing: {type: bool, initial: 'false'}
+    retries: {type: int, initial: '0'}
+    now: {type: int, initial: '0'}
+    due: {type: int, initial: '-1'}
+  actions:
+    - name: changeSource
+      guard: 'true'
+      updates: {source: 'source == "a" ? "b" : "a"'}
+    - name: deliverCache
+      guard: 'true'
+      updates: {cached: source}
+    - name: enqueue
+      guard: 'true'
+      updates: {dirty: 'true', ready: 'ready || !processing'}
+    - name: begin
+      guard: 'ready && !processing && retries < 3'
+      updates: {ready: 'false', dirty: 'false', processing: 'true', pc: '1', snapshot: '""', failed: 'false'}
+    - name: readSource
+      effect: readSource
+      guard: 'pc == 1'
+      updates: {snapshot: cached, pc: '2'}
+    - name: readSourceError
+      effect: readSource
+      guard: 'pc == 1'
+      updates: {failed: 'true', pc: '4'}
+    - name: readTarget
+      effect: readTarget
+      guard: 'pc == 2'
+      updates: {pc: '3'}
+    - name: readTargetError
+      effect: readTarget
+      guard: 'pc == 2'
+      updates: {failed: 'true', pc: '4'}
+    - name: commit
+      effect: writeTarget
+      guard: 'pc == 3'
+      updates: {target: snapshot, pc: '4'}
+    - name: writeError
+      effect: writeTarget
+      guard: 'pc == 3'
+      updates: {failed: 'true', pc: '4'}
+    - name: finish
+      guard: 'pc == 4 && processing'
+      updates:
+        pc: '0'
+        processing: 'false'
+        ready: dirty
+        retries: 'failed ? retries + 1 : 0'
+        due: 'failed ? (due < 0 || now + 2 < due ? now + 2 : due) : due'
+    - name: advance
+      guard: 'now < 20'
+      updates: {now: 'now + 1'}
+    - name: fire
+      guard: 'due >= 0 && now >= due'
+      updates: {due: '-1', dirty: 'true', ready: 'ready || !processing'}
+  properties:
+    - name: queueSafety
+      expression: '!(ready && processing) && (!ready || dirty)'
+    - name: writesObservedValue
+      expression: 'event != "commit" || target == snapshot'
+    - name: boundedRetries
+      expression: 'retries >= 0 && retries <= 3'

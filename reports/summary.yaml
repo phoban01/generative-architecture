@@ -1,0 +1,39 @@
+apiVersion: architecture.local/v1alpha1
+kind: VerificationReport
+metadata:
+  name: system
+status:
+  celEvaluations: 61449
+  coverage:
+    claim.grant: 464
+    claim.revoke: 325
+    infra.request: 1572
+    infra.submit: 54
+    mac.clear: 1328
+    mac.createClaim: 1231
+    mac.observe: 889
+    mac.publish:accepted: 104
+    mac.publish:rejected: 740
+    service.execute:accepted: 23
+    service.execute:rejected: 6
+    service.fence: 1303
+  implementation: Go / cel-go
+  likec4Validation: separate render command
+  mode: replay of hash-checked evidence; no external tools run
+  modelCheck: random invariant simulation, not exhaustive verification
+  modelSha256: d16a7ea13437147d339edad671df10232a78114a7263fa136b1a5ec04ad47233
+  mutations:
+    - detected: true
+      scenario: staleLease
+      step: 6
+    - detected: true
+      scenario: staleEpoch
+      step: 7
+  safetyGap:
+    assumption: clearing an assignment does not cancel a prepared provisioning call
+    property: provisionRequiresCurrentLease
+    result: counterexample
+  scope: finite authored contracts and simulated Go implementation; no actual CAPI/controller-runtime
+  status: conformance-passed; model-safety-gap-demonstrated
+  steps: 8039
+  traceCount: 204

@@ -1,0 +1,22 @@
+apiVersion: architecture.local/v1alpha1
+kind: RuntimeGroup
+metadata:
+  name: multiple-controllers
+spec:
+  name: MultipleControllers
+  maxTicks: 20
+  controllers:
+    - name: writer
+      workers: 2
+      retryTicks: 2
+      afterTicks: 3
+      keys:
+        - {id: a, name: a}
+        - {id: b, name: b}
+    - name: reader
+      workers: 1
+      retryTicks: 3
+      afterTicks: 4
+      keys:
+        - {id: a, name: a}
+        - {id: b, name: b}

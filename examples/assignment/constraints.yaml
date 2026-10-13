@@ -1,0 +1,22 @@
+apiVersion: architecture.local/v1alpha1
+kind: ModelConstraints
+metadata:
+  name: assignment-requirements
+spec:
+  properties:
+    - name: claimsRequireCompatibleInfra
+      expression: '!claimExists || (infraExists && contractSatisfied)'
+    - name: atMostOneClaim
+      expression: 'claimCreates <= 1'
+    - name: publicationRequiresFulfilledClaim
+      expression: 'statusMachineId == "" || (claimExists && claimMachineId != "" && statusMachineId == claimMachineId)'
+    - name: waitingHasAClaim
+      expression: 'outcome != "waiting" || claimExists'
+    - name: assignedHasMachineId
+      expression: 'outcome != "assigned" || statusMachineId != ""'
+    - name: infraWatchEnqueuesMAC
+      expression: 'event != "deliverInfra" || queued'
+    - name: claimFulfillmentEnqueuesMAC
+      expression: 'event != "deliverClaim" || claimMachineId == "" || queued'
+    - name: watchTargetsInfraMachine
+      expression: '!wrongKey'

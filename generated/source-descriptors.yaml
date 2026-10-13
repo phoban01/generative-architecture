@@ -1,0 +1,146 @@
+apiVersion: architecture.local/v1alpha1
+kind: SourceDescriptor
+metadata:
+  name: sources
+status:
+  contracts:
+    - contracts/allocation-interface.yaml
+  contractImplementations:
+    - contract: mac.allocation/v1
+      goType: generative-architecture/examples/machinevendor/api/v1alpha1.InfraMachineStatus
+      module: generative-architecture
+      jsonPaths:
+        machineId: machineId
+      sourceHashes:
+        examples/machinevendor/api/v1alpha1/types.go: f3c784a9e6a505b029c93d2246ebf1fadc5f50d7dedf9722afce5e9d3d3a8c18
+        examples/machinevendor/api/v1alpha1/zz_generated.deepcopy.go: db59cbd180f5991a4278d65201c164e80185751f57e9492c51aca2d30abb2242
+        type-shape: d1667415f822a1bbb3553d1ca46335b26c0cc3e41d663b8c008698e820716d10
+      origin: marker
+  records:
+    Assignment:
+      epoch: int
+      machineId: string
+  mappings: source-mappings.yaml
+  generator: arch sourcegen/v3 (controller-tools markers + go/types)
+  packages:
+    - ./examples/machinevendor/api/v1alpha1
+    - ./examples/machinevendor/controllerdemo
+  sourceFiles:
+    contracts/allocation-interface.yaml: 077d81598962e4a5481b780a6a265990cdb424aff06f83526003b924a6b0547f
+    examples/machinevendor/api/v1alpha1/types.go: f3c784a9e6a505b029c93d2246ebf1fadc5f50d7dedf9722afce5e9d3d3a8c18
+    examples/machinevendor/api/v1alpha1/zz_generated.deepcopy.go: db59cbd180f5991a4278d65201c164e80185751f57e9492c51aca2d30abb2242
+    examples/machinevendor/controllerdemo/adapter.go: 0f2be084ed2528dc01a4775caef478b72cfeb698f4aaae2050fac08a7ca47938
+    examples/machinevendor/controllerdemo/check.go: fb168210cb2b1d5a978f525b59728a072bf52ec5f63389db107e80ca643ede20
+    examples/machinevendor/controllerdemo/mac.go: b6eb3e62afc77cfa9c494e3e3d3ef324ec6c7000600fb43d05259e811181faec
+    go.mod: 8aa8337955375010a1b32382047e537827ac319fd58eb66d745b74448dde69a6
+    go.sum: e8531c7210f8b9a53c6e17b31d25ffeafb85acb188a97bb21d9b42047be35ef2
+    source-mappings.yaml: e3e4477f407ae1b6af5f0b21779d3f8284428b7c525cf8db51cab0f49418f679
+  directories:
+    - examples/machinevendor/api/v1alpha1
+    - examples/machinevendor/controllerdemo
+  resources:
+    - id: generative-architecture/examples/machinevendor/api/v1alpha1.InfraMachine
+      group: demo.architecture.local
+      version: v1alpha1
+      kind: InfraMachine
+      fields:
+        - goPath: Spec
+          jsonPath: spec
+          goType: generative-architecture/examples/machinevendor/api/v1alpha1.InfraMachineSpec
+        - goPath: Spec.AllocationRequested
+          jsonPath: spec.allocationRequested
+          goType: bool
+        - goPath: Status
+          jsonPath: status
+          goType: generative-architecture/examples/machinevendor/api/v1alpha1.InfraMachineStatus
+        - goPath: Status.MachineID
+          jsonPath: status.machineId
+          goType: string
+      source:
+        file: examples/machinevendor/api/v1alpha1/types.go
+        line: 11
+    - id: generative-architecture/examples/machinevendor/api/v1alpha1.MachineClaim
+      group: demo.architecture.local
+      version: v1alpha1
+      kind: MachineClaim
+      fields:
+        - goPath: Spec
+          jsonPath: spec
+          goType: generative-architecture/examples/machinevendor/api/v1alpha1.MachineClaimSpec
+        - goPath: Spec.InfraMachineName
+          jsonPath: spec.infraMachineName
+          goType: string
+        - goPath: Status
+          jsonPath: status
+          goType: generative-architecture/examples/machinevendor/api/v1alpha1.Assignment
+        - goPath: Status.MachineID
+          jsonPath: status.machineId
+          goType: string
+        - goPath: Status.Epoch
+          jsonPath: status.epoch
+          goType: int64
+      source:
+        file: examples/machinevendor/api/v1alpha1/types.go
+        line: 29
+  controllers:
+    - component: mac
+      goType: generative-architecture/examples/machinevendor/controllerdemo.MACReconciler
+      primary: generative-architecture/examples/machinevendor/api/v1alpha1.InfraMachine
+      owns: generative-architecture/examples/machinevendor/api/v1alpha1.MachineClaim
+      source:
+        file: examples/machinevendor/controllerdemo/mac.go
+        line: 56
+      ports:
+        - name: assignment
+          resource: generative-architecture/examples/machinevendor/api/v1alpha1.InfraMachine
+          goField: Status.MachineID
+          jsonPath: status.machineId
+          goType: string
+          type: map(string, string)
+          evidence: semantic join declared in YAML; field path and type checked from Go
+        - name: claim
+          resource: generative-architecture/examples/machinevendor/api/v1alpha1.MachineClaim
+          goField: $exists
+          jsonPath: $exists
+          goType: object existence
+          type: map(string, bool)
+          evidence: semantic join declared in YAML; field path and type checked from Go
+        - name: eligible
+          resource: generative-architecture/examples/machinevendor/api/v1alpha1.InfraMachine
+          goField: Spec.AllocationRequested
+          jsonPath: spec.allocationRequested
+          goType: bool
+          type: map(string, bool)
+          evidence: semantic join declared in YAML; field path and type checked from Go
+        - name: lease
+          resource: generative-architecture/examples/machinevendor/api/v1alpha1.MachineClaim
+          goField: Status
+          jsonPath: status
+          goType: generative-architecture/examples/machinevendor/api/v1alpha1.Assignment
+          type: map(string, Assignment)
+          evidence: semantic join declared in YAML; field path and type checked from Go
+      actions:
+        - name: clear
+          method: Clear
+          signature: func(ctx context.Context, key sigs.k8s.io/controller-runtime/pkg/client.ObjectKey) (bool, error)
+          source:
+            file: examples/machinevendor/controllerdemo/mac.go
+            line: 117
+        - name: createClaim
+          method: EnsureClaim
+          signature: func(ctx context.Context, key sigs.k8s.io/controller-runtime/pkg/client.ObjectKey) (bool, error)
+          source:
+            file: examples/machinevendor/controllerdemo/mac.go
+            line: 65
+        - name: observe
+          method: Observe
+          signature: func(ctx context.Context, key sigs.k8s.io/controller-runtime/pkg/client.ObjectKey) (generative-architecture/examples/machinevendor/controllerdemo.Assignment, error)
+          source:
+            file: examples/machinevendor/controllerdemo/mac.go
+            line: 88
+        - name: publish
+          method: Publish
+          signature: func(ctx context.Context, key sigs.k8s.io/controller-runtime/pkg/client.ObjectKey, observed generative-architecture/examples/machinevendor/controllerdemo.Assignment) (bool, error)
+          source:
+            file: examples/machinevendor/controllerdemo/mac.go
+            line: 97

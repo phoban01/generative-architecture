@@ -1,0 +1,8 @@
+apiVersion: architecture.local/v1alpha1
+kind: ProcessComposition
+metadata:
+  name: mac-publication-runtime
+spec:
+  process: behavior/publication.yaml
+  # RuntimeProfile is selected by System.spec.runtime; do not duplicate it here.
+  resultPolicy: propagate-error

@@ -1,0 +1,62 @@
+apiVersion: architecture.local/v1alpha1
+kind: Contract
+metadata:
+  name: claim
+spec:
+  version: 0.3.0
+  title: MachineClaim / lease mechanism
+  origin: owned-example
+  description: Abstracts the existing claim-to-lease mechanism; actual controller placement is
+    unspecified. Leases are bound to the requesting InfraMachine identity.
+  state:
+    leases:
+      type: map(string, Assignment)
+      init:
+        domain: INFRAS
+        value: EMPTY_ASSIGNMENT
+    epochs:
+      type: map(string, int)
+      init:
+        domain: HOSTS
+        value: "0"
+  ports:
+    claim:
+      direction: in
+      protocol: machine-claim/v1
+      type: map(string, bool)
+      key: inframachine-uid
+    lease:
+      direction: out
+      protocol: claim-assignment/v1
+      type: map(string, Assignment)
+      key: inframachine-uid
+      state: leases
+    physical:
+      direction: in
+      protocol: physical-assignment/v1
+      type: map(string, string)
+      key: physical-host-id
+  actions:
+    - name: grant
+      params:
+        - infra
+        - host
+      guard: claim[infra] && leases[infra].machineId == "" && INFRAS.all(i, leases[i].machineId != host)
+        && physical[host] == "" && epochs[host] < MAX_EPOCH
+      updates:
+        leases:
+          key: infra
+          value: '{"machineId": host, "epoch": epochs[host] + 1}'
+        epochs:
+          key: host
+          value: epochs[host] + 1
+      accepted: "true"
+    - name: revoke
+      params:
+        - infra
+      guard: leases[infra].machineId != ""
+      updates:
+        leases:
+          key: infra
+          value: EMPTY_ASSIGNMENT
+      accepted: "true"

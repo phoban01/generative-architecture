@@ -1,0 +1,14 @@
+apiVersion: architecture.local/v1alpha1
+kind: BehaviorAnalysis
+metadata:
+  name: mac-publication
+spec:
+  component: mac
+  action: publish
+  # Select the ordinary implementation, not its existing deliberate mutation flag.
+  allowStalePublication: false
+  requirements:
+    - name: publicationUsesCheckedLease
+      expression: 'event != "commit" || (publishedMachineId != "" && publishedMachineId == claim.machineId && observed == claim)'
+    - name: publicationUsesLiveLease
+      expression: 'event != "commit" || (publishedMachineId != "" && publishedMachineId == lease.machineId && observed == lease)'

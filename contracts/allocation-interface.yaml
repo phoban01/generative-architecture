@@ -1,0 +1,8 @@
+apiVersion: architecture.local/v1alpha1
+kind: InteractionContract
+metadata:
+  name: mac.allocation
+spec:
+  version: v1
+  fields:
+    machineId: string

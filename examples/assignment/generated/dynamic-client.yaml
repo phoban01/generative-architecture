@@ -1,0 +1,63 @@
+apiVersion: architecture.local/v1alpha1
+kind: ExtractedDynamicAccess
+metadata:
+  name: mac
+status:
+  accesses:
+    - method: CreateMachineClaim
+      effect: createClaim
+      operation: create
+      binding:
+        expression: s.ClaimResource
+        resource:
+          group: demo.architecture.local
+          version: v1alpha1
+          kind: MachineClaim
+        plural: machineclaims
+        scope: Namespaced
+      namespace: s.Key.Namespace
+      line: 65
+      methodSha256: 76000a8bd5814afcb4b81f1eb2c8fce4afc80d8b00e501b04af2a862435707b2
+    - method: InfraMachineExists
+      effect: readInfra
+      operation: get
+      binding:
+        expression: s.InfraResource
+        resource:
+          group: demo.architecture.local
+          version: v1alpha1
+          kind: InfraMachine
+        plural: inframachines
+        scope: Namespaced
+      namespace: s.Key.Namespace
+      line: 29
+      methodSha256: 786ddcab33a8817b5900ad48c934156e0af7dd69ef86bd35527582719baee928
+    - method: MachineClaim
+      effect: readClaim
+      operation: get
+      binding:
+        expression: s.ClaimResource
+        resource:
+          group: demo.architecture.local
+          version: v1alpha1
+          kind: MachineClaim
+        plural: machineclaims
+        scope: Namespaced
+      namespace: s.Key.Namespace
+      line: 45
+      methodSha256: 63e650010ef36cbce2fba73f38507be56a164cf543c4477c88aac8c21e7aff3a
+    - method: UpdateInfraMachineStatus
+      effect: publish
+      operation: status.update
+      binding:
+        expression: s.InfraResource
+        resource:
+          group: demo.architecture.local
+          version: v1alpha1
+          kind: InfraMachine
+        plural: inframachines
+        scope: Namespaced
+      namespace: s.Key.Namespace
+      line: 77
+      methodSha256: 4576aab9f9610effdc674db2f0815f2664296c1851217e97ae88768fc88a4d65
+  sourceSha256: 92809019ef87a4dc3165acaf31a38445c1ac994e5847b2024136ea2863211715

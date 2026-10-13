@@ -1,0 +1,71 @@
+apiVersion: architecture.local/v1alpha1
+kind: System
+metadata:
+  name: machine-vendor
+spec:
+  composition: behavior/composition.yaml
+  runtime: runtime/controller-runtime.yaml
+  title: "Machine vendor: MAC contract composition"
+  hosts:
+    - host-1
+    - host-2
+  maxEpoch: 3
+  authorizationPolicy: mac-clears-assignment; no independent provisioning check
+  consumers:
+    - id: reserve-capi
+      title: Dedicated reserve Kubernetes cluster
+    - id: customer-capi
+      title: Customer Kubernetes cluster
+  infraMachines:
+    - id: infra-reserve
+      consumer: reserve-capi
+    - id: infra-customer
+      consumer: customer-capi
+  components:
+    - id: infra
+      contract: contracts/infra.yaml
+      version: 0.3.0
+    - id: mac
+      contract: contracts/mac.yaml
+      version: 0.3.0
+    - id: claim
+      contract: contracts/claim.yaml
+      version: 0.3.0
+    - id: service
+      contract: contracts/service.yaml
+      version: 0.3.0
+  bindings:
+    - from: infra.eligible
+      to: mac.eligible
+    - from: mac.claim
+      to: claim.claim
+    - from: claim.lease
+      to: mac.lease
+    - from: mac.assignment
+      to: infra.assignment
+    - from: infra.provision
+      to: service.calls
+    - from: claim.lease
+      to: service.lifecycle
+      evidence: "prototype assumption: fence only after lease release; not a provisioning authorization check"
+    - from: service.physical
+      to: claim.physical
+  properties:
+    - name: publicationRequiresCurrentLease
+      expression: event.name != "mac.publish" || !(event.accepted) || (mac.assigned[event.infra] ==
+        claim.leases[event.infra].machineId && claim.leases[event.infra].machineId != "")
+    - name: exclusiveLeases
+      expression: INFRAS.all(a, INFRAS.all(b, a == b || claim.leases[a].machineId == "" ||
+        claim.leases[a].machineId != claim.leases[b].machineId))
+  safetyQuestions:
+    - name: provisionRequiresCurrentLease
+      expression: event.name != "service.execute" || !(event.accepted) || infra.calls[event.infra] ==
+        claim.leases[event.infra].machineId
+  expressionLanguage: cel
+  sources:
+    contracts: [contracts/allocation-interface.yaml]
+    packages:
+      - ./examples/machinevendor/api/v1alpha1
+      - ./examples/machinevendor/controllerdemo
+    descriptor: generated/source-descriptors.yaml
+    mappings: source-mappings.yaml

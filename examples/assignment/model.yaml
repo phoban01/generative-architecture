@@ -1,0 +1,56 @@
+apiVersion: architecture.local/v1alpha1
+kind: TransitionModel
+metadata:
+  name: assignment
+spec:
+  name: AssignmentWalkthrough
+  # One InfraMachine, one claim, one possible assigned machine; four invocations.
+  # Branches and publication updates are extracted from controller.go.
+  state:
+    infraExists: {type: bool, initial: 'false'}
+    contractSatisfied: {type: bool, initial: 'false'}
+    claimExists: {type: bool, initial: 'false'}
+    claimMachineId: {type: string, initial: '""'}
+    statusMachineId: {type: string, initial: '""'}
+    claimCreates: {type: int, initial: '0'}
+    found: {type: bool, initial: 'false'}
+    compatible: {type: bool, initial: 'false'}
+    claimFound: {type: bool, initial: 'false'}
+    machineID: {type: string, initial: '""'}
+    outcome: {type: string, initial: '""'}
+    invocations: {type: int, initial: '0'}
+  effects:
+    - id: readInfra
+      resource: {group: demo.architecture.local, version: v1alpha1, kind: InfraMachine}
+      operation: get
+      consistency: direct
+    - id: checkContract
+      resource: {group: demo.architecture.local, version: v1alpha1, kind: InfraMachine}
+      operation: check-contract
+      consistency: schema
+    - id: readClaim
+      resource: {group: demo.architecture.local, version: v1alpha1, kind: MachineClaim}
+      operation: get
+      consistency: direct
+    - id: createClaim
+      resource: {group: demo.architecture.local, version: v1alpha1, kind: MachineClaim}
+      operation: create
+      consistency: direct
+    - id: publish
+      resource: {group: demo.architecture.local, version: v1alpha1, kind: InfraMachine}
+      operation: status.update
+      consistency: direct
+  actions:
+    - name: discoverCompatible
+      guard: '!infraExists && invocations == 0'
+      updates: {infraExists: 'true', contractSatisfied: 'true'}
+    - name: discoverUnsupported
+      guard: '!infraExists && invocations == 0'
+      updates: {infraExists: 'true', contractSatisfied: 'false'}
+    # The claim/lease controller fulfills the claim; MAC does not allocate it.
+    - name: fulfillClaim
+      guard: 'claimExists && claimMachineId == ""'
+      updates: {claimMachineId: '"machine-1"'}
+    - name: idle
+      guard: finished
+      updates: {}

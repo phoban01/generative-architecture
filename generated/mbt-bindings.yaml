@@ -1,0 +1,86 @@
+apiVersion: architecture.local/v1alpha1
+kind: TestBindings
+metadata:
+  name: machine-vendor
+status:
+  actions:
+    - id: infra.request
+      owner: infra
+      params:
+        - infra
+      quint: infra_request
+    - id: infra.submit
+      owner: infra
+      params:
+        - infra
+      quint: infra_submit
+    - id: mac.createClaim
+      owner: mac
+      params:
+        - infra
+      quint: mac_createClaim
+    - id: mac.observe
+      owner: mac
+      params:
+        - infra
+      quint: mac_observe
+    - id: mac.publish
+      owner: mac
+      params:
+        - infra
+      quint: mac_publish
+    - id: mac.clear
+      owner: mac
+      params:
+        - infra
+      quint: mac_clear
+    - id: claim.grant
+      owner: claim
+      params:
+        - infra
+        - host
+      quint: claim_grant
+    - id: claim.revoke
+      owner: claim
+      params:
+        - infra
+      quint: claim_revoke
+    - id: service.execute
+      owner: service
+      params:
+        - infra
+      quint: service_execute
+    - id: service.fence
+      owner: service
+      params:
+        - host
+      quint: service_fence
+  adapterInterface: generated/adapter_generated.go
+  evidence: Generated wiring only; see reports for independently executed simulator and demo controller results. No upstream conformance.
+  hosts:
+    - host-1
+    - host-2
+  infraMachines:
+    - id: infra-reserve
+      consumer: reserve-capi
+    - id: infra-customer
+      consumer: customer-capi
+  maxEpoch: 3
+  modelSha256: d16a7ea13437147d339edad671df10232a78114a7263fa136b1a5ec04ad47233
+  projection:
+    - owner: infra
+      variable: infra_calls
+    - owner: infra
+      variable: infra_wanted
+    - owner: mac
+      variable: mac_assigned
+    - owner: mac
+      variable: mac_claims
+    - owner: mac
+      variable: mac_observed
+    - owner: claim
+      variable: claim_epochs
+    - owner: claim
+      variable: claim_leases
+    - owner: service
+      variable: service_machines

@@ -1,0 +1,440 @@
+apiVersion: architecture.local/v1alpha1
+kind: Architecture
+metadata:
+  name: machine-vendor
+status:
+  implementation: Go / cel-go
+  model:
+    states:
+      - name: infra_calls
+        owner: infra
+        type: str -> str
+        init: INFRAS.mapBy(_ => "")
+      - name: infra_wanted
+        owner: infra
+        type: str -> bool
+        init: INFRAS.mapBy(_ => false)
+      - name: mac_assigned
+        owner: mac
+        type: str -> str
+        init: INFRAS.mapBy(_ => "")
+      - name: mac_claims
+        owner: mac
+        type: str -> bool
+        init: INFRAS.mapBy(_ => false)
+      - name: mac_observed
+        owner: mac
+        type: str -> Assignment
+        init: INFRAS.mapBy(_ => EMPTY_ASSIGNMENT)
+      - name: claim_epochs
+        owner: claim
+        type: str -> int
+        init: HOSTS.mapBy(_ => 0)
+      - name: claim_leases
+        owner: claim
+        type: str -> Assignment
+        init: INFRAS.mapBy(_ => EMPTY_ASSIGNMENT)
+      - name: service_machines
+        owner: service
+        type: str -> str
+        init: HOSTS.mapBy(_ => "")
+    actions:
+      - id: infra.request
+        owner: infra
+        quint: infra_request
+        params:
+          - infra
+        guard: "true"
+        accepted: "true"
+        updates:
+          infra_wanted: infra_wanted.set(infra, true)
+      - id: infra.submit
+        owner: infra
+        quint: infra_submit
+        params:
+          - infra
+        guard: (mac_assigned.get(infra) != "")
+        accepted: "true"
+        updates:
+          infra_calls: infra_calls.set(infra, mac_assigned.get(infra))
+      - id: mac.createClaim
+        owner: mac
+        quint: mac_createClaim
+        params:
+          - infra
+        guard: infra_wanted.get(infra)
+        accepted: "true"
+        updates:
+          mac_claims: mac_claims.set(infra, true)
+      - id: mac.observe
+        owner: mac
+        quint: mac_observe
+        params:
+          - infra
+        guard: mac_claims.get(infra)
+        accepted: "true"
+        updates:
+          mac_observed: mac_observed.set(infra, claim_leases.get(infra))
+      - id: mac.publish
+        owner: mac
+        quint: mac_publish
+        params:
+          - infra
+        guard: mac_claims.get(infra)
+        accepted: allowed
+        locals:
+          - name: allowed
+            value: ((mac_observed.get(infra).machineId != "") and (mac_observed.get(infra) == claim_leases.get(infra)))
+        updates:
+          mac_assigned: if (allowed) mac_assigned.set(infra, mac_observed.get(infra).machineId) else mac_assigned
+      - id: mac.clear
+        owner: mac
+        quint: mac_clear
+        params:
+          - infra
+        guard: (claim_leases.get(infra).machineId == "")
+        accepted: "true"
+        updates:
+          mac_assigned: mac_assigned.set(infra, "")
+      - id: claim.grant
+        owner: claim
+        quint: claim_grant
+        params:
+          - infra
+          - host
+        guard: (((mac_claims.get(infra) and (claim_leases.get(infra).machineId == "")) and INFRAS.forall(i => (claim_leases.get(i).machineId != host))) and ((service_machines.get(host) == "") and (claim_epochs.get(host) < MAX_EPOCH)))
+        accepted: "true"
+        updates:
+          claim_epochs: claim_epochs.set(host, (claim_epochs.get(host) + 1))
+          claim_leases: 'claim_leases.set(infra, { epoch: (claim_epochs.get(host) + 1), machineId: host })'
+      - id: claim.revoke
+        owner: claim
+        quint: claim_revoke
+        params:
+          - infra
+        guard: (claim_leases.get(infra).machineId != "")
+        accepted: "true"
+        updates:
+          claim_leases: claim_leases.set(infra, EMPTY_ASSIGNMENT)
+      - id: service.execute
+        owner: service
+        quint: service_execute
+        params:
+          - infra
+        guard: (infra_calls.get(infra) != "")
+        accepted: allowed
+        locals:
+          - name: machineId
+            value: infra_calls.get(infra)
+          - name: allowed
+            value: (service_machines.get(machineId) == "")
+        updates:
+          service_machines: if (allowed) service_machines.set(infra_calls.get(infra), infra) else service_machines
+      - id: service.fence
+        owner: service
+        quint: service_fence
+        params:
+          - host
+        guard: INFRAS.forall(i => (claim_leases.get(i).machineId != host))
+        accepted: "true"
+        updates:
+          service_machines: service_machines.set(host, "")
+    bindings:
+      - from: infra.eligible
+        to: mac.eligible
+        protocol: mac-inframachine/v1
+        key: inframachine-uid
+        state: infra_wanted
+        evidence: explicit validated binding
+      - from: mac.claim
+        to: claim.claim
+        protocol: machine-claim/v1
+        key: inframachine-uid
+        state: mac_claims
+        evidence: explicit validated binding
+      - from: claim.lease
+        to: mac.lease
+        protocol: claim-assignment/v1
+        key: inframachine-uid
+        state: claim_leases
+        evidence: explicit validated binding
+      - from: mac.assignment
+        to: infra.assignment
+        protocol: assigned-machine-id/v1
+        key: inframachine-uid
+        state: mac_assigned
+        evidence: explicit validated binding
+      - from: infra.provision
+        to: service.calls
+        protocol: provision-call/v1
+        key: inframachine-uid
+        state: infra_calls
+        evidence: explicit validated binding
+      - from: claim.lease
+        to: service.lifecycle
+        protocol: claim-assignment/v1
+        key: inframachine-uid
+        state: claim_leases
+        evidence: 'prototype assumption: fence only after lease release; not a provisioning authorization check'
+      - from: service.physical
+        to: claim.physical
+        protocol: physical-assignment/v1
+        key: physical-host-id
+        state: service_machines
+        evidence: explicit validated binding
+    properties:
+      - name: publicationRequiresCurrentLease
+        expression: (((event.name != "mac.publish") or not(event.accepted)) or ((mac_assigned.get(event.infra) == claim_leases.get(event.infra).machineId) and (claim_leases.get(event.infra).machineId != "")))
+      - name: exclusiveLeases
+        expression: INFRAS.forall(a => INFRAS.forall(b => (((a == b) or (claim_leases.get(a).machineId == "")) or (claim_leases.get(a).machineId != claim_leases.get(b).machineId))))
+      - name: provisionRequiresCurrentLease
+        expression: (((event.name != "service.execute") or not(event.accepted)) or (infra_calls.get(event.infra) == claim_leases.get(event.infra).machineId))
+    inputState:
+      claim.claim: mac_claims
+      claim.physical: service_machines
+      infra.assignment: mac_assigned
+      mac.eligible: infra_wanted
+      mac.lease: claim_leases
+      service.calls: infra_calls
+      service.lifecycle: claim_leases
+  provenance:
+    contracts:
+      claim:
+        path: contracts/claim.yaml
+        version: 0.3.0
+        sha256: 3ad198d6e6855dd54e67a535bc14a4cc714af4f3d67e226291bbb0ad1220aa82
+      infra:
+        path: contracts/infra.yaml
+        version: 0.3.0
+        sha256: 58232943d1101b95df1ca6223fb4aeaff459deda94e6bbd6121d5520348a4f93
+      mac:
+        path: contracts/mac.yaml
+        version: 0.3.0
+        sha256: df73819a204dd42c3a2f5b3c4a8bdd647a1acd9e51361321996f9ad941e4ab49
+      service:
+        path: contracts/service.yaml
+        version: 0.3.0
+        sha256: bb485e0f633ce103e480d4a1287a43662062ba192dc137206f4b698afca79e5e
+    scenariosSha256: 40d6a297f7f592cce877221e62428a3d1d2c9c591b3bc92d05089e61db7c98c5
+    systemSha256: 12bb4cb47f23efd3c4c3d276e36c23da90079d7cf3dc757bc88916efa18a8fec
+  sourceDescriptors:
+    contracts:
+      - contracts/allocation-interface.yaml
+    contractImplementations:
+      - contract: mac.allocation/v1
+        goType: generative-architecture/examples/machinevendor/api/v1alpha1.InfraMachineStatus
+        module: generative-architecture
+        jsonPaths:
+          machineId: machineId
+        sourceHashes:
+          examples/machinevendor/api/v1alpha1/types.go: f3c784a9e6a505b029c93d2246ebf1fadc5f50d7dedf9722afce5e9d3d3a8c18
+          examples/machinevendor/api/v1alpha1/zz_generated.deepcopy.go: db59cbd180f5991a4278d65201c164e80185751f57e9492c51aca2d30abb2242
+          type-shape: d1667415f822a1bbb3553d1ca46335b26c0cc3e41d663b8c008698e820716d10
+        origin: marker
+    records:
+      Assignment:
+        epoch: int
+        machineId: string
+    mappings: source-mappings.yaml
+    generator: arch sourcegen/v3 (controller-tools markers + go/types)
+    packages:
+      - ./examples/machinevendor/api/v1alpha1
+      - ./examples/machinevendor/controllerdemo
+    sourceFiles:
+      contracts/allocation-interface.yaml: 077d81598962e4a5481b780a6a265990cdb424aff06f83526003b924a6b0547f
+      examples/machinevendor/api/v1alpha1/types.go: f3c784a9e6a505b029c93d2246ebf1fadc5f50d7dedf9722afce5e9d3d3a8c18
+      examples/machinevendor/api/v1alpha1/zz_generated.deepcopy.go: db59cbd180f5991a4278d65201c164e80185751f57e9492c51aca2d30abb2242
+      examples/machinevendor/controllerdemo/adapter.go: 0f2be084ed2528dc01a4775caef478b72cfeb698f4aaae2050fac08a7ca47938
+      examples/machinevendor/controllerdemo/check.go: fb168210cb2b1d5a978f525b59728a072bf52ec5f63389db107e80ca643ede20
+      examples/machinevendor/controllerdemo/mac.go: b6eb3e62afc77cfa9c494e3e3d3ef324ec6c7000600fb43d05259e811181faec
+      go.mod: 8aa8337955375010a1b32382047e537827ac319fd58eb66d745b74448dde69a6
+      go.sum: e8531c7210f8b9a53c6e17b31d25ffeafb85acb188a97bb21d9b42047be35ef2
+      source-mappings.yaml: e3e4477f407ae1b6af5f0b21779d3f8284428b7c525cf8db51cab0f49418f679
+    directories:
+      - examples/machinevendor/api/v1alpha1
+      - examples/machinevendor/controllerdemo
+    resources:
+      - id: generative-architecture/examples/machinevendor/api/v1alpha1.InfraMachine
+        group: demo.architecture.local
+        version: v1alpha1
+        kind: InfraMachine
+        fields:
+          - goPath: Spec
+            jsonPath: spec
+            goType: generative-architecture/examples/machinevendor/api/v1alpha1.InfraMachineSpec
+          - goPath: Spec.AllocationRequested
+            jsonPath: spec.allocationRequested
+            goType: bool
+          - goPath: Status
+            jsonPath: status
+            goType: generative-architecture/examples/machinevendor/api/v1alpha1.InfraMachineStatus
+          - goPath: Status.MachineID
+            jsonPath: status.machineId
+            goType: string
+        source:
+          file: examples/machinevendor/api/v1alpha1/types.go
+          line: 11
+      - id: generative-architecture/examples/machinevendor/api/v1alpha1.MachineClaim
+        group: demo.architecture.local
+        version: v1alpha1
+        kind: MachineClaim
+        fields:
+          - goPath: Spec
+            jsonPath: spec
+            goType: generative-architecture/examples/machinevendor/api/v1alpha1.MachineClaimSpec
+          - goPath: Spec.InfraMachineName
+            jsonPath: spec.infraMachineName
+            goType: string
+          - goPath: Status
+            jsonPath: status
+            goType: generative-architecture/examples/machinevendor/api/v1alpha1.Assignment
+          - goPath: Status.MachineID
+            jsonPath: status.machineId
+            goType: string
+          - goPath: Status.Epoch
+            jsonPath: status.epoch
+            goType: int64
+        source:
+          file: examples/machinevendor/api/v1alpha1/types.go
+          line: 29
+    controllers:
+      - component: mac
+        goType: generative-architecture/examples/machinevendor/controllerdemo.MACReconciler
+        contract: contracts/mac.yaml
+        version: 0.3.0
+        primary: generative-architecture/examples/machinevendor/api/v1alpha1.InfraMachine
+        owns: generative-architecture/examples/machinevendor/api/v1alpha1.MachineClaim
+        source:
+          file: examples/machinevendor/controllerdemo/mac.go
+          line: 56
+        ports:
+          - name: assignment
+            direction: out
+            resource: generative-architecture/examples/machinevendor/api/v1alpha1.InfraMachine
+            goField: Status.MachineID
+            jsonPath: status.machineId
+            goType: string
+            type: map(string, string)
+            protocol: assigned-machine-id/v1
+            key: inframachine-uid
+            evidence: semantic join declared in YAML; field path and type checked from Go
+          - name: claim
+            direction: out
+            resource: generative-architecture/examples/machinevendor/api/v1alpha1.MachineClaim
+            goField: $exists
+            jsonPath: $exists
+            goType: object existence
+            type: map(string, bool)
+            protocol: machine-claim/v1
+            key: inframachine-uid
+            evidence: semantic join declared in YAML; field path and type checked from Go
+          - name: eligible
+            direction: in
+            resource: generative-architecture/examples/machinevendor/api/v1alpha1.InfraMachine
+            goField: Spec.AllocationRequested
+            jsonPath: spec.allocationRequested
+            goType: bool
+            type: map(string, bool)
+            protocol: mac-inframachine/v1
+            key: inframachine-uid
+            evidence: semantic join declared in YAML; field path and type checked from Go
+          - name: lease
+            direction: in
+            resource: generative-architecture/examples/machinevendor/api/v1alpha1.MachineClaim
+            goField: Status
+            jsonPath: status
+            goType: generative-architecture/examples/machinevendor/api/v1alpha1.Assignment
+            type: map(string, Assignment)
+            protocol: claim-assignment/v1
+            key: inframachine-uid
+            evidence: semantic join declared in YAML; field path and type checked from Go
+        actions:
+          - name: clear
+            method: Clear
+            signature: func(ctx context.Context, key sigs.k8s.io/controller-runtime/pkg/client.ObjectKey) (bool, error)
+            source:
+              file: examples/machinevendor/controllerdemo/mac.go
+              line: 117
+          - name: createClaim
+            method: EnsureClaim
+            signature: func(ctx context.Context, key sigs.k8s.io/controller-runtime/pkg/client.ObjectKey) (bool, error)
+            source:
+              file: examples/machinevendor/controllerdemo/mac.go
+              line: 65
+          - name: observe
+            method: Observe
+            signature: func(ctx context.Context, key sigs.k8s.io/controller-runtime/pkg/client.ObjectKey) (generative-architecture/examples/machinevendor/controllerdemo.Assignment, error)
+            source:
+              file: examples/machinevendor/controllerdemo/mac.go
+              line: 88
+          - name: publish
+            method: Publish
+            signature: func(ctx context.Context, key sigs.k8s.io/controller-runtime/pkg/client.ObjectKey, observed generative-architecture/examples/machinevendor/controllerdemo.Assignment) (bool, error)
+            source:
+              file: examples/machinevendor/controllerdemo/mac.go
+              line: 97
+  system:
+    composition: behavior/composition.yaml
+    runtime: runtime/controller-runtime.yaml
+    sources:
+      contracts:
+        - contracts/allocation-interface.yaml
+      mappings: source-mappings.yaml
+      packages:
+        - ./examples/machinevendor/api/v1alpha1
+        - ./examples/machinevendor/controllerdemo
+      descriptor: generated/source-descriptors.yaml
+    title: 'Machine vendor: MAC contract composition'
+    expressionLanguage: cel
+    hosts:
+      - host-1
+      - host-2
+    maxEpoch: 3
+    authorizationPolicy: mac-clears-assignment; no independent provisioning check
+    consumers:
+      - id: reserve-capi
+        title: Dedicated reserve Kubernetes cluster
+      - id: customer-capi
+        title: Customer Kubernetes cluster
+    infraMachines:
+      - id: infra-reserve
+        consumer: reserve-capi
+      - id: infra-customer
+        consumer: customer-capi
+    components:
+      - id: infra
+        contract: contracts/infra.yaml
+        version: 0.3.0
+      - id: mac
+        contract: contracts/mac.yaml
+        version: 0.3.0
+      - id: claim
+        contract: contracts/claim.yaml
+        version: 0.3.0
+      - id: service
+        contract: contracts/service.yaml
+        version: 0.3.0
+    bindings:
+      - from: infra.eligible
+        to: mac.eligible
+      - from: mac.claim
+        to: claim.claim
+      - from: claim.lease
+        to: mac.lease
+      - from: mac.assignment
+        to: infra.assignment
+      - from: infra.provision
+        to: service.calls
+      - from: claim.lease
+        to: service.lifecycle
+        evidence: 'prototype assumption: fence only after lease release; not a provisioning authorization check'
+      - from: service.physical
+        to: claim.physical
+    properties:
+      - name: publicationRequiresCurrentLease
+        expression: event.name != "mac.publish" || !(event.accepted) || (mac.assigned[event.infra] == claim.leases[event.infra].machineId && claim.leases[event.infra].machineId != "")
+      - name: exclusiveLeases
+        expression: INFRAS.all(a, INFRAS.all(b, a == b || claim.leases[a].machineId == "" || claim.leases[a].machineId != claim.leases[b].machineId))
+    safetyQuestions:
+      - name: provisionRequiresCurrentLease
+        expression: event.name != "service.execute" || !(event.accepted) || infra.calls[event.infra] == claim.leases[event.infra].machineId

@@ -1,0 +1,13 @@
+specification { element assignmentWatchPart }
+model {
+ mac_watch_queue = assignmentWatchPart "MAC workqueue"
+ mac_watch_reconcile = assignmentWatchPart "MAC reconcile"
+ mac_watch_queue -> mac_watch_reconcile "dequeue InfraMachine key"
+ mac_watch_source0 = assignmentWatchPart "InfraMachine events"
+ mac_watch_source0 -> mac_watch_queue "self "
+ mac_watch_source1 = assignmentWatchPart "MachineClaim events"
+ mac_watch_source1 -> mac_watch_queue "ClaimToInfraMachine "
+}
+views { view mac_assignment_watches { title "MAC: watches extracted from Go setup"
+ include mac_watch_queue, mac_watch_reconcile, mac_watch_source0, mac_watch_source1
+ } }

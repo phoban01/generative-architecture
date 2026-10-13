@@ -1,0 +1,81 @@
+apiVersion: architecture.local/v1alpha1
+kind: VerificationReport
+metadata:
+  name: machine-assignment
+status:
+  coverage:
+    deliverClaim: 30
+    deliverInfra: 110
+    discoverCompatible: 36
+    discoverUnsupported: 49
+    fulfillClaim: 15
+    idle: 1342
+    node0_return: 43
+    node1_publish: 44
+    node3_branch: 44
+    node4_return: 15
+    node5_createClaim: 15
+    node6_branch: 60
+    node7_readClaim: 60
+    node8_return: 19
+    node9_branch: 79
+    node10_checkContract: 79
+    node11_return: 17
+    node12_branch: 96
+    node13_readInfra: 96
+    reconcile: 96
+    removeInfraBeforeRead: 55
+  inputHashes:
+    constraints.yaml: 4eb0c1944e0a8cd9e9a978598c5a11400d890255aa51a73f7f961d447686978a
+    controller.go: 1b7c48c5cb45853f72d7ed54a6a95258318e8e0db68f2cf21915f63ae2a3724d
+    dynamic_store.go: 92809019ef87a4dc3165acaf31a38445c1ac994e5847b2024136ea2863211715
+    model.yaml: 9ad397c32fdf81ba2af5a75d13181dfcbb50242f10f552595f13c313dbe741a4
+    process.yaml: 925ff245eff5c147e7d385f418e0229b74870b2153ab6d4240c77ff507bb682c
+    resources.yaml: ef211949dd3677c56eb5d2668493b027ce934daa11cb428381145cbf66ff5031
+    wiring.go: f98a2029b4da78dd43cb588ec500ec2b83559f6181ac2704371badf25f37002b
+  modelSha256: e740c9977d88d5349de52ac32da1ac72e128d88fe46eeb9979ab6101269b15d9
+  result: passed
+  scope: source-derived MAC reconcile; one InfraMachine/claim; up to four invocations; source-extracted watches/mapping and dynamic GVR operations; unstructured InfraMachine; observed dynamic client with fake API; native event handlers and FIFO; controlled/coalesced event delivery; summarized contract/store effects; no Kubernetes API errors, cache or revocation
+  traceHashes:
+    trace-000.itf.json: 4312f43092b8cf88c9465810aaa7c3af67894d04f2d363abe34d5c3f44f06677
+    trace-001.itf.json: 2859f09caa5c033e4cfd167bf82abea3ea62da81e66dbbb6fa36aa28a333d452
+    trace-002.itf.json: 86a12e3b0a64826360f1bb5ce5a5fb70497a86c651ec9aaa0678f2da347f8fb8
+    trace-003.itf.json: 435a6bf9b27ba9f377ed8e8064e37afe0cfb4cc5e4420554636572def9f2bdeb
+    trace-004.itf.json: 212e8f795c66cd45ec80720d973f2ac91501a900ee3d0d33bad2868169d0d027
+    trace-005.itf.json: 1a8fe9f82918f69c2942af7806f390a96ca5d23dd0e92e10114c6449d2910ef9
+    trace-006.itf.json: acc6eae9c1f30415aaeaf77695156fd47abe080122cdff1a9f2f4aeb61b4709b
+    trace-007.itf.json: 6a2881e955c8454ce828d2a0e6afdf07e4bc4d84696c60765ae23d4e1221543e
+    trace-008.itf.json: 415d68ec2bbd5b4decea42bb5d244a4f790966f2c6e4e6c184623a4d1b7c26f7
+    trace-009.itf.json: 583a5043fd89369f13c026d37045ddfd81a36881cb9084aedc5a01ac383a5cf6
+    trace-010.itf.json: 66d999768a201e65a155fab520c3c43227bf0a2225c7d1fdb14550086c39bdfe
+    trace-011.itf.json: 03106e75f5bc3a80e91a7d6b915b33e108eda55cc2a927b53b66bac1c9ea9e71
+    trace-012.itf.json: 28411865f2cc8cec25363dca2b628e6435dceb8747243924e3da5d2a01f1038f
+    trace-013.itf.json: e093f0401df0220220ae68818d86c1058651ad96acb473103f1636e28e484423
+    trace-014.itf.json: 913c0cdc6c087f50cdd2c1aa13d92a503054d280105d7124e27aa30f17b8ce16
+    trace-015.itf.json: 8fb6deeae4b24351d88e7026650bea4c37413fd58b6c32981fd633333074f175
+    trace-016.itf.json: 4b77853a83b1672adc7114f4e4286a4bcfac60e0872683dbb52b99a8b965a6a0
+    trace-017.itf.json: 0f7021f1be4479a8198524f9789981630771bb5cada9f4c46b4f8d221afc8fc7
+    trace-018.itf.json: 9ae0db137cca6fde15a31ac424789114152b54e653b82e8691db66caa1ea19ca
+    trace-019.itf.json: 1c1f99b88538293d40a539bb24bd5abcf94e11551f2633ac92135c372f3ed5b9
+    trace-020.itf.json: c43a8c79b7f34483eb9cd1164f5f38852454b5f9fffe6ba030d01c6875bed608
+    trace-021.itf.json: f08f3b2ee6bad7a357690916bb4cc3f62653b6ec5e300917b97668d71674d4ea
+    trace-022.itf.json: ae9181474dbddeba01bc1588b021359dd4f380d1bf1cfb2c0e0080eba6dc6d7d
+    trace-023.itf.json: 9df4b2c1f1d80ddc7f239f5b5ea011551b40177c4fa3be9db01d2fb84492abba
+    trace-024.itf.json: 2e12bb76c94c771152456d079ecf4b1b09e20ed1df4c3c3ac73eb737b6d4204a
+    trace-025.itf.json: 22d8c6d339fb45e9889256427e8b62c4ae93904e8b1c936c65bbd652a7cad40b
+    trace-026.itf.json: 0d299abbbc2864a3a876ee8b463b0fa165b6b99c8a4d2b52b219a4595b892684
+    trace-027.itf.json: 31073925175930ceeb194a52dcc9830fb031e6652f6520a740bd1154c6226407
+    trace-028.itf.json: 0f40cb69db1256d63423a44e2d87e5e9e1cd7ffbd738ae58e909f7940e4ef874
+    trace-029.itf.json: 46fb49249985e4d4bc9b0a2e058697dc0ecad930a1e5520c71e8099c52141ca7
+    trace-030.itf.json: f43302ec41eee46b717a10b636809abde778f5c6710a7033fa76fe0a91ff4f14
+    trace-031.itf.json: b0369176c45f1b85775e63ec1bc813e2a93b9d614c37cfed0628eb36a33576e5
+    trace-032.itf.json: b7fe9687ac10f5d67c52ca812524ae5a10de76bdfc82c36e9aa90e4574399e99
+    trace-033.itf.json: c74e894549907447084e04fc364c53def2d9d14194b293041d471186f91ac2cd
+    trace-034.itf.json: 1e505f494f0c52bc9b2664b1715633405bd21ccb2674d20daf005061af85d83f
+    trace-035.itf.json: 52631e7b17a3a9eebb0d653816db78f9d79f489b9ac17437adb50158b9e57bd4
+    trace-036.itf.json: 789a605e37e398231165f24664d56f10034f1bb8822c2bbfaae5ebcca2a197cd
+    trace-037.itf.json: ca660d9d40dd94729a0720f7aae1f0077dbd197afafbac70a16be8ec1f41ce58
+    trace-038.itf.json: 89fdb564bfb08900090e5a939eb56c3ebd6c1dabef18bf123241a26244361e9c
+    trace-039.itf.json: 109e532ea6dcf0497c70eb9e9e2a27f854964188c22985bc95b1f8ecbc8f72f7
+  traces: 40
+  transitions: 2400

@@ -1,0 +1,17 @@
+specification {
+ element library_ConfigMirrorProcess
+ element library_ConfigMirrorResource
+}
+model {
+ library_ConfigMirror_process = library_ConfigMirrorProcess "ConfigMirror"
+ library_ConfigMirror_resource0 = library_ConfigMirrorResource "ConfigMap" { description "/v1" }
+ library_ConfigMirror_process -> library_ConfigMirror_resource0 "readSource: get (cached)"
+ library_ConfigMirror_process -> library_ConfigMirror_resource0 "readTarget: get (direct)"
+ library_ConfigMirror_process -> library_ConfigMirror_resource0 "writeTarget: update (direct)"
+}
+views {
+ view library_ConfigMirror {
+ title "ConfigMirror"
+ include library_ConfigMirror_process, library_ConfigMirror_resource0
+ }
+}

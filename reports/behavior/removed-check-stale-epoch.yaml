@@ -1,0 +1,203 @@
+apiVersion: architecture.local/v1alpha1
+kind: Counterexample
+metadata:
+  name: removed-check-stale-epoch
+status:
+  - accepted: false
+    claim:
+      epoch: 0
+      machineId: ""
+    epoch: 1
+    err: false
+    event: init
+    finished: false
+    lease:
+      epoch: 1
+      machineId: host-1
+    localMachineId: ""
+    observed:
+      epoch: 1
+      machineId: host-1
+    pc: 12
+    publishedMachineId: ""
+    tick: 0
+  - accepted: false
+    claim:
+      epoch: 0
+      machineId: ""
+    epoch: 1
+    err: false
+    event: revoke
+    finished: false
+    lease:
+      epoch: 0
+      machineId: ""
+    localMachineId: ""
+    observed:
+      epoch: 1
+      machineId: host-1
+    pc: 12
+    publishedMachineId: ""
+    tick: 1
+  - accepted: false
+    claim:
+      epoch: 0
+      machineId: ""
+    epoch: 2
+    err: false
+    event: grant
+    finished: false
+    lease:
+      epoch: 2
+      machineId: host-1
+    localMachineId: ""
+    observed:
+      epoch: 1
+      machineId: host-1
+    pc: 12
+    publishedMachineId: ""
+    tick: 2
+  - accepted: false
+    claim:
+      epoch: 2
+      machineId: host-1
+    epoch: 2
+    err: false
+    event: readClaim
+    finished: false
+    lease:
+      epoch: 2
+      machineId: host-1
+    localMachineId: ""
+    observed:
+      epoch: 1
+      machineId: host-1
+    pc: 11
+    publishedMachineId: ""
+    tick: 3
+  - accepted: false
+    claim:
+      epoch: 2
+      machineId: host-1
+    epoch: 2
+    err: false
+    event: branch
+    finished: false
+    lease:
+      epoch: 2
+      machineId: host-1
+    localMachineId: ""
+    observed:
+      epoch: 1
+      machineId: host-1
+    pc: 9
+    publishedMachineId: ""
+    tick: 4
+  - accepted: false
+    claim:
+      epoch: 2
+      machineId: host-1
+    epoch: 2
+    err: false
+    event: branch
+    finished: false
+    lease:
+      epoch: 2
+      machineId: host-1
+    localMachineId: ""
+    observed:
+      epoch: 1
+      machineId: host-1
+    pc: 7
+    publishedMachineId: ""
+    tick: 5
+  - accepted: false
+    claim:
+      epoch: 2
+      machineId: host-1
+    epoch: 2
+    err: false
+    event: readInfra
+    finished: false
+    lease:
+      epoch: 2
+      machineId: host-1
+    localMachineId: ""
+    observed:
+      epoch: 1
+      machineId: host-1
+    pc: 6
+    publishedMachineId: ""
+    tick: 6
+  - accepted: false
+    claim:
+      epoch: 2
+      machineId: host-1
+    epoch: 2
+    err: false
+    event: branch
+    finished: false
+    lease:
+      epoch: 2
+      machineId: host-1
+    localMachineId: ""
+    observed:
+      epoch: 1
+      machineId: host-1
+    pc: 4
+    publishedMachineId: ""
+    tick: 7
+  - accepted: false
+    claim:
+      epoch: 2
+      machineId: host-1
+    epoch: 2
+    err: false
+    event: setField
+    finished: false
+    lease:
+      epoch: 2
+      machineId: host-1
+    localMachineId: host-1
+    observed:
+      epoch: 1
+      machineId: host-1
+    pc: 3
+    publishedMachineId: ""
+    tick: 8
+  - accepted: false
+    claim:
+      epoch: 2
+      machineId: host-1
+    epoch: 2
+    err: false
+    event: branch
+    finished: false
+    lease:
+      epoch: 2
+      machineId: host-1
+    localMachineId: host-1
+    observed:
+      epoch: 1
+      machineId: host-1
+    pc: 1
+    publishedMachineId: ""
+    tick: 9
+  - accepted: false
+    claim:
+      epoch: 2
+      machineId: host-1
+    epoch: 2
+    err: false
+    event: commit
+    finished: false
+    lease:
+      epoch: 2
+      machineId: host-1
+    localMachineId: host-1
+    observed:
+      epoch: 1
+      machineId: host-1
+    pc: 0
+    publishedMachineId: host-1
+    tick: 10

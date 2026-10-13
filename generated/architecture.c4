@@ -1,0 +1,30 @@
+// GENERATED from the same resolved bindings as System.qnt.
+specification {
+  element owned { style { color blue } }
+  element external { style { color amber } }
+  element cluster { style { color green } }
+}
+model {
+  infra = external "CAPI InfraMachine controller" { description "Implements the MAC contract, requests allocation, then calls provisioning with the returned machine ID. Has no lease-specific input. Abstract upstream/provider behavior, not executed CAPI. Evidence: authored assumption; upstream conformance untested; contract 0.3.0" }
+  mac = owned "Machine allocation controller (MAC)" { description "Recognizes the InfraMachine contract, creates a MachineClaim, observes its lease assignment, and publishes only the machine ID back to the InfraMachine. Evidence: authored contract; simulated Go adapter; Go structure checked: generative-architecture/examples/machinevendor/controllerdemo.MACReconciler; primary generative-architecture/examples/machinevendor/api/v1alpha1.InfraMachine; owns (declared) generative-architecture/examples/machinevendor/api/v1alpha1.MachineClaim; contract 0.3.0" }
+  claim = owned "MachineClaim / lease mechanism" { description "Abstracts the existing claim-to-lease mechanism; actual controller placement is unspecified. Leases are bound to the requesting InfraMachine identity. Evidence: authored contract; simulated Go adapter; contract 0.3.0" }
+  service = owned "Machine provisioning service" { description "Executes the queued machine-ID call with no independent lease authorization check. Fencing after release is an abstract lifecycle operation. Evidence: authored contract; simulated Go adapter; contract 0.3.0" }
+  cluster0 = cluster "Dedicated reserve Kubernetes cluster" { description "CAPI consumer identity: reserve-capi; topology context only." }
+  cluster1 = cluster "Customer Kubernetes cluster" { description "CAPI consumer identity: customer-capi; topology context only." }
+  infra -> mac "eligible → eligible / mac-inframachine/v1" { description "infra.eligible → mac.eligible; state infra_wanted; explicit validated binding" }
+  mac -> claim "claim → claim / machine-claim/v1" { description "mac.claim → claim.claim; state mac_claims; explicit validated binding" }
+  claim -> mac "lease → lease / claim-assignment/v1" { description "claim.lease → mac.lease; state claim_leases; explicit validated binding" }
+  mac -> infra "assignment → assignment / assigned-machine-id/v1" { description "mac.assignment → infra.assignment; state mac_assigned; explicit validated binding" }
+  infra -> service "provision → calls / provision-call/v1" { description "infra.provision → service.calls; state infra_calls; explicit validated binding" }
+  claim -> service "lease → lifecycle / claim-assignment/v1" { description "claim.lease → service.lifecycle; state claim_leases; prototype assumption: fence only after lease release; not a provisioning authorization check" }
+  service -> claim "physical → physical / physical-assignment/v1" { description "service.physical → claim.physical; state service_machines; explicit validated binding" }
+  infra -> cluster0 "consumer reserve-capi"
+  infra -> cluster1 "consumer customer-capi"
+}
+views {
+  view index {
+    title 'MAC and InfraMachine: resolved contracts'
+    include infra, mac, claim, service, cluster0, cluster1
+    autoLayout TopBottom
+  }
+}

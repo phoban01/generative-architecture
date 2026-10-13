@@ -1,0 +1,47 @@
+apiVersion: architecture.local/v1alpha1
+kind: VerificationReport
+metadata:
+  name: multiple-controllers
+status:
+  coverage:
+    advance: 274
+    reader_a_after: 11
+    reader_a_enqueue: 322
+    reader_a_error: 15
+    reader_a_errorAfter: 17
+    reader_a_fire: 23
+    reader_a_requeue: 24
+    reader_a_start: 102
+    reader_a_success: 16
+    reader_a_terminal: 16
+    reader_b_after: 14
+    reader_b_enqueue: 317
+    reader_b_error: 21
+    reader_b_errorAfter: 24
+    reader_b_fire: 14
+    reader_b_requeue: 16
+    reader_b_start: 104
+    reader_b_success: 13
+    reader_b_terminal: 11
+    writer_a_after: 18
+    writer_a_enqueue: 302
+    writer_a_error: 14
+    writer_a_errorAfter: 20
+    writer_a_fire: 23
+    writer_a_requeue: 18
+    writer_a_start: 112
+    writer_a_success: 14
+    writer_a_terminal: 25
+    writer_b_after: 13
+    writer_b_enqueue: 278
+    writer_b_error: 17
+    writer_b_errorAfter: 27
+    writer_b_fire: 23
+    writer_b_requeue: 10
+    writer_b_start: 101
+    writer_b_success: 11
+    writer_b_terminal: 20
+  result: passed
+  scope: bounded runtime simulation; real FIFO workers; scripted reconcile outcomes
+  traces: 40
+  transitions: 2400

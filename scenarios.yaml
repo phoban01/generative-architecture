@@ -1,0 +1,93 @@
+apiVersion: architecture.local/v1alpha1
+kind: ScenarioSuite
+metadata:
+  name: machine-vendor
+spec:
+  staleLease:
+    - action: infra.request
+      infra: infra-reserve
+    - action: mac.createClaim
+      infra: infra-reserve
+    - action: claim.grant
+      infra: infra-reserve
+      host: host-1
+    - action: mac.observe
+      infra: infra-reserve
+    - action: claim.revoke
+      infra: infra-reserve
+    - action: mac.publish
+      infra: infra-reserve
+  staleEpoch:
+    - action: infra.request
+      infra: infra-reserve
+    - action: mac.createClaim
+      infra: infra-reserve
+    - action: claim.grant
+      infra: infra-reserve
+      host: host-1
+    - action: mac.observe
+      infra: infra-reserve
+    - action: claim.revoke
+      infra: infra-reserve
+    - action: claim.grant
+      infra: infra-reserve
+      host: host-1
+    - action: mac.publish
+      infra: infra-reserve
+  revokedAfterPublication:
+    - action: infra.request
+      infra: infra-reserve
+    - action: mac.createClaim
+      infra: infra-reserve
+    - action: claim.grant
+      infra: infra-reserve
+      host: host-1
+    - action: mac.observe
+      infra: infra-reserve
+    - action: mac.publish
+      infra: infra-reserve
+    - action: infra.submit
+      infra: infra-reserve
+    - action: claim.revoke
+      infra: infra-reserve
+    - action: mac.clear
+      infra: infra-reserve
+    - action: service.execute
+      infra: infra-reserve
+  transferFromReserve:
+    - action: infra.request
+      infra: infra-reserve
+    - action: mac.createClaim
+      infra: infra-reserve
+    - action: claim.grant
+      infra: infra-reserve
+      host: host-1
+    - action: mac.observe
+      infra: infra-reserve
+    - action: mac.publish
+      infra: infra-reserve
+    - action: infra.submit
+      infra: infra-reserve
+    - action: service.execute
+      infra: infra-reserve
+    - action: claim.revoke
+      infra: infra-reserve
+    - action: mac.clear
+      infra: infra-reserve
+    - action: service.fence
+      host: host-1
+    - action: infra.request
+      infra: infra-customer
+    - action: mac.createClaim
+      infra: infra-customer
+    - action: claim.grant
+      infra: infra-customer
+      host: host-1
+    - action: mac.observe
+      infra: infra-customer
+    - action: mac.publish
+      infra: infra-customer
+    - action: infra.submit
+      infra: infra-customer
+    - action: service.execute
+      infra: infra-customer

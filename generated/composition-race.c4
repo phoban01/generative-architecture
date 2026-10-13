@@ -1,0 +1,16 @@
+// Generated from a Quint counterexample successfully replayed against paused Go.
+model { runtimeEnvironment = runtimePart "Controlled environment" { description "Schedules lease changes, API faults and cache delivery in the test harness." } }
+views { dynamic view composed_publication_race {
+ variant sequence
+ title 'Replayed Go publication: revocation between read and write'
+ description 'Actual unmodified MAC.Publish, real worker/queue, controlled fake API and cache; no production claim.'
+ runtimeEnvironment -> runtimeQueue "enqueue key"
+ runtimeQueue -> runtimeWorker "begin reconcile"
+ runtimeProcess -> runtimeCache "observe cached assignment"
+ runtimeWorker -> runtimeProcess "invoke Publish with retained observation"
+ runtimeProcess -> runtimeAPI "read lease and retain snapshot"
+ runtimeEnvironment -> runtimeAPI "revoke lease"
+ runtimeAPI -> runtimeCache "deliver revoked assignment"
+ runtimeProcess -> runtimeCache "read InfraMachine and its resourceVersion"
+ runtimeProcess -> runtimeAPI "commit machine ID from retained snapshot"
+} }

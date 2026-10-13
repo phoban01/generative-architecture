@@ -1,0 +1,5 @@
+# Local builds and reproducible tool logs. Models, traces and YAML evidence stay versioned.
+/bin/
+/site/
+/reports/**/*.txt
+.DS_Store

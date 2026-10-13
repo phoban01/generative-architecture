@@ -1,0 +1,246 @@
+// Package watchgen extracts a deliberately restricted controller-runtime builder
+// setup. Unknown predicates, options, handlers and setup control flow fail closed.
+package watchgen
+
+import (
+	"fmt"
+	"generative-architecture/pkg/effect"
+	"generative-architecture/pkg/goflow"
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"strconv"
+)
+
+type Rule struct {
+	Resource      effect.Resource `yaml:"resource"`
+	GoType        string          `yaml:"goType"`
+	Unstructured  bool            `yaml:"unstructured,omitempty"`
+	Mapping       string          `yaml:"mapping"` // self, or a selected Go mapping function
+	Line          int             `yaml:"line"`
+	NamePath      []string        `yaml:"namePath,omitempty"`
+	Predicates    []string        `yaml:"predicates,omitempty"`
+	MappingSHA256 string          `yaml:"mappingSha256,omitempty"`
+}
+type Result struct {
+	Rules        []Rule `yaml:"rules"`
+	SourceSHA256 string `yaml:"sourceSha256"`
+	MethodSHA256 string `yaml:"methodSha256"`
+}
+
+// Extract reads a single fluent builder return and supported local field-reference
+// mappers. Resources supplies resolved Go import-path.Type names and checked GVKs.
+// Callers typecheck the input package; this frontend checks the supported syntax.
+func Extract(source []byte, receiver, method string, resources map[string]effect.Resource) (Result, error) {
+	return ExtractWithGVKs(source, receiver, method, resources, nil)
+}
+
+// ExtractWithGVKs also resolves unstructured watch objects. The optional bindings
+// map gives exact GVKs for runtime expressions such as r.InfraGVK; unresolved
+// discovery values fail rather than silently dropping a watch from the model.
+func ExtractWithGVKs(source []byte, receiver, method string, resources, bindings map[string]effect.Resource) (Result, error) {
+	out := Result{SourceSHA256: goflow.Hash(source)}
+	fs := token.NewFileSet()
+	f, err := parser.ParseFile(fs, "wiring.go", source, parser.ParseComments)
+	if err != nil {
+		return out, err
+	}
+	imports := map[string]string{}
+	for _, i := range f.Imports {
+		path, err := strconv.Unquote(i.Path.Value)
+		if err != nil {
+			return out, err
+		}
+		if i.Name == nil {
+			defaults := map[string]string{"context": "context", "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured": "unstructured", "k8s.io/apimachinery/pkg/runtime/schema": "schema", "sigs.k8s.io/controller-runtime": "controllerruntime", "sigs.k8s.io/controller-runtime/pkg/client": "client", "sigs.k8s.io/controller-runtime/pkg/handler": "handler", "sigs.k8s.io/controller-runtime/pkg/reconcile": "reconcile", "sigs.k8s.io/controller-runtime/pkg/builder": "builder", "sigs.k8s.io/controller-runtime/pkg/predicate": "predicate"}
+			name, ok := defaults[path]
+			if !ok {
+				return out, fmt.Errorf("supply an explicit import alias for package %s", path)
+			}
+			imports[name] = path
+		} else {
+			imports[i.Name.Name] = path
+		}
+	}
+	fn := goflow.FindMethod(f, receiver, method)
+	if fn == nil || fn.Body == nil || len(fn.Body.List) == 0 {
+		return out, fmt.Errorf("expected a builder return in %s.%s", receiver, method)
+	}
+	ret, ok := fn.Body.List[len(fn.Body.List)-1].(*ast.ReturnStmt)
+	if !ok || len(ret.Results) != 1 {
+		return out, fmt.Errorf("expected builder return")
+	}
+	out.MethodSHA256 = goflow.Hash([]byte(goflow.Code(fn)))
+	qualified := func(e ast.Expr) string {
+		s, ok := e.(*ast.SelectorExpr)
+		if !ok {
+			return ""
+		}
+		id, ok := s.X.(*ast.Ident)
+		if !ok {
+			return ""
+		}
+		return imports[id.Name] + "." + s.Sel.Name
+	}
+	if fn.Recv == nil || len(fn.Recv.List) != 1 || len(fn.Recv.List[0].Names) != 1 ||
+		len(fn.Type.Params.List) != 1 || len(fn.Type.Params.List[0].Names) != 1 ||
+		qualified(fn.Type.Params.List[0].Type) != "sigs.k8s.io/controller-runtime.Manager" {
+		return out, fmt.Errorf("expected a named receiver and one controller-runtime Manager parameter")
+	}
+	receiverName := fn.Recv.List[0].Names[0].Name
+	managerName := fn.Type.Params.List[0].Names[0].Name
+	isName := func(e ast.Expr, name string) bool {
+		id, ok := e.(*ast.Ident)
+		return ok && id.Name == name && name != "_"
+	}
+	objects, err := unstructuredObjects(fn.Body.List[:len(fn.Body.List)-1], qualified, bindings)
+	if err != nil {
+		return out, err
+	}
+	usedObjects := map[string]bool{}
+	resource := func(e ast.Expr) (string, effect.Resource, error) {
+		if id, ok := e.(*ast.Ident); ok {
+			if r, ok := objects[id.Name]; ok {
+				usedObjects[id.Name] = true
+				return "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured.Unstructured", r, nil
+			}
+			return "", effect.Resource{}, fmt.Errorf("unresolved watch object %s", id.Name)
+		}
+		ptr, ok := e.(*ast.UnaryExpr)
+		if !ok || ptr.Op != token.AND {
+			return "", effect.Resource{}, fmt.Errorf("expected resource pointer")
+		}
+		lit, ok := ptr.X.(*ast.CompositeLit)
+		if !ok || len(lit.Elts) != 0 {
+			return "", effect.Resource{}, fmt.Errorf("expected empty resource literal")
+		}
+		name := qualified(lit.Type)
+		r, ok := resources[name]
+		if !ok {
+			return "", r, fmt.Errorf("unknown watched resource %s", name)
+		}
+		return name, r, nil
+	}
+	var visit func(ast.Expr) error
+	primary := false
+	globalPredicates := []string{}
+	parsePredicate := func(e ast.Expr) (string, error) {
+		lit, ok := e.(*ast.CompositeLit)
+		if !ok || len(lit.Elts) != 0 {
+			return "", fmt.Errorf("unsupported predicate expression")
+		}
+		name := qualified(lit.Type)
+		switch name {
+		case "sigs.k8s.io/controller-runtime/pkg/predicate.GenerationChangedPredicate":
+			return "generationChanged", nil
+		case "sigs.k8s.io/controller-runtime/pkg/predicate.ResourceVersionChangedPredicate":
+			return "resourceVersionChanged", nil
+		}
+		return "", fmt.Errorf("unsupported predicate %s", name)
+	}
+	visit = func(e ast.Expr) error {
+		call, ok := e.(*ast.CallExpr)
+		if !ok || call.Ellipsis.IsValid() {
+			return fmt.Errorf("unsupported watch builder expression")
+		}
+		if qualified(call.Fun) == "sigs.k8s.io/controller-runtime.NewControllerManagedBy" {
+			if len(call.Args) != 1 || !isName(call.Args[0], managerName) {
+				return fmt.Errorf("unsupported manager arguments")
+			}
+			return nil
+		}
+		sel, ok := call.Fun.(*ast.SelectorExpr)
+		if !ok {
+			return fmt.Errorf("unsupported builder call")
+		}
+		if err := visit(sel.X); err != nil {
+			return err
+		}
+		switch sel.Sel.Name {
+		case "Complete":
+			if len(call.Args) != 1 || e != ret.Results[0] || !isName(call.Args[0], receiverName) {
+				return fmt.Errorf("Complete must terminate setup with its receiver")
+			}
+		case "For", "Watches":
+			count := 1
+			if sel.Sel.Name == "Watches" {
+				count = 2
+			}
+			if len(call.Args) < count {
+				return fmt.Errorf("incomplete watch")
+			}
+			predicates := []string{}
+			for _, arg := range call.Args[count:] {
+				opt, ok := arg.(*ast.CallExpr)
+				if !ok || qualified(opt.Fun) != "sigs.k8s.io/controller-runtime/pkg/builder.WithPredicates" || len(opt.Args) == 0 {
+					return fmt.Errorf("unsupported watch option")
+				}
+				for _, arg := range opt.Args {
+					p, err := parsePredicate(arg)
+					if err != nil {
+						return err
+					}
+					predicates = append(predicates, p)
+				}
+			}
+			name, r, err := resource(call.Args[0])
+			if err != nil {
+				return err
+			}
+			rule := Rule{Resource: r, GoType: name, Unstructured: name == "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured.Unstructured", Mapping: "self", Line: fs.Position(sel.Sel.Pos()).Line, NamePath: []string{"Name"}, Predicates: predicates}
+			if sel.Sel.Name == "For" {
+				if primary {
+					return fmt.Errorf("duplicate primary watch")
+				}
+				primary = true
+			} else {
+				h, ok := call.Args[1].(*ast.CallExpr)
+				if !ok || qualified(h.Fun) != "sigs.k8s.io/controller-runtime/pkg/handler.EnqueueRequestsFromMapFunc" || len(h.Args) != 1 {
+					return fmt.Errorf("unsupported watch handler")
+				}
+				id, ok := h.Args[0].(*ast.Ident)
+				if !ok {
+					return fmt.Errorf("mapping must name a local function")
+				}
+				rule.Mapping = id.Name
+				if err := extractMapping(f, imports, &rule); err != nil {
+					return err
+				}
+			}
+			out.Rules = append(out.Rules, rule)
+		case "WithEventFilter":
+			if len(call.Args) != 1 {
+				return fmt.Errorf("invalid global predicate")
+			}
+			p, err := parsePredicate(call.Args[0])
+			if err != nil {
+				return err
+			}
+			globalPredicates = append(globalPredicates, p)
+		default:
+			return fmt.Errorf("unsupported builder operation %s", sel.Sel.Name)
+		}
+		return nil
+	}
+	outer, ok := ret.Results[0].(*ast.CallExpr)
+	if !ok {
+		return out, fmt.Errorf("missing Complete")
+	}
+	sel, ok := outer.Fun.(*ast.SelectorExpr)
+	if !ok || sel.Sel.Name != "Complete" {
+		return out, fmt.Errorf("missing Complete")
+	}
+	if err = visit(ret.Results[0]); err != nil {
+		return out, err
+	}
+	if len(usedObjects) != len(objects) {
+		return out, fmt.Errorf("unused unstructured watch object")
+	}
+	if !primary {
+		return out, fmt.Errorf("primary For watch required")
+	}
+	for i := range out.Rules {
+		out.Rules[i].Predicates = append(out.Rules[i].Predicates, globalPredicates...)
+	}
+	return out, nil
+}

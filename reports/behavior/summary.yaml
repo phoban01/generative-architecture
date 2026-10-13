@@ -1,0 +1,110 @@
+apiVersion: architecture.local/v1alpha1
+kind: VerificationReport
+metadata:
+  name: behavior
+status:
+  atomicity: API read and write are separate transitions; observed snapshot retained between them
+  configurationSha256: 2b26aff10025ce1e3db24707ef519853b58d7f47819c8d659f71510371022ced
+  implementation: Go AST -> control-flow transitions -> Quint
+  method: MACReconciler.Publish
+  mutantMethodSha256: 5f8fc8f9b1813deb24d8d6a257bcf94a0b8e52ce618c81b365b4687f10a4c750
+  mutantModelSha256: 1fbcdf1d2715700f1ce3756ae744dee98b256c71252e4a265a3c0eb0f9379182
+  originalMethodSha256: 5156f9ffbfa63dd9806efb1311b102b99080296b616e7cd625d94c8ade564e22
+  originalModelSha256: 6e76a593649dfa1aff8d1525c812e934218619b10fad8c1598438ad303cc9630
+  results:
+    intact-read-write-race:
+      expectedViolation: true
+      finalState:
+        accepted: false
+        claim:
+          epoch: 1
+          machineId: host-1
+        epoch: 1
+        err: false
+        event: commit
+        finished: false
+        lease:
+          epoch: 0
+          machineId: ""
+        localMachineId: host-1
+        observed:
+          epoch: 1
+          machineId: host-1
+        pc: 0
+        publishedMachineId: host-1
+        tick: 9
+      model: Publication
+      property: publicationUsesLiveLease
+      samples: 1
+      steps: 9
+      trace: reports/behavior/intact-read-write-race.itf.json
+    intact-stale-epoch:
+      expectedViolation: false
+      model: Publication
+      property: publicationUsesCheckedLease
+      samples: 1
+    intact-stale-lease:
+      expectedViolation: false
+      model: Publication
+      property: publicationUsesCheckedLease
+      samples: 1
+    removed-check-stale-epoch:
+      expectedViolation: true
+      finalState:
+        accepted: false
+        claim:
+          epoch: 2
+          machineId: host-1
+        epoch: 2
+        err: false
+        event: commit
+        finished: false
+        lease:
+          epoch: 2
+          machineId: host-1
+        localMachineId: host-1
+        observed:
+          epoch: 1
+          machineId: host-1
+        pc: 0
+        publishedMachineId: host-1
+        tick: 10
+      model: PublicationMutant
+      property: publicationUsesCheckedLease
+      samples: 1
+      steps: 10
+      trace: reports/behavior/removed-check-stale-epoch.itf.json
+    removed-check-stale-lease:
+      expectedViolation: true
+      finalState:
+        accepted: false
+        claim:
+          epoch: 0
+          machineId: ""
+        epoch: 1
+        err: false
+        event: commit
+        finished: false
+        lease:
+          epoch: 0
+          machineId: ""
+        localMachineId: host-1
+        observed:
+          epoch: 1
+          machineId: host-1
+        pc: 0
+        publishedMachineId: host-1
+        tick: 9
+      model: PublicationMutant
+      property: publicationUsesCheckedLease
+      samples: 1
+      steps: 9
+      trace: reports/behavior/removed-check-stale-lease.itf.json
+    snapshot-check:
+      expectedViolation: false
+      model: Publication
+      property: publicationUsesCheckedLease
+      samples: 500
+  scope: single subreconciler-like process; finite environment summaries, sampled simulation, not exhaustive verification
+  source: examples/machinevendor/controllerdemo/mac.go
+  sourceSha256: b6eb3e62afc77cfa9c494e3e3d3ef324ec6c7000600fb43d05259e811181faec

@@ -1,0 +1,21 @@
+// GENERATED from Go types and declared +arch markers.
+specification {
+ element sourceController
+ element sourceResource
+}
+model {
+ sourceResource0 = sourceResource "InfraMachine" { description "demo.architecture.local/v1alpha1; generative-architecture/examples/machinevendor/api/v1alpha1.InfraMachine; examples/machinevendor/api/v1alpha1/types.go" }
+ sourceResource1 = sourceResource "MachineClaim" { description "demo.architecture.local/v1alpha1; generative-architecture/examples/machinevendor/api/v1alpha1.MachineClaim; examples/machinevendor/api/v1alpha1/types.go" }
+ sourceController0 = sourceController "mac controller" { description "generative-architecture/examples/machinevendor/controllerdemo.MACReconciler; declared primary generative-architecture/examples/machinevendor/api/v1alpha1.InfraMachine; declared owns generative-architecture/examples/machinevendor/api/v1alpha1.MachineClaim; runtime registration not inferred" }
+ sourceController0 -> sourceResource0 "assignment / status.machineId" { description "map(string, string); assigned-machine-id/v1; semantic join declared in YAML; field path and type checked from Go" }
+ sourceController0 -> sourceResource1 "claim / $exists" { description "map(string, bool); machine-claim/v1; semantic join declared in YAML; field path and type checked from Go" }
+ sourceResource0 -> sourceController0 "eligible / spec.allocationRequested" { description "map(string, bool); mac-inframachine/v1; semantic join declared in YAML; field path and type checked from Go" }
+ sourceResource1 -> sourceController0 "lease / status" { description "map(string, Assignment); claim-assignment/v1; semantic join declared in YAML; field path and type checked from Go" }
+}
+views {
+ view code_structure {
+ title 'Go types and declared controller mappings'
+ include sourceResource0, sourceResource1, sourceController0
+ autoLayout TopBottom
+ }
+}
