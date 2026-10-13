@@ -11,11 +11,11 @@ break adopters on every patch release.
 ## Decision
 
 Quint and LikeC4 remain separately installed executables selected by `QUINT_BIN`/`LIKEC4_BIN`
-or flags. Each is accepted within a documented semver range (minimum version plus the next
+or flags. Compatibility and reproducibility are separate concerns: each tool is accepted within a documented semver range (minimum version plus the next
 minor as the exclusive upper bound). The repository has no npm project. The supported Go
 toolchain is the two most recent minor releases.
 
 ## Consequences
 
-- Version checks parse semver and compare ranges; receipts record the exact version used.
+- Version checks parse semver and compare ranges; every execution receipt records the exact resolved version, so a range never weakens reproducibility.
 - CI runs a small matrix across the supported range.
