@@ -1,0 +1,18 @@
+apiVersion: architecture.local/v1alpha1
+kind: Project
+metadata:
+  name: config-mirror
+spec:
+  module: generative-architecture
+  packages:
+    - ./examples/configmirror
+  catalog:
+    discovery:
+      - discovery.json
+  constraints:
+    - constraints.yaml
+  runtime:
+    profile: controller-runtime
+  bounds:
+    maxObjectsPerResource: 2
+    maxInvocations: 3

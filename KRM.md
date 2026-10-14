@@ -27,11 +27,13 @@ spec:
 
 | Document | Kind | Payload | Used by |
 | --- | --- | --- | --- |
+| `examples/refsystem/project.yaml`, `examples/configmirror/project.yaml` | Project | spec | `pkg/project`: module, package patterns, catalog sources, constraints, boundaries, runtime profile and bounds; referenced paths are checked and hashed (ADOPT-1) |
 | `examples/database/model.yaml`, `examples/configmirror/system.yaml` | TransitionModel | spec | `pkg/model`, `pkg/process`, `pkg/composition` |
 | `examples/database/process.yaml` | ProcessSemantics | spec | `pkg/process` (effect summaries for extracted Go calls) |
 | `examples/database/resources.yaml` | KubernetesResourceCatalog | spec | `pkg/dynamicgen` (GVR/GVK/plural/scope bindings) |
-| `examples/database/constraints.yaml` | ModelConstraints | spec | independent properties compiled apart from the behaviour model |
-| An abstraction document (`pkg/abstraction/testdata/database.yaml`) | Abstraction | spec | `pkg/abstraction`: bounded objects, fields, value domains, references and locals that derive model state (ADR-0005) |
+| `examples/database/constraints.yaml`, `examples/configmirror/constraints.yaml` | ModelConstraints | spec | independent properties compiled apart from the behaviour model |
+| `examples/configmirror/abstraction.yaml`, `pkg/abstraction/testdata/database.yaml` | Abstraction | spec | `pkg/abstraction`: bounded objects, fields, value domains, references and locals that derive model state (ADR-0005) |
+| A mutation suite document | MutationSuite | spec | `pkg/mutation`: named find/replace mutations of a file with the constraints expected to detect them; `Run` builds the detection matrix in memory (CON-8) |
 | `pkg/summaries/data/*.yaml` (embedded) | EffectSummaries | spec | `pkg/summaries`: built-in outcomes of client operations as CEL templates over `$placeholders` (ARCH-7) |
 | An external effects document (`pkg/goflow/testdata/external/effects.yaml`) | ExternalEffects | spec | `pkg/goflow`: declared outcomes of calls outside the API, keyed by callee symbol; typed extraction lowers a matching call to an `effect` node and `pkg/process` expands the outcomes (ARCH-13) |
 | A generated IR document | ArchitectureIR | status | `pkg/ir.Document`: controllers, watches, effects (kind `api`, or `external` with a callee target and declared outcomes), processes, contracts and constraints with evidence and provenance |
@@ -42,6 +44,7 @@ spec:
 | `examples/database/generated/watches.yaml` | ExtractedWatches | status | registrations, mapper field paths, predicates, hashes |
 | `examples/database/generated/dynamic-client.yaml` | ExtractedDynamicAccess | status | dynamic-client methods, resources, verbs, hashes |
 | `examples/*/report.yaml` | VerificationReport | status | trace counts, coverage, input and trace hashes |
+| An evidence receipt document | EvidenceReceipt | status | `pkg/receipt`: the consumed input closure (selected packages, their in-module transitive imports, go.mod/go.sum, extra documents) with SHA-256 per file and exact tool versions; `Verify` reports changed, missing and added files (EVID-5) |
 
 The Go loader (`pkg/krm`) validates the expected kind, supported API version, required payload, names, labels and annotation keys. It rejects unknown typed fields, duplicate keys, aliases, multiple YAML documents and malformed CEL scalars. Documents use cluster-scoped local identities, so nonempty namespaces are rejected explicitly. Payload maps such as state names remain intentionally extensible. The loader is not a general Kubernetes admission or schema implementation.
 

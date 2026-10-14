@@ -1,0 +1,12 @@
+apiVersion: architecture.local/v1alpha1
+kind: ModelConstraints
+metadata:
+  name: config-mirror-requirements
+spec:
+  properties:
+    - name: queueSafety
+      expression: '!(ready && processing) && (!ready || dirty)'
+    - name: writesObservedValue
+      expression: 'event != "commit" || target == snapshot'
+    - name: boundedRetries
+      expression: 'retries >= 0 && retries <= 3'

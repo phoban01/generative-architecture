@@ -1,0 +1,25 @@
+apiVersion: architecture.local/v1alpha1
+kind: Abstraction
+metadata:
+  name: config-mirror
+spec:
+  resources:
+    - gvk: {group: "", version: v1, kind: ConfigMap}
+      objects:
+        - {id: source, namespace: demo, name: source}
+        - {id: copy, namespace: demo, name: copy}
+      fields:
+        - {path: [data, value], type: string}
+      valueDomains:
+        data.value: ['"a"', '"b"', '""']
+      identity:
+        - [metadata, name]
+  locals:
+    - {name: snapshot, type: string}
+  bounds:
+    # One source and one copy: two ConfigMap objects in total.
+    maxObjectsPerResource: 2
+    maxInvocations: 3
+  excludes:
+    - delete
+    - list
