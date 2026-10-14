@@ -24,9 +24,14 @@ type markedType struct {
 	source Location
 }
 
+// kubebuilderRoot is the kubebuilder marker that declares a root API object.
+// A type carrying it is a resource without needing +arch:resource (ADOPT-2);
+// list types, which carry it too, are not resources.
+const kubebuilderRoot = "kubebuilder:object:root"
+
 func definitions() (map[string]*markers.Definition, error) {
 	out := map[string]*markers.Definition{}
-	for name, value := range map[string]any{"arch:resource": struct{}{}, "arch:controller": "", "arch:action": "", "arch:implements": ""} {
+	for name, value := range map[string]any{"arch:resource": struct{}{}, "arch:controller": "", "arch:action": "", "arch:implements": "", kubebuilderRoot: false} {
 		def, err := markers.MakeDefinition(name, markers.DescribesType, value)
 		if err != nil {
 			return nil, err
@@ -42,7 +47,7 @@ func parseComments(group *ast.CommentGroup, defs map[string]*markers.Definition,
 	}
 	for _, c := range group.List {
 		raw := strings.TrimSpace(strings.TrimPrefix(c.Text, "//"))
-		if !strings.HasPrefix(raw, "+arch:") {
+		if !strings.HasPrefix(raw, "+arch:") && raw != "+"+kubebuilderRoot && !strings.HasPrefix(raw, "+"+kubebuilderRoot+"=") {
 			continue
 		}
 		var name string
@@ -79,6 +84,37 @@ func location(root string, p *packages.Package, pos token.Pos) Location {
 	return Location{filepath.ToSlash(rel), loc.Line}
 }
 func named(t types.Type) *types.Named { n, _ := types.Unalias(t).(*types.Named); return n }
+
+// listType reports whether t is a Kubernetes list object: a struct embedding
+// metav1.ListMeta. Lists carry +kubebuilder:object:root=true but are not
+// resources a controller reconciles or a catalog lists.
+func listType(t types.Type) bool {
+	st, ok := t.Underlying().(*types.Struct)
+	if !ok {
+		return false
+	}
+	for i := 0; i < st.NumFields(); i++ {
+		if f := st.Field(i); f.Embedded() && types.TypeString(f.Type(), nil) == "k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta" {
+			return true
+		}
+	}
+	return false
+}
+
+// resourceOptIn folds the kubebuilder root marker into +arch:resource: a
+// type with either marker is a resource, with both it is one resource, and
+// a list type or root=false adds nothing.
+func resourceOptIn(marks map[string][]any, t types.Type) {
+	roots := marks[kubebuilderRoot]
+	delete(marks, kubebuilderRoot)
+	root := false
+	for _, v := range roots {
+		root = root || v.(bool)
+	}
+	if root && !listType(t) && len(marks["arch:resource"]) == 0 {
+		marks["arch:resource"] = []any{struct{}{}}
+	}
+}
 func field(t types.Type, path string) (types.Type, string, error) {
 	var jsonParts []string
 	for _, part := range strings.Split(path, ".") {
@@ -271,6 +307,7 @@ func Extract(root string, c Config) (*Descriptor, error) {
 					if err != nil {
 						return nil, err
 					}
+					delete(marks, kubebuilderRoot)
 					if len(marks) == 0 {
 						continue
 					}
@@ -310,13 +347,17 @@ func Extract(root string, c Config) (*Descriptor, error) {
 						}
 						delete(marks, "arch:implements")
 					}
+					obj := p.TypesInfo.Defs[ts.Name]
+					if obj == nil {
+						return nil, fmt.Errorf("%s: type %s has no type information", p.Fset.Position(ts.Pos()), ts.Name.Name)
+					}
+					resourceOptIn(marks, obj.Type())
 					if len(marks) == 0 {
 						continue
 					}
 					if len(marks) != 1 || len(marks["arch:action"]) > 0 {
 						return nil, fmt.Errorf("type declarations accept one resource or controller marker")
 					}
-					obj := p.TypesInfo.Defs[ts.Name]
 					n := named(obj.Type())
 					if n == nil || ts.Assign.IsValid() {
 						return nil, fmt.Errorf("markers require a defined Go type")

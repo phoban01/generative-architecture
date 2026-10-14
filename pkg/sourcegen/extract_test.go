@@ -149,3 +149,56 @@ func TestExtractArbitraryNamedRecord(t *testing.T) {
 		t.Fatalf("wrong record binding: %+v", descriptor.Controllers[0].Ports)
 	}
 }
+
+func TestKubebuilderRootMarkerOptsResourcesIn(t *testing.T) {
+	config := Config{Packages: []string{"./"}, Mappings: "source-mappings.yaml"}
+	// DatabaseInstance carries only the kubebuilder marker; Database carries both.
+	source := strings.Replace(fixture, "// +arch:resource\ntype DatabaseInstance", "// +kubebuilder:object:root=true\ntype DatabaseInstance", 1)
+	source = strings.Replace(source, "// +arch:resource\ntype Database ", "// +kubebuilder:object:root=true\n// +arch:resource\ntype Database ", 1)
+	d, err := Extract(fixtureRoot(t, source), config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(d.Resources) != 2 || d.Resources[0].Kind != "Database" || d.Resources[1].Kind != "DatabaseInstance" {
+		t.Fatalf("kubebuilder root type not extracted as a resource: %+v", d.Resources)
+	}
+	if d.Controllers[0].Owns != d.Resources[1].ID {
+		t.Fatalf("owned resource not resolved: %+v", d.Controllers[0])
+	}
+	// root=false is not an opt-in, so the owned resource is missing.
+	off := strings.Replace(source, "// +kubebuilder:object:root=true\ntype DatabaseInstance", "// +kubebuilder:object:root=false\ntype DatabaseInstance", 1)
+	if _, err := Extract(fixtureRoot(t, off), config); err == nil || !strings.Contains(err.Error(), "unknown primary/owned resource") {
+		t.Fatalf("root=false opted a resource in: %v", err)
+	}
+}
+
+func TestKubebuilderRootListTypesAreNotResources(t *testing.T) {
+	source := strings.Replace(fixture, "import (\n", "import (\n metav1 \"k8s.io/apimachinery/pkg/apis/meta/v1\"\n", 1) +
+		"// +kubebuilder:object:root=true\ntype DatabaseList struct { metav1.ListMeta `json:\"metadata\"`; Items []Database `json:\"items\"` }\n"
+	root := fixtureRoot(t, source)
+	for path, body := range map[string]string{
+		"go.mod":                                 "module sigs.k8s.io/controller-runtime\n\ngo 1.25.0\n\nrequire k8s.io/apimachinery v0.0.0\n\nreplace k8s.io/apimachinery => ./apimachinery\n",
+		"apimachinery/go.mod":                    "module k8s.io/apimachinery\n\ngo 1.25.0\n",
+		"apimachinery/pkg/apis/meta/v1/types.go": "package v1\ntype ListMeta struct{}\n",
+	} {
+		full := filepath.Join(root, path)
+		if err := os.MkdirAll(filepath.Dir(full), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(body), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	d, err := Extract(root, Config{Packages: []string{"./"}, Mappings: "source-mappings.yaml"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range d.Resources {
+		if r.Kind == "DatabaseList" {
+			t.Fatalf("list type extracted as a resource: %+v", d.Resources)
+		}
+	}
+	if len(d.Resources) != 2 {
+		t.Fatalf("expected the two marked resources: %+v", d.Resources)
+	}
+}
