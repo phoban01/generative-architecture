@@ -1,0 +1,24 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/0.18.4/.schema/devbox.schema.json",
+  "packages": [
+    "go@1.26.8",
+    "nodejs@24.21.0",
+    "gh@2.102.0"
+  ],
+  "env": {
+    "QUINT_BIN": "$PWD/hack/tools/node_modules/.bin/quint",
+    "LIKEC4_BIN": "$PWD/hack/tools/node_modules/.bin/likec4",
+    "PATH": "$PWD/hack/tools/node_modules/.bin:$PATH"
+  },
+  "shell": {
+    "init_hook": [
+      "if [ ! -x hack/tools/node_modules/.bin/quint ] || [ ! -x hack/tools/node_modules/.bin/likec4 ]; then npm ci --prefix hack/tools --silent --no-audit --no-fund; fi"
+    ],
+    "scripts": {
+      "check": "make check",
+      "verify": "make verify",
+      "render": "make render",
+      "tools": "go version && quint --version && likec4 --version && gh --version | head -1"
+    }
+  }
+}

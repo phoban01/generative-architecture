@@ -3,3 +3,6 @@
 /site/
 /reports/**/*.txt
 .DS_Store
+/hack/tools/node_modules/
+/.devbox/
+/.direnv/

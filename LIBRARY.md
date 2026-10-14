@@ -82,7 +82,7 @@ make consumer-test               # imports from a separate Go module
 make verify                      # refresh all model evidence and run all tests
 ```
 
-Fresh simulation requires the external Quint 0.33.0 CLI (`QUINT_BIN`); LikeC4 rendering requires LikeC4 1.59.4 (`LIKEC4_BIN`). The application/library is Go and has no npm project.
+Fresh simulation requires the external Quint 0.33.0 CLI (`QUINT_BIN`); LikeC4 rendering requires LikeC4 1.59.4 (`LIKEC4_BIN`). The application/library is Go and imports no npm code; `devbox shell` installs both CLIs at the pinned versions from `hack/tools/package.json`.
 
 `make verify` includes the full MAC walkthrough with 40 sampled traces, the larger MAC process/runtime composition checks, ConfigMirror integration tests, and 40 sampled multi-controller runtime traces. Targeted tests cover concurrent invocations, source mutations, unsupported syntax, subreconciler returns, contract drift, ambiguous providers, shared-state snapshots and read-only ports. Simulation is bounded, not exhaustive verification or a liveness proof.
 

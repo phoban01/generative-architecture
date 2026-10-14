@@ -237,7 +237,7 @@ Architectural decisions are recorded in `docs/adr/`. Decisions taken by this pla
 
 - ADR-0001: `TransitionModel` is the canonical model schema; the `Contract`/`System` schema under `contracts/` and `system.yaml` is legacy and confined to `cmd/machinevendor`.
 - ADR-0002: One shared IR (`pkg/ir`) is the only input to generators; frontends never talk to generators directly.
-- ADR-0003: External tools (Quint, LikeC4) stay external and are invoked by version range; no npm project in the repository.
+- ADR-0003: External tools (Quint, LikeC4) stay external and are invoked by version range; the Go module imports no npm code (`hack/tools/` only pins the CLIs for devbox).
 - ADR-0004: A neutral reference system under `examples/refsystem` is the walkthrough and the source of exit criteria.
 - ADR-0005: State abstraction is a declared input (`Abstraction` document) that drives both model generation and replay projection.
 - ADR-0006: Integration checkpoints on existing controllers gate expansion of the extraction, composition and diagram surface.

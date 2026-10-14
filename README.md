@@ -56,9 +56,20 @@ Authored documents use KRM `apiVersion`, `kind`, `metadata` and `spec`; generate
 
 The original MAC runtime profile selects one key, one worker and a FIFO queue. The reusable runtime also supports multiple controllers, keys and workers; `examples/runtimegroup/` exercises that profile. The composition layer retains invocation locals and permits runtime events between publication API operations. The handwritten adapters, fake API stores and environment assumptions remain visible in each layer's guide.
 
+## Development environment
+
+[Devbox](https://www.jetify.com/devbox) pins the toolchain in `devbox.json` and `devbox.lock`: Go, Node.js and `gh` from nixpkgs, plus Quint 0.33.0 and LikeC4 1.59.4 installed by npm from `hack/tools/package.json` and its lockfile on first shell entry. The Go module has no npm dependency; `hack/tools/` only supplies the two external CLIs.
+
+```sh
+devbox shell          # or: devbox run tools   (prints every tool version)
+devbox run check      # replay hash-checked evidence
+devbox run verify     # refresh evidence with the pinned Quint
+devbox run render     # build the LikeC4 site
+```
+
 ## Fresh verification
 
-Dependencies are pinned in `go.mod` and `go.sum`. Fresh model checks require **Quint 0.33.0**; diagram rendering requires **LikeC4 1.59.4**. The Go tools call those external executables; this repository has no npm project. Set `QUINT_BIN` / `LIKEC4_BIN`, or use the commands' `--quint` / `--likec4` flags.
+Dependencies are pinned in `go.mod` and `go.sum`. Fresh model checks require **Quint 0.33.0**; diagram rendering requires **LikeC4 1.59.4**. The Go tools call those external executables and never import npm code. `devbox shell` provides Go, Node, `gh` and both CLIs at the pinned versions and exports `QUINT_BIN` / `LIKEC4_BIN` (see [Development environment](#development-environment)). Outside devbox, set those variables or use the commands' `--quint` / `--likec4` flags.
 
 ```sh
 go run ./cmd/arch generate

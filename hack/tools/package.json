@@ -1,0 +1,9 @@
+{
+  "name": "generative-architecture-tools",
+  "private": true,
+  "description": "Pinned external CLIs that the Go tools invoke. Not part of the library; see devbox.json.",
+  "dependencies": {
+    "@informalsystems/quint": "0.33.0",
+    "likec4": "1.59.4"
+  }
+}
