@@ -46,7 +46,7 @@ Authored documents use KRM `apiVersion`, `kind`, `metadata` and `spec`; generate
 
 ## Development environment
 
-[Devbox](https://www.jetify.com/devbox) pins the toolchain in `devbox.json` and `devbox.lock`: Go, Node.js and `gh` from nixpkgs, plus Quint 0.33.0 and LikeC4 1.59.4 installed by npm from `hack/tools/package.json` and its lockfile on first shell entry. The Go module has no npm dependency; `hack/tools/` only supplies the two external CLIs.
+[Devbox](https://www.jetify.com/devbox) pins the toolchain in `devbox.json` and `devbox.lock`: Go, Node.js and `gh` from nixpkgs, plus Quint and LikeC4 installed by npm from `hack/tools/package.json` and its lockfile on first shell entry. The devbox pins sit at the minimum of each supported range below; they are a convenience, not the compatibility contract. The Go module has no npm dependency; `hack/tools/` only supplies the two external CLIs.
 
 ```sh
 devbox shell          # or: devbox run tools   (prints every tool version)
@@ -55,9 +55,18 @@ devbox run verify     # refresh evidence with the pinned Quint
 devbox run render     # build the LikeC4 site
 ```
 
-## Fresh verification
+## Supported toolchain
 
-Dependencies are pinned in `go.mod` and `go.sum`. Fresh model checks require **Quint 0.33.0**; diagram rendering requires **LikeC4 1.59.4**. The Go tools call those external executables and never import npm code. `devbox shell` provides Go, Node, `gh` and both CLIs at the pinned versions and exports `QUINT_BIN` / `LIKEC4_BIN` (see [Development environment](#development-environment)). Outside devbox, set those variables or use the commands' `--quint` / `--likec4` flags.
+Go dependencies are pinned in `go.mod` and `go.sum`. The external tools are accepted by version range, following [ADR-0003](docs/adr/0003-external-tools-by-version-range.md): the minimum version is inclusive, the next minor is the exclusive upper bound, and every verification receipt records the exact version that ran.
+
+| Tool | Supported | Selected by |
+| --- | --- | --- |
+| Go | The two most recent minor releases (currently 1.26 and 1.27); `go.mod` declares the minimum language version | `devbox.json` or your own install |
+| Quint | 0.33.x | `QUINT_BIN` or `--quint` |
+| LikeC4 | 1.59.x | `LIKEC4_BIN` or `--likec4` |
+| controller-runtime, client-go | Pinned in `go.mod` | Go modules |
+
+The Go tools call Quint and LikeC4 as executables and never import npm code. `devbox shell` provides all of them and exports `QUINT_BIN` / `LIKEC4_BIN` (see [Development environment](#development-environment)). Outside devbox, set those variables or use the flags.
 
 ```sh
 make verify

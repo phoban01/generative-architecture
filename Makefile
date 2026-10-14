@@ -27,7 +27,7 @@ test:
 # Native Go only: replay checked-in, hash-verified evidence.
 check: test walkthrough
 
-# Refresh all evidence before testing source-hash receipts. Requires Quint 0.33.0 (QUINT_BIN).
+# Refresh all evidence before testing source-hash receipts. Requires Quint 0.33.x (QUINT_BIN).
 verify:
 	go run ./cmd/walkthrough --refresh
 	go run ./cmd/general-demo
@@ -35,7 +35,7 @@ verify:
 	go test ./...
 	$(MAKE) consumer-test
 
-# Build the sample controller's diagrams into site/. Requires LikeC4 1.59.4 (LIKEC4_BIN).
+# Build the sample controller's diagrams into site/. Requires LikeC4 1.59.x (LIKEC4_BIN).
 LIKEC4 ?= $(or $(LIKEC4_BIN),likec4)
 render:
 	$(LIKEC4) build examples/database/generated -o site --base ./ --output-single-file
