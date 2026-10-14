@@ -1,0 +1,49 @@
+apiVersion: architecture.local/v1alpha1
+kind: EffectSummaries
+metadata:
+  name: patch
+spec:
+  summaries:
+    # A merge patch updates the fields present in $value and leaves the
+    # rest of the object unchanged. It has no version precondition unless
+    # the patch carries one as $options.resourceVersion.
+    - operation: patch
+      consistency: direct
+      bindings: [$exists, $object, $resourceVersion, $value, $snapshotVersion, $options]
+      outcomes:
+        - name: ok
+          guard: $exists && (!has($options.resourceVersion) || $options.resourceVersion == $resourceVersion)
+          updates:
+            $object: $value
+            $resourceVersion: $resourceVersion + 1
+            $snapshotVersion: $resourceVersion + 1
+        - name: conflict
+          guard: $exists && has($options.resourceVersion) && $options.resourceVersion != $resourceVersion
+          error: conflict
+        - name: notFound
+          guard: '!$exists'
+          error: notFound
+        - name: error
+          guard: 'true'
+          error: transient
+    # Server-side apply creates the object when absent and records that
+    # $options.fieldManager owns the applied fields. A field owned by another
+    # manager ($contested) is a conflict unless $options.force is set.
+    - operation: apply
+      consistency: direct
+      bindings: [$exists, $object, $resourceVersion, $value, $snapshotVersion, $options, $owners, $contested]
+      outcomes:
+        - name: ok
+          guard: (!$exists || !$contested || (has($options.force) && $options.force)) && (!has($options.resourceVersion) || $options.resourceVersion == $resourceVersion)
+          updates:
+            $exists: 'true'
+            $object: $value
+            $resourceVersion: $resourceVersion + 1
+            $snapshotVersion: $resourceVersion + 1
+            $owners[$options.fieldManager]: $value
+        - name: conflict
+          guard: $exists && (($contested && !(has($options.force) && $options.force)) || (has($options.resourceVersion) && $options.resourceVersion != $resourceVersion))
+          error: conflict
+        - name: error
+          guard: 'true'
+          error: transient

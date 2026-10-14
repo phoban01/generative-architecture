@@ -1,0 +1,25 @@
+apiVersion: architecture.local/v1alpha1
+kind: EffectSummaries
+metadata:
+  name: create
+spec:
+  summaries:
+    - operation: create
+      consistency: direct
+      bindings: [$exists, $object, $resourceVersion, $value, $snapshotVersion]
+      outcomes:
+        # The stored object becomes the passed value at a fresh version, and
+        # the caller's copy is updated to that version as the client does.
+        - name: created
+          guard: '!$exists'
+          updates:
+            $exists: 'true'
+            $object: $value
+            $resourceVersion: $resourceVersion + 1
+            $snapshotVersion: $resourceVersion + 1
+        - name: alreadyExists
+          guard: $exists
+          error: alreadyExists
+        - name: error
+          guard: 'true'
+          error: transient

@@ -1,0 +1,20 @@
+apiVersion: architecture.local/v1alpha1
+kind: EffectSummaries
+metadata:
+  name: delete
+spec:
+  summaries:
+    - operation: delete
+      consistency: direct
+      bindings: [$exists]
+      outcomes:
+        - name: ok
+          guard: $exists
+          updates:
+            $exists: 'false'
+        - name: notFound
+          guard: '!$exists'
+          error: notFound
+        - name: error
+          guard: 'true'
+          error: transient
