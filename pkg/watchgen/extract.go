@@ -72,7 +72,18 @@ func ExtractWithGVKs(source []byte, receiver, method string, resources, bindings
 			imports[i.Name.Name] = path
 		}
 	}
-	fn := goflow.FindMethod(f, receiver, method)
+	resolve := func(id *ast.Ident) (string, bool) {
+		path, ok := imports[id.Name]
+		return path, ok
+	}
+	return extract(fs, f, goflow.FindMethod(f, receiver, method), source, receiver, method, imports, resolve, resources, bindings)
+}
+
+// extract reads the builder setup in fn. imports maps the file's package
+// names to import paths and resolve maps a package identifier to its import
+// path: by name in text mode, by symbol in the loaded path.
+func extract(fs *token.FileSet, f *ast.File, fn *ast.FuncDecl, source []byte, receiver, method string, imports map[string]string, resolve func(*ast.Ident) (string, bool), resources, bindings map[string]effect.Resource) (Result, error) {
+	out := Result{SourceSHA256: goflow.Hash(source)}
 	if fn == nil || fn.Body == nil || len(fn.Body.List) == 0 {
 		return out, diag(fs, f.Name, "method", fmt.Sprintf("expected a builder return in %s.%s", receiver, method))
 	}
@@ -90,7 +101,11 @@ func ExtractWithGVKs(source []byte, receiver, method string, resources, bindings
 		if !ok {
 			return ""
 		}
-		return imports[id.Name] + "." + s.Sel.Name
+		path, ok := resolve(id)
+		if !ok {
+			return ""
+		}
+		return path + "." + s.Sel.Name
 	}
 	if fn.Recv == nil || len(fn.Recv.List) != 1 || len(fn.Recv.List[0].Names) != 1 ||
 		len(fn.Type.Params.List) != 1 || len(fn.Type.Params.List[0].Names) != 1 ||
@@ -249,7 +264,7 @@ func ExtractWithGVKs(source []byte, receiver, method string, resources, bindings
 				return diag(fs, h.Args[0], "handler", "mapping must name a local function")
 			}
 			rule.Mapping = id.Name
-			return extractMapping(fs, f, imports, rule)
+			return extractMapping(fs, f, imports, qualified, rule)
 		case "sigs.k8s.io/controller-runtime/pkg/handler.EnqueueRequestForOwner":
 			if len(h.Args) < 3 || len(h.Args) > 4 || !managerCall(h.Args[0], "GetScheme") || !managerCall(h.Args[1], "GetRESTMapper") {
 				return diag(fs, e, "handler", "expected EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), owner, ...)")
