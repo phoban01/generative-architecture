@@ -180,6 +180,72 @@ func TestOwnsMapsToPrimaryOwner(t *testing.T) {
 	}
 }
 
+func TestWatchesOwnerAndObjectHandlers(t *testing.T) {
+	source, resources := fixture(t)
+	extract := func(s string) (watchgen.Result, error) {
+		return watchgen.Extract([]byte(s), "DatabaseReconciler", "SetupWithManager", resources)
+	}
+	const mapped = "Watches(&apiv1.DatabaseInstance{}, handler.EnqueueRequestsFromMapFunc(InstanceToDatabase))"
+	if !strings.Contains(string(source), mapped) {
+		t.Fatal("fixture changed")
+	}
+	owner := strings.Replace(string(source), mapped, "Watches(&apiv1.DatabaseInstance{}, handler.EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), &apiv1.Database{}, handler.OnlyControllerOwner()))", 1)
+	result, err := extract(owner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rule := result.Rules[1]
+	if rule.Mapping != "owner" || rule.OwnerKind != "Database" || !rule.OnlyController || rule.Owner == nil || rule.Owner.Group != "test.example" || rule.Resource.Kind != "DatabaseInstance" {
+		t.Fatalf("unexpected owner rule %+v", rule)
+	}
+	w := result.IR("database", "wiring.go")[1]
+	if w.Mapping.Kind != ir.MappingOwner || w.Mapping.OwnerGVK == nil || w.Mapping.OwnerGVK.Kind != "Database" || w.Mapping.OwnerGVK.Group != "test.example" {
+		t.Fatalf("owner mapping lost in IR: %+v", w)
+	}
+	// Without OnlyControllerOwner every owner reference is enqueued.
+	result, err = extract(strings.Replace(owner, ", handler.OnlyControllerOwner()", "", 1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rule := result.Rules[1]; rule.Mapping != "owner" || rule.OwnerKind != "Database" || rule.OnlyController {
+		t.Fatalf("unexpected owner rule %+v", rule)
+	}
+	// The declared unstructured primary may also name the owner.
+	result, err = extract(strings.Replace(owner, "&apiv1.Database{}", "database", 1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rule := result.Rules[1]; rule.Mapping != "owner" || rule.Owner == nil || rule.Owner.Group != "demo.architecture.local" {
+		t.Fatalf("unexpected owner rule %+v", rule)
+	}
+	// EnqueueRequestForObject maps the watched object to itself.
+	result, err = extract(strings.Replace(string(source), mapped, "Watches(&apiv1.DatabaseInstance{}, handler.EnqueueRequestForObject{})", 1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rule := result.Rules[1]; rule.Mapping != "self" || strings.Join(rule.NamePath, ".") != "Name" {
+		t.Fatalf("unexpected object rule %+v", rule)
+	}
+	for _, changed := range []string{
+		strings.Replace(owner, "mgr.GetScheme()", "scheme", 1),
+		strings.Replace(owner, "mgr.GetRESTMapper()", "mgr.GetCache()", 1),
+		strings.Replace(owner, "handler.OnlyControllerOwner()", "handler.OnlyControllerOwner(x)", 1),
+		strings.Replace(owner, "handler.OnlyControllerOwner()", "customOption", 1),
+		strings.Replace(owner, "&apiv1.Database{}", "&apiv1.Unknown{}", 1),
+		strings.Replace(owner, "&apiv1.Database{}", "&apiv1.Database{}, handler.OnlyControllerOwner()", 1),
+		strings.Replace(string(source), mapped, "Watches(&apiv1.DatabaseInstance{}, handler.EnqueueRequestForObject{Custom: true})", 1),
+		strings.Replace(string(source), mapped, "Watches(&apiv1.DatabaseInstance{}, customHandler)", 1),
+	} {
+		if _, err := extract(changed); err == nil {
+			t.Fatalf("unsupported handler accepted: %s", changed)
+		}
+	}
+	_, err = extract(strings.Replace(owner, "mgr.GetScheme()", "scheme", 1))
+	if d, ok := goflow.AsDiagnostic(err); !ok || d.Construct != "handler" {
+		t.Fatalf("expected a handler diagnostic, got %v", err)
+	}
+}
+
 func TestNamedRecordsControllerName(t *testing.T) {
 	source, resources := fixture(t)
 	extract := func(s string) (watchgen.Result, error) {

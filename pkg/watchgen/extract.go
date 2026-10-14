@@ -171,6 +171,59 @@ func ExtractWithGVKs(source []byte, receiver, method string, resources, bindings
 		}
 		return Rule{Resource: r, GoType: name, Unstructured: name == "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured.Unstructured", Mapping: "self", Line: fs.Position(sel.Pos()).Line, NamePath: []string{"Name"}, Predicates: predicates}, nil
 	}
+	// managerCall matches mgr.<method>() with no arguments.
+	managerCall := func(e ast.Expr, method string) bool {
+		call, ok := e.(*ast.CallExpr)
+		if !ok || len(call.Args) != 0 {
+			return false
+		}
+		sel, ok := call.Fun.(*ast.SelectorExpr)
+		return ok && isName(sel.X, managerName) && sel.Sel.Name == method
+	}
+	// parseHandler sets the key mapping of rule from a standard event handler:
+	// a local map function, the object itself, or an owner reference.
+	parseHandler := func(e ast.Expr, rule *Rule) error {
+		if lit, ok := e.(*ast.CompositeLit); ok {
+			if qualified(lit.Type) != "sigs.k8s.io/controller-runtime/pkg/handler.EnqueueRequestForObject" || len(lit.Elts) != 0 {
+				return diag(fs, e, "handler", "unsupported watch handler")
+			}
+			return nil // the rule already maps to the object itself
+		}
+		h, ok := e.(*ast.CallExpr)
+		if !ok || h.Ellipsis.IsValid() {
+			return diag(fs, e, "handler", "unsupported watch handler")
+		}
+		switch qualified(h.Fun) {
+		case "sigs.k8s.io/controller-runtime/pkg/handler.EnqueueRequestsFromMapFunc":
+			if len(h.Args) != 1 {
+				return diag(fs, e, "handler", "unsupported watch handler")
+			}
+			id, ok := h.Args[0].(*ast.Ident)
+			if !ok {
+				return diag(fs, h.Args[0], "handler", "mapping must name a local function")
+			}
+			rule.Mapping = id.Name
+			return extractMapping(fs, f, imports, rule)
+		case "sigs.k8s.io/controller-runtime/pkg/handler.EnqueueRequestForOwner":
+			if len(h.Args) < 3 || len(h.Args) > 4 || !managerCall(h.Args[0], "GetScheme") || !managerCall(h.Args[1], "GetRESTMapper") {
+				return diag(fs, e, "handler", "expected EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), owner, ...)")
+			}
+			_, owner, err := resource(h.Args[2])
+			if err != nil {
+				return err
+			}
+			rule.Mapping, rule.NamePath, rule.OwnerKind, rule.Owner = "owner", nil, owner.Kind, &owner
+			if len(h.Args) == 4 {
+				opt, ok := h.Args[3].(*ast.CallExpr)
+				if !ok || qualified(opt.Fun) != "sigs.k8s.io/controller-runtime/pkg/handler.OnlyControllerOwner" || len(opt.Args) != 0 {
+					return diag(fs, h.Args[3], "handler", "unsupported owner handler option")
+				}
+				rule.OnlyController = true
+			}
+			return nil
+		}
+		return diag(fs, e, "handler", "unsupported watch handler")
+	}
 	visit = func(e ast.Expr) error {
 		call, ok := e.(*ast.CallExpr)
 		if !ok || call.Ellipsis.IsValid() {
@@ -264,16 +317,7 @@ func ExtractWithGVKs(source []byte, receiver, method string, resources, bindings
 			if err != nil {
 				return err
 			}
-			h, ok := call.Args[1].(*ast.CallExpr)
-			if !ok || qualified(h.Fun) != "sigs.k8s.io/controller-runtime/pkg/handler.EnqueueRequestsFromMapFunc" || len(h.Args) != 1 {
-				return diag(fs, call.Args[1], "handler", "unsupported watch handler")
-			}
-			id, ok := h.Args[0].(*ast.Ident)
-			if !ok {
-				return diag(fs, h.Args[0], "handler", "mapping must name a local function")
-			}
-			rule.Mapping = id.Name
-			if err := extractMapping(fs, f, imports, &rule); err != nil {
+			if err := parseHandler(call.Args[1], &rule); err != nil {
 				return err
 			}
 			out.Rules = append(out.Rules, rule)
