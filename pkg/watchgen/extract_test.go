@@ -246,6 +246,54 @@ func TestWatchesOwnerAndObjectHandlers(t *testing.T) {
 	}
 }
 
+func TestWithOptionsLiteralExtraction(t *testing.T) {
+	source, resources := fixture(t)
+	withImport := strings.Replace(string(source), "import (", "import (\n controller \"sigs.k8s.io/controller-runtime/pkg/controller\"", 1)
+	extract := func(options string) (watchgen.Result, error) {
+		return watchgen.Extract([]byte(strings.Replace(withImport, "Complete(r)", "WithOptions("+options+").Complete(r)", 1)), "DatabaseReconciler", "SetupWithManager", resources)
+	}
+	result, err := extract("controller.Options{MaxConcurrentReconciles: 4, RateLimiter: r.Limiter, NeedLeaderElection: true}")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Options) != 3 || result.Options["maxConcurrentReconciles"] != "4" || result.Options["rateLimiter"] != "true" || result.Options["needLeaderElection"] != "true" {
+		t.Fatalf("unexpected options %+v", result.Options)
+	}
+	if len(result.Rules) != 2 {
+		t.Fatalf("options changed the rules: %+v", result.Rules)
+	}
+	result, err = extract("controller.Options{}")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Options) != 0 {
+		t.Fatalf("unexpected options %+v", result.Options)
+	}
+	for field, options := range map[string]string{
+		"MaxConcurrentReconciles": "controller.Options{MaxConcurrentReconciles: r.Workers}",
+		"CacheSyncTimeout":        "controller.Options{MaxConcurrentReconciles: 1, CacheSyncTimeout: 2 * time.Minute}",
+		"RecoverPanic":            "controller.Options{RecoverPanic: ptr.To(true)}",
+	} {
+		_, err := extract(options)
+		d, ok := goflow.AsDiagnostic(err)
+		if !ok || d.Construct != "WithOptions" || !strings.Contains(d.Reason, field) {
+			t.Fatalf("expected a WithOptions diagnostic naming %s, got %v", field, err)
+		}
+	}
+	for _, options := range []string{
+		"controller.Options{MaxConcurrentReconciles: \"4\"}",
+		"controller.Options{4}",
+		"controller.Options{MaxConcurrentReconciles: 1, MaxConcurrentReconciles: 2}",
+		"customOptions",
+		"controller.Options{}, controller.Options{}",
+		"controller.Options{}).WithOptions(controller.Options{}",
+	} {
+		if _, err := extract(options); err == nil {
+			t.Fatalf("unsupported options accepted: %s", options)
+		}
+	}
+}
+
 func TestNamedRecordsControllerName(t *testing.T) {
 	source, resources := fixture(t)
 	extract := func(s string) (watchgen.Result, error) {

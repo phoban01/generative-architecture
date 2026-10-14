@@ -10,6 +10,7 @@ import (
 	"go/parser"
 	"go/token"
 	"strconv"
+	"strings"
 )
 
 type Rule struct {
@@ -28,10 +29,13 @@ type Rule struct {
 	OnlyController bool             `yaml:"onlyController,omitempty"`
 }
 type Result struct {
-	Name         string `yaml:"name,omitempty"` // controller name given by Named, if any
-	Rules        []Rule `yaml:"rules"`
-	SourceSHA256 string `yaml:"sourceSha256"`
-	MethodSHA256 string `yaml:"methodSha256"`
+	Name  string `yaml:"name,omitempty"` // controller name given by Named, if any
+	Rules []Rule `yaml:"rules"`
+	// Options holds literal controller.Options fields given by WithOptions,
+	// keyed by lower-camel field name; rateLimiter only records presence.
+	Options      map[string]string `yaml:"options,omitempty"`
+	SourceSHA256 string            `yaml:"sourceSha256"`
+	MethodSHA256 string            `yaml:"methodSha256"`
 }
 
 // Extract reads a single fluent builder return and supported local field-reference
@@ -58,7 +62,7 @@ func ExtractWithGVKs(source []byte, receiver, method string, resources, bindings
 			return out, err
 		}
 		if i.Name == nil {
-			defaults := map[string]string{"context": "context", "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured": "unstructured", "k8s.io/apimachinery/pkg/runtime/schema": "schema", "sigs.k8s.io/controller-runtime": "controllerruntime", "sigs.k8s.io/controller-runtime/pkg/client": "client", "sigs.k8s.io/controller-runtime/pkg/handler": "handler", "sigs.k8s.io/controller-runtime/pkg/reconcile": "reconcile", "sigs.k8s.io/controller-runtime/pkg/builder": "builder", "sigs.k8s.io/controller-runtime/pkg/predicate": "predicate"}
+			defaults := map[string]string{"context": "context", "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured": "unstructured", "k8s.io/apimachinery/pkg/runtime/schema": "schema", "sigs.k8s.io/controller-runtime": "controllerruntime", "sigs.k8s.io/controller-runtime/pkg/client": "client", "sigs.k8s.io/controller-runtime/pkg/handler": "handler", "sigs.k8s.io/controller-runtime/pkg/reconcile": "reconcile", "sigs.k8s.io/controller-runtime/pkg/builder": "builder", "sigs.k8s.io/controller-runtime/pkg/predicate": "predicate", "sigs.k8s.io/controller-runtime/pkg/controller": "controller"}
 			name, ok := defaults[path]
 			if !ok {
 				return out, diag(fs, i, "import", "supply an explicit import alias for package "+path)
@@ -321,6 +325,18 @@ func ExtractWithGVKs(source []byte, receiver, method string, resources, bindings
 				return err
 			}
 			out.Rules = append(out.Rules, rule)
+		case "WithOptions":
+			if len(call.Args) != 1 {
+				return diag(fs, sel.Sel, "WithOptions", "WithOptions takes exactly one controller.Options literal")
+			}
+			if out.Options != nil {
+				return diag(fs, sel.Sel, "WithOptions", "duplicate controller options")
+			}
+			options, err := parseOptionsLiteral(fs, call.Args[0], qualified)
+			if err != nil {
+				return err
+			}
+			out.Options = options
 		case "WithEventFilter":
 			if len(call.Args) != 1 {
 				return diag(fs, sel.Sel, "WithEventFilter", "invalid global predicate")
@@ -356,6 +372,62 @@ func ExtractWithGVKs(source []byte, receiver, method string, resources, bindings
 		out.Rules[i].Predicates = append(out.Rules[i].Predicates, globalPredicates...)
 	}
 	return out, nil
+}
+
+// parseOptionsLiteral reads a keyed controller.Options composite literal.
+// MaxConcurrentReconciles must be an int literal and RateLimiter records only
+// its presence; other fields are kept when literal and diagnosed by name
+// otherwise, since their runtime values cannot be summarized.
+func parseOptionsLiteral(fs *token.FileSet, e ast.Expr, qualified func(ast.Expr) string) (map[string]string, error) {
+	lit, ok := e.(*ast.CompositeLit)
+	if !ok || qualified(lit.Type) != "sigs.k8s.io/controller-runtime/pkg/controller.Options" {
+		return nil, diag(fs, e, "WithOptions", "expected a controller.Options literal")
+	}
+	options := map[string]string{}
+	for _, element := range lit.Elts {
+		kv, ok := element.(*ast.KeyValueExpr)
+		if !ok {
+			return nil, diag(fs, element, "WithOptions", "controller options require keyed fields")
+		}
+		key, ok := kv.Key.(*ast.Ident)
+		if !ok {
+			return nil, diag(fs, kv.Key, "WithOptions", "invalid controller option field")
+		}
+		name := strings.ToLower(key.Name[:1]) + key.Name[1:]
+		if _, seen := options[name]; seen {
+			return nil, diag(fs, key, "WithOptions", "duplicate controller option field "+key.Name)
+		}
+		if key.Name == "RateLimiter" {
+			options[name] = "true"
+			continue
+		}
+		value, ok := literalValue(kv.Value)
+		if !ok || (key.Name == "MaxConcurrentReconciles" && !isIntLiteral(kv.Value)) {
+			return nil, diag(fs, kv.Value, "WithOptions", "controller option "+key.Name+" must be a literal")
+		}
+		options[name] = value
+	}
+	return options, nil
+}
+
+// literalValue returns the value of a basic literal or boolean identifier.
+func literalValue(e ast.Expr) (string, bool) {
+	switch v := e.(type) {
+	case *ast.BasicLit:
+		if v.Kind == token.STRING {
+			s, err := strconv.Unquote(v.Value)
+			return s, err == nil
+		}
+		return v.Value, true
+	case *ast.Ident:
+		return v.Name, v.Name == "true" || v.Name == "false"
+	}
+	return "", false
+}
+
+func isIntLiteral(e ast.Expr) bool {
+	v, ok := e.(*ast.BasicLit)
+	return ok && v.Kind == token.INT
 }
 
 // diag reports an unsupported construct at the position of n.
