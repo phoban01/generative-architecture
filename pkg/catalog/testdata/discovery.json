@@ -1,0 +1,12 @@
+[
+  {
+    "kind": "APIResourceList",
+    "groupVersion": "v1",
+    "resources": [
+      {"name": "configmaps", "singularName": "configmap", "namespaced": true, "kind": "ConfigMap", "verbs": ["create", "delete", "get", "list", "patch", "update", "watch"]},
+      {"name": "secrets", "singularName": "secret", "namespaced": true, "kind": "Secret", "verbs": ["create", "delete", "get", "list", "patch", "update", "watch"]},
+      {"name": "namespaces", "singularName": "namespace", "namespaced": false, "kind": "Namespace", "verbs": ["create", "delete", "get", "list", "patch", "update", "watch"]},
+      {"name": "namespaces/status", "singularName": "", "namespaced": false, "kind": "Namespace", "verbs": ["get", "patch", "update"]}
+    ]
+  }
+]
