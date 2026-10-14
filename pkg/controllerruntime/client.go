@@ -105,8 +105,11 @@ func (c *clientProxy) Update(ctx context.Context, obj client.Object, opts ...cli
 	}
 	return c.o.invoke(ctx, "update", "direct", client.ObjectKeyFromObject(obj), obj, func() error { return c.Client.Update(ctx, obj) })
 }
-func (c *clientProxy) Create(context.Context, client.Object, ...client.CreateOption) error {
-	return unsupported("Create")
+func (c *clientProxy) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+	if len(opts) > 0 {
+		return unsupported("Create options")
+	}
+	return c.o.invoke(ctx, "create", "direct", client.ObjectKeyFromObject(obj), obj, func() error { return c.Client.Create(ctx, obj) })
 }
 func (c *clientProxy) Delete(context.Context, client.Object, ...client.DeleteOption) error {
 	return unsupported("Delete")

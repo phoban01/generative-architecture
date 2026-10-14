@@ -66,3 +66,67 @@ func TestInterceptorUsesGVKKeysSnapshotsAndFailsClosed(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestTypedCreateIsObservedAndGated(t *testing.T) {
+	ctx := context.Background()
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	base := fake.NewClientBuilder().WithScheme(scheme).Build()
+	registry, err := effect.NewRegistry([]effect.Descriptor{{ID: "create-mirror", Actor: "configmirror", Resource: effect.Resource{Version: "v1", Kind: "ConfigMap"}, Operation: "create", Consistency: "direct"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var calls []effect.Call
+	var results []effect.Result
+	gate := make(chan struct{}, 1)
+	o := cr.Observer{Actor: "configmirror", Scheme: scheme, Registry: registry, Hook: func(ctx context.Context, c effect.Call, next func() effect.Result) effect.Result {
+		calls = append(calls, c)
+		gate <- struct{}{}
+		result := next()
+		results = append(results, result)
+		return result
+	}}
+	wrapped := o.Client(base, "cached")
+	obj := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "mirror", Namespace: "test"}, Data: map[string]string{"value": "initial"}}
+	if err := wrapped.Create(ctx, obj); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-gate:
+	default:
+		t.Fatal("create bypassed the gate hook")
+	}
+	if len(calls) != 1 || len(results) != 1 {
+		t.Fatalf("expected one observed call, got %d calls and %d results", len(calls), len(results))
+	}
+	call := calls[0]
+	if call.Descriptor.ID != "create-mirror" || call.Descriptor.Operation != "create" || call.Descriptor.Consistency != "direct" || call.Descriptor.Resource != (effect.Resource{Version: "v1", Kind: "ConfigMap"}) {
+		t.Fatalf("wrong descriptor: %+v", call.Descriptor)
+	}
+	if call.Key != (effect.Key{Namespace: "test", Name: "mirror"}) {
+		t.Fatalf("wrong key: %+v", call.Key)
+	}
+	if call.Submitted["data"].(map[string]any)["value"] != "initial" || call.Submitted["metadata"].(map[string]any)["resourceVersion"] != nil {
+		t.Fatalf("submitted snapshot is not the pre-create object: %+v", call.Submitted)
+	}
+	obj.Data["value"] = "mutated"
+	snapshot := results[0].Snapshot
+	if snapshot["data"].(map[string]any)["value"] != "initial" {
+		t.Fatal("snapshot aliases live object")
+	}
+	if snapshot["metadata"].(map[string]any)["resourceVersion"] == "" {
+		t.Fatalf("snapshot lacks the server-assigned resourceVersion: %+v", snapshot["metadata"])
+	}
+	stored := &corev1.ConfigMap{}
+	if err := base.Get(ctx, client.ObjectKeyFromObject(obj), stored); err != nil {
+		t.Fatalf("object not created through the base client: %v", err)
+	}
+	if err := wrapped.Create(ctx, obj.DeepCopy(), &client.CreateOptions{}); err == nil || !strings.Contains(err.Error(), "unsupported") {
+		t.Fatalf("create options escaped observation: %v", err)
+	}
+	if len(calls) != 1 {
+		t.Fatal("rejected create reached the hook")
+	}
+}
