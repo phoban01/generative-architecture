@@ -23,6 +23,7 @@ type Rule struct {
 	MappingSHA256 string          `yaml:"mappingSha256,omitempty"`
 }
 type Result struct {
+	Name         string `yaml:"name,omitempty"` // controller name given by Named, if any
 	Rules        []Rule `yaml:"rules"`
 	SourceSHA256 string `yaml:"sourceSha256"`
 	MethodSHA256 string `yaml:"methodSha256"`
@@ -161,6 +162,25 @@ func ExtractWithGVKs(source []byte, receiver, method string, resources, bindings
 			if len(call.Args) != 1 || e != ret.Results[0] || !isName(call.Args[0], receiverName) {
 				return diag(fs, sel.Sel, "Complete", "Complete must terminate setup with its receiver")
 			}
+		case "Named":
+			if len(call.Args) != 1 {
+				return diag(fs, sel.Sel, "Named", "Named takes exactly one controller name")
+			}
+			lit, ok := call.Args[0].(*ast.BasicLit)
+			if !ok || lit.Kind != token.STRING {
+				return diag(fs, call.Args[0], "Named", "controller name must be a string literal")
+			}
+			name, err := strconv.Unquote(lit.Value)
+			if err != nil {
+				return err
+			}
+			if name == "" {
+				return diag(fs, call.Args[0], "Named", "controller name must not be empty")
+			}
+			if out.Name != "" {
+				return diag(fs, sel.Sel, "Named", "duplicate controller name")
+			}
+			out.Name = name
 		case "For", "Watches":
 			count := 1
 			if sel.Sel.Name == "Watches" {

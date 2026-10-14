@@ -129,3 +129,45 @@ func TestUnsupportedBuilderOperationIsLocated(t *testing.T) {
 		t.Fatalf("unexpected diagnostic %+v (want Owns at line %d)", d, line)
 	}
 }
+
+func TestNamedRecordsControllerName(t *testing.T) {
+	source, resources := fixture(t)
+	extract := func(s string) (watchgen.Result, error) {
+		return watchgen.Extract([]byte(s), "DatabaseReconciler", "SetupWithManager", resources)
+	}
+	result, err := extract(string(source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Name != "" {
+		t.Fatalf("unexpected controller name %q", result.Name)
+	}
+	named := strings.Replace(string(source), "For(database).", "Named(\"tenant\").For(database).", 1)
+	result, err = extract(named)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Name != "tenant" {
+		t.Fatalf("expected controller name tenant, got %q", result.Name)
+	}
+	watches := result.IR("", "wiring.go")
+	if len(watches) != 2 || watches[0].Controller != "tenant" || watches[1].Controller != "tenant" {
+		t.Fatalf("controller name lost in IR: %+v", watches)
+	}
+	if explicit := result.IR("explicit", "wiring.go"); explicit[0].Controller != "explicit" {
+		t.Fatalf("explicit controller name overridden: %+v", explicit[0])
+	}
+	for _, changed := range []string{
+		strings.Replace(string(source), "For(database).", "Named(name).For(database).", 1),
+		strings.Replace(string(source), "For(database).", "Named(\"a\" + \"b\").For(database).", 1),
+		strings.Replace(string(source), "For(database).", "Named(\"\").For(database).", 1),
+		strings.Replace(string(source), "For(database).", "Named(\"a\", \"b\").For(database).", 1),
+		strings.Replace(string(source), "For(database).", "Named(\"a\").Named(\"b\").For(database).", 1),
+	} {
+		_, err := extract(changed)
+		d, ok := goflow.AsDiagnostic(err)
+		if !ok || d.Construct != "Named" {
+			t.Fatalf("expected a Named diagnostic, got %v for %s", err, changed)
+		}
+	}
+}

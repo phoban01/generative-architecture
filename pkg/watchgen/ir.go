@@ -6,9 +6,13 @@ import "generative-architecture/pkg/ir"
 const Generator = "watchgen"
 
 // IR converts the extracted rules into IR watch records for the named
-// controller. Each watch carries extracted evidence and a provenance record
+// controller. An empty controller falls back to the name the builder gave with
+// Named. Each watch carries extracted evidence and a provenance record
 // pointing at the builder call in file; its ID is the stable content hash.
 func (r Result) IR(controller, file string) []ir.Watch {
+	if controller == "" {
+		controller = r.Name
+	}
 	out := make([]ir.Watch, 0, len(r.Rules))
 	for i, rule := range r.Rules {
 		mapping := ir.KeyMapping{Kind: ir.MappingSelf}
