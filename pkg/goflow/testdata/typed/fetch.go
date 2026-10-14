@@ -2,8 +2,27 @@ package typed
 
 import "context"
 
-// Database is a minimal object a Reconciler fetches and records.
-type Database struct{ Size int }
+// Database is a minimal object a Reconciler fetches and records. Its JSON
+// tags follow the usual API conventions: an inlined embedded header, a
+// tagged sub-struct and an unexported field that is not serialized.
+type Database struct {
+	TypeMeta `json:",inline"`
+	Spec     DatabaseSpec `json:"spec"`
+	internal int
+}
+
+type TypeMeta struct {
+	Kind string `json:"kind,omitempty"`
+}
+
+type DatabaseSpec struct {
+	Size int `json:"size"`
+}
+
+// ConfigMap carries a map field, which has no path lowering.
+type ConfigMap struct {
+	Data map[string]string `json:"data,omitempty"`
+}
 
 type Reconciler struct{}
 

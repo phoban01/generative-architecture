@@ -58,6 +58,7 @@ type Options struct {
 	Targets                map[string]string
 	Returns                []Return
 	Call                   func(Callee, *ast.CallExpr, Convert) (Node, bool, error)
+	Field                  func(root string, jsonPath []string) (expr.Expression, bool)
 	Statement              func(ast.Stmt, Convert) (Node, bool, error)
 }
 
@@ -130,6 +131,11 @@ func (e *extractor) translate(n ast.Expr) (expr.Expression, error) {
 			return expr.Expression(strconv.FormatInt(v, 10)), err
 		}
 	case *ast.SelectorExpr:
+		if e.info != nil {
+			if v, ok, err := e.selector(x); ok || err != nil {
+				return v, err
+			}
+		}
 		v, err := e.translate(x.X)
 		if err == nil {
 			return v + "." + expr.Expression(x.Sel.Name), nil

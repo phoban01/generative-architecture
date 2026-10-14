@@ -7,7 +7,10 @@ import (
 	"go/constant"
 	"go/types"
 	"os"
+	"reflect"
+	"slices"
 	"strconv"
+	"strings"
 )
 
 // ExtractTyped lowers a loaded method using its package's type information.
@@ -147,6 +150,125 @@ func (e *extractor) bindResults(n Node, x *ast.AssignStmt) (Node, error) {
 // isErrorType reports whether t is the predeclared error interface.
 func isErrorType(t types.Type) bool {
 	return types.Identical(t, types.Universe.Lookup("error").Type())
+}
+
+// selector lowers a selector expression through type information. A field
+// selection rooted at a local or parameter becomes the JSON path of its
+// struct tags and is mapped to a model expression by Options.Field; an
+// unmapped field is a diagnostic. A package-qualified constant lowers to its
+// literal. Other selectors fall back to name-based lowering, as does any
+// field selection when no Field callback is configured.
+func (e *extractor) selector(x *ast.SelectorExpr) (expr.Expression, bool, error) {
+	if c, ok := e.info.Uses[x.Sel].(*types.Const); ok {
+		if _, isPkg := e.info.Uses[rootIdent(x.X)].(*types.PkgName); isPkg {
+			v, err := e.constant(x, c)
+			return v, true, err
+		}
+	}
+	if e.opts.Field == nil {
+		return "", false, nil
+	}
+	sel, ok := e.info.Selections[x]
+	if !ok || sel.Kind() != types.FieldVal {
+		return "", false, nil
+	}
+	root, path, err := e.fieldPath(x)
+	if err != nil {
+		return "", true, err
+	}
+	if v, ok := e.opts.Field(root, path); ok {
+		return v, true, nil
+	}
+	return "", true, e.diagnose(x, "field", "unmapped field "+root+"."+strings.Join(path, "."))
+}
+
+// fieldPath walks a chain of field selections down to its root identifier,
+// returning the root's name and the JSON path of every hop, including
+// promoted fields of inlined embedded structs.
+func (e *extractor) fieldPath(x *ast.SelectorExpr) (string, []string, error) {
+	var hops []*ast.SelectorExpr
+	var n ast.Expr = x
+	for {
+		s, ok := ast.Unparen(n).(*ast.SelectorExpr)
+		if !ok {
+			break
+		}
+		sel, ok := e.info.Selections[s]
+		if !ok || sel.Kind() != types.FieldVal {
+			return "", nil, e.diagnose(s, "field", "unsupported selector")
+		}
+		hops = append(hops, s)
+		n = s.X
+	}
+	root, ok := ast.Unparen(n).(*ast.Ident)
+	if !ok {
+		return "", nil, e.diagnose(n, "field", "field selection must be rooted at an identifier")
+	}
+	if _, ok := e.info.Uses[root].(*types.Var); !ok {
+		return "", nil, e.diagnose(root, "field", "field selection must be rooted at a variable")
+	}
+	var path []string
+	for i := len(hops) - 1; i >= 0; i-- {
+		segment, err := jsonPath(e.info.Selections[hops[i]])
+		if err != nil {
+			return "", nil, e.diagnose(hops[i], "field", err.Error())
+		}
+		path = append(path, segment...)
+	}
+	return root.Name, path, nil
+}
+
+// jsonPath returns the JSON names along a field selection, following the
+// same tag rules as encoding/json: the tag name, else the Go field name;
+// inlined embedded structs contribute nothing; "-" and unexported fields are
+// not serialized.
+func jsonPath(sel *types.Selection) ([]string, error) {
+	t := sel.Recv()
+	var path []string
+	for _, i := range sel.Index() {
+		st, ok := deref(t).Underlying().(*types.Struct)
+		if !ok {
+			return nil, fmt.Errorf("field selection traverses a non-struct")
+		}
+		f := st.Field(i)
+		if !f.Exported() {
+			return nil, fmt.Errorf("unexported field %s is not serialized", f.Name())
+		}
+		tag := strings.Split(reflect.StructTag(st.Tag(i)).Get("json"), ",")
+		name := tag[0]
+		switch {
+		case name == "-":
+			return nil, fmt.Errorf("field %s is not serialized", f.Name())
+		case name == "" && (f.Embedded() || slices.Contains(tag[1:], "inline")):
+		case name == "":
+			path = append(path, f.Name())
+		default:
+			path = append(path, name)
+		}
+		t = f.Type()
+	}
+	return path, nil
+}
+
+func deref(t types.Type) types.Type {
+	if p, ok := types.Unalias(t).(*types.Pointer); ok {
+		return p.Elem()
+	}
+	return t
+}
+
+// rootIdent returns the identifier a selector chain starts from, or nil.
+func rootIdent(n ast.Expr) *ast.Ident {
+	for {
+		switch x := ast.Unparen(n).(type) {
+		case *ast.Ident:
+			return x
+		case *ast.SelectorExpr:
+			n = x.X
+		default:
+			return nil
+		}
+	}
 }
 
 // typedIdent resolves an identifier through type information. It reports
