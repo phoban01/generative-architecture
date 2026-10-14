@@ -65,3 +65,33 @@ func Actions() []adaptergen.EnvAction {
 		{Name: "removeDatabase", Operation: adaptergen.ActionDelete, Resource: Database, Key: db},
 	}
 }
+
+// Process is the control flow of the sample reconcile: read the Database,
+// return when absent, read its instance, create one when missing, otherwise
+// record the endpoint and return.
+func Process() ir.Process {
+	return ir.Process{
+		ID:         "database-reconcile",
+		Controller: "database",
+		Method:     "Reconcile",
+		Entry:      "n1",
+		Nodes: []ir.Node{
+			{ID: "n1", Kind: ir.NodeEffect, Effect: "readDatabase", Next: "n2"},
+			{ID: "n2", Kind: ir.NodeBranch, Expression: "!Database_db1_exists", Next: "n6", Else: "n3"},
+			{ID: "n3", Kind: ir.NodeEffect, Effect: "readInstance", Next: "n4"},
+			{ID: "n4", Kind: ir.NodeBranch, Expression: "DatabaseInstance_inst1_exists", Next: "n5", Else: "n7"},
+			{ID: "n5", Kind: ir.NodeAssign, Expression: "endpoint = DatabaseInstance_inst1_status_endpoint", Next: "n6"},
+			{ID: "n6", Kind: ir.NodeReturn},
+			{ID: "n7", Kind: ir.NodeEffect, Effect: "createInstance", Next: "n6"},
+		},
+	}
+}
+
+// Nodes indexes the sample process by node ID, as ApplyProcessEvent takes it.
+func Nodes() map[string]ir.Node {
+	out := map[string]ir.Node{}
+	for _, n := range Process().Nodes {
+		out[n.ID] = n
+	}
+	return out
+}
