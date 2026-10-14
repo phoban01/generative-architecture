@@ -7,14 +7,23 @@ import (
 	"strings"
 )
 
-// Controller is one reconciler discovered in a project.
+// Controller is one reconciler discovered in a project. Injection lists the
+// exported fields through which it receives its dependencies; see
+// docs/supported-patterns.md for the field types a frontend records.
 type Controller struct {
 	ID         string     `yaml:"id"`
 	Name       string     `yaml:"name"`
 	Package    string     `yaml:"package,omitempty"`
 	Receiver   string     `yaml:"receiver,omitempty"`
 	Setup      *Source    `yaml:"setup,omitempty"`
+	Injection  []Field    `yaml:"injection,omitempty"`
 	Provenance Provenance `yaml:"provenance"`
+}
+
+// Field is an exported struct field by name and fully qualified Go type.
+type Field struct {
+	Name string `yaml:"name"`
+	Type string `yaml:"type"`
 }
 
 // Predicate filters the events a watch delivers.
