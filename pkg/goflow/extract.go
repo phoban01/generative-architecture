@@ -11,6 +11,7 @@ import (
 	"go/format"
 	"go/parser"
 	"go/token"
+	"go/types"
 	"strconv"
 	"strings"
 )
@@ -39,8 +40,15 @@ type Return struct {
 	Error bool
 }
 
+// Convert lowers a Go expression that must have the given model type. It is an
+// alias so callbacks written against the plain function type keep compiling.
+type Convert = func(ast.Expr, string) (expr.Expression, error)
+
 // Summary callbacks must verify any helpers they abstract. The same frontend
 // handles all control flow; callbacks describe effects and representation only.
+// Call is consulted first, in typed mode only, for expression statements and
+// assignments whose right-hand side is a call whose callee resolves to a
+// symbol; Statement then sees any statement Call declined.
 type Options struct {
 	File, Receiver, Method string
 	Compiler               expr.Compiler
@@ -49,7 +57,9 @@ type Options struct {
 	Errors                 map[string]bool
 	Targets                map[string]string
 	Returns                []Return
-	Statement              func(ast.Stmt, func(ast.Expr, string) (expr.Expression, error)) (Node, bool, error)
+	Call                   func(Callee, *ast.CallExpr, Convert) (Node, bool, error)
+	Field                  func(root string, jsonPath []string) (expr.Expression, bool)
+	Statement              func(ast.Stmt, Convert) (Node, bool, error)
 }
 
 func Code(n ast.Node) string {
@@ -78,6 +88,7 @@ type extractor struct {
 	opts    Options
 	program Program
 	fset    *token.FileSet
+	info    *types.Info // nil in text mode; set by ExtractTyped
 }
 
 func (e *extractor) expression(n ast.Expr, want string) (expr.Expression, error) {
@@ -99,6 +110,11 @@ func (e *extractor) translate(n ast.Expr) (expr.Expression, error) {
 		v, err := e.translate(x.X)
 		return "(" + v + ")", err
 	case *ast.Ident:
+		if e.info != nil {
+			if v, ok, err := e.typedIdent(x); ok || err != nil {
+				return v, err
+			}
+		}
 		if x.Name == "true" || x.Name == "false" {
 			return expr.Expression(x.Name), nil
 		}
@@ -115,9 +131,20 @@ func (e *extractor) translate(n ast.Expr) (expr.Expression, error) {
 			return expr.Expression(strconv.FormatInt(v, 10)), err
 		}
 	case *ast.SelectorExpr:
+		if e.info != nil {
+			if v, ok, err := e.selector(x); ok || err != nil {
+				return v, err
+			}
+		}
 		v, err := e.translate(x.X)
 		if err == nil {
 			return v + "." + expr.Expression(x.Sel.Name), nil
+		}
+	case *ast.CallExpr:
+		if e.info != nil {
+			if v, ok, err := e.idiom(x); ok || err != nil {
+				return v, err
+			}
 		}
 	case *ast.UnaryExpr:
 		if x.Op == token.NOT || x.Op == token.SUB {
@@ -172,13 +199,26 @@ func (e *extractor) block(stmts []ast.Stmt, next int) (int, error) {
 	return next, nil
 }
 func (e *extractor) statement(s ast.Stmt, next int) (int, error) {
+	if e.opts.Call != nil {
+		if call := statementCall(s); call != nil {
+			if c, ok := e.callee(call); ok {
+				n, ok, err := e.opts.Call(c, call, e.expression)
+				if err != nil {
+					return 0, err
+				}
+				if ok {
+					return e.summarized(n, s, next)
+				}
+			}
+		}
+	}
 	if e.opts.Statement != nil {
 		n, ok, err := e.opts.Statement(s, e.expression)
 		if err != nil {
 			return 0, err
 		}
 		if ok {
-			return e.add(n, s, next, 0), nil
+			return e.summarized(n, s, next)
 		}
 	}
 	switch x := s.(type) {
@@ -210,6 +250,8 @@ func (e *extractor) statement(s ast.Stmt, next int) (int, error) {
 			return e.statement(x.Init, branch)
 		}
 		return branch, nil
+	case *ast.SwitchStmt:
+		return e.switchStmt(x, next)
 	case *ast.ReturnStmt:
 		if len(x.Results) != len(e.opts.Returns) {
 			return 0, e.diagnose(s, "return", fmt.Sprintf("unsupported return arity %d; expected %d", len(x.Results), len(e.opts.Returns)))
@@ -258,6 +300,9 @@ func (e *extractor) statement(s ast.Stmt, next int) (int, error) {
 	}
 	return 0, e.diagnose(s, statementKind(s), "unsupported Go statement")
 }
+
+// Extract lowers the selected method of a single parsed file. Identifiers are
+// resolved by name against Options; see ExtractTyped for symbol resolution.
 func Extract(source []byte, opts Options) (*Program, error) {
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, opts.File, source, parser.ParseComments)
@@ -268,9 +313,20 @@ func Extract(source []byte, opts Options) (*Program, error) {
 	if method == nil || method.Body == nil {
 		return nil, fmt.Errorf("method not found: %s.%s", opts.Receiver, opts.Method)
 	}
-	e := &extractor{opts: opts, fset: fset}
+	return (&extractor{opts: opts, fset: fset}).run(source, method)
+}
+
+// run lowers method's body. Scope and Errors are copied so that symbols the
+// extractor declares itself never leak back into the caller's Options.
+func (e *extractor) run(source []byte, method *ast.FuncDecl) (*Program, error) {
+	e.opts.Scope = copyScope(e.opts.Scope)
+	e.opts.Errors = copyErrors(e.opts.Errors)
+	if e.info != nil {
+		e.declareErrors(method.Body)
+	}
 	e.program.SourceSHA256 = Hash(source)
 	e.program.MethodSHA256 = Hash([]byte(Code(method)))
+	var err error
 	e.program.Entry, err = e.block(method.Body.List, -1)
 	if err != nil {
 		return nil, err
@@ -336,6 +392,146 @@ func VerifyDeclarations(source []byte, expected map[string]string) (map[string]s
 		out[name] = Hash([]byte(actual))
 	}
 	return out, nil
+}
+
+// switchStmt lowers a switch to a chain of branch nodes, one per case
+// expression, tried in source order; a case list shares one body. With a tag
+// each branch tests tag == literal (constants lower to literals in typed
+// mode); without one each case expression is itself the condition. The
+// default clause, wherever it appears, is the final else. fallthrough and
+// non-literal cases are diagnostics.
+func (e *extractor) switchStmt(x *ast.SwitchStmt, next int) (int, error) {
+	var def *ast.CaseClause
+	var cases []*ast.CaseClause
+	for _, s := range x.Body.List {
+		c, ok := s.(*ast.CaseClause)
+		if !ok {
+			return 0, e.diagnose(s, "switch", "unsupported switch clause")
+		}
+		if len(c.Body) > 0 {
+			if b, ok := c.Body[len(c.Body)-1].(*ast.BranchStmt); ok && b.Tok == token.FALLTHROUGH {
+				return 0, e.diagnose(b, "fallthrough", "unsupported fallthrough: each case must end its own flow")
+			}
+		}
+		if c.List == nil {
+			if def != nil {
+				return 0, e.diagnose(c, "switch", "duplicate default clause")
+			}
+			def = c
+			continue
+		}
+		cases = append(cases, c)
+	}
+	chain := next
+	var err error
+	if def != nil {
+		if chain, err = e.block(def.Body, next); err != nil {
+			return 0, err
+		}
+	}
+	var tag expr.Expression
+	if x.Tag != nil {
+		if tag, err = e.translate(x.Tag); err != nil {
+			return 0, err
+		}
+	}
+	for i := len(cases) - 1; i >= 0; i-- {
+		body, err := e.block(cases[i].Body, next)
+		if err != nil {
+			return 0, err
+		}
+		for j := len(cases[i].List) - 1; j >= 0; j-- {
+			ex := cases[i].List[j]
+			var condition expr.Expression
+			if x.Tag != nil {
+				lit, err := e.caseLiteral(ex)
+				if err != nil {
+					return 0, err
+				}
+				condition = "(" + tag + " == " + lit + ")"
+				if _, err = e.opts.Compiler.Compile(condition, e.opts.Scope, "bool"); err != nil {
+					return 0, err
+				}
+			} else if condition, err = e.expression(ex, "bool"); err != nil {
+				return 0, err
+			}
+			chain = e.add(Node{Kind: "branch", Expression: condition}, ex, body, chain)
+		}
+	}
+	if x.Init != nil {
+		return e.statement(x.Init, chain)
+	}
+	return chain, nil
+}
+
+// caseLiteral lowers a case expression of a tagged switch: a string or int
+// literal, or in typed mode a constant of basic kind.
+func (e *extractor) caseLiteral(ex ast.Expr) (expr.Expression, error) {
+	switch v := ast.Unparen(ex).(type) {
+	case *ast.BasicLit:
+		if v.Kind == token.STRING || v.Kind == token.INT {
+			return e.translate(v)
+		}
+	case *ast.Ident:
+		if e.info != nil {
+			if _, ok := e.info.Uses[v].(*types.Const); ok {
+				return e.translate(v)
+			}
+		}
+	case *ast.SelectorExpr:
+		if e.info != nil {
+			if _, ok := e.info.Uses[v.Sel].(*types.Const); ok {
+				return e.translate(v)
+			}
+		}
+	}
+	return "", e.diagnose(ex, "case", "unsupported case expression; expected a string or int literal")
+}
+
+// summarized adds a node a summary callback produced for s. In typed mode an
+// assignment binds each left-hand name to the node's Results so the summary
+// can update the corresponding model symbols.
+func (e *extractor) summarized(n Node, s ast.Stmt, next int) (int, error) {
+	if x, ok := s.(*ast.AssignStmt); ok && e.info != nil {
+		var err error
+		if n, err = e.bindResults(n, x); err != nil {
+			return 0, err
+		}
+	}
+	return e.add(n, s, next, 0), nil
+}
+
+// statementCall returns the call a statement consists of: an expression
+// statement that is a call, or an assignment from a single call.
+func statementCall(s ast.Stmt) *ast.CallExpr {
+	switch x := s.(type) {
+	case *ast.ExprStmt:
+		if call, ok := x.X.(*ast.CallExpr); ok {
+			return call
+		}
+	case *ast.AssignStmt:
+		if len(x.Rhs) == 1 && (x.Tok == token.ASSIGN || x.Tok == token.DEFINE) {
+			if call, ok := x.Rhs[0].(*ast.CallExpr); ok {
+				return call
+			}
+		}
+	}
+	return nil
+}
+
+func copyScope(s map[string]expr.Symbol) map[string]expr.Symbol {
+	out := make(map[string]expr.Symbol, len(s))
+	for k, v := range s {
+		out[k] = v
+	}
+	return out
+}
+func copyErrors(s map[string]bool) map[string]bool {
+	out := make(map[string]bool, len(s))
+	for k, v := range s {
+		out[k] = v
+	}
+	return out
 }
 
 // statementKind names a statement for diagnostics.
