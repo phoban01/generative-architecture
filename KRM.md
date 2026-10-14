@@ -27,12 +27,12 @@ spec:
 
 | Document | Kind | Payload | Used by |
 | --- | --- | --- | --- |
-| `examples/refsystem/project.yaml` | Project | spec | `pkg/project`: module, package patterns, catalog sources, constraints, boundaries, runtime profile and bounds; referenced paths are checked and hashed (ADOPT-1) |
+| `examples/refsystem/project.yaml`, `examples/configmirror/project.yaml` | Project | spec | `pkg/project`: module, package patterns, catalog sources, constraints, boundaries, runtime profile and bounds; referenced paths are checked and hashed (ADOPT-1) |
 | `examples/database/model.yaml`, `examples/configmirror/system.yaml` | TransitionModel | spec | `pkg/model`, `pkg/process`, `pkg/composition` |
 | `examples/database/process.yaml` | ProcessSemantics | spec | `pkg/process` (effect summaries for extracted Go calls) |
 | `examples/database/resources.yaml` | KubernetesResourceCatalog | spec | `pkg/dynamicgen` (GVR/GVK/plural/scope bindings) |
-| `examples/database/constraints.yaml` | ModelConstraints | spec | independent properties compiled apart from the behaviour model |
-| An abstraction document (`pkg/abstraction/testdata/database.yaml`) | Abstraction | spec | `pkg/abstraction`: bounded objects, fields, value domains, references and locals that derive model state (ADR-0005) |
+| `examples/database/constraints.yaml`, `examples/configmirror/constraints.yaml` | ModelConstraints | spec | independent properties compiled apart from the behaviour model |
+| `examples/configmirror/abstraction.yaml`, `pkg/abstraction/testdata/database.yaml` | Abstraction | spec | `pkg/abstraction`: bounded objects, fields, value domains, references and locals that derive model state (ADR-0005) |
 | A mutation suite document | MutationSuite | spec | `pkg/mutation`: named find/replace mutations of a file with the constraints expected to detect them; `Run` builds the detection matrix in memory (CON-8) |
 | `pkg/summaries/data/*.yaml` (embedded) | EffectSummaries | spec | `pkg/summaries`: built-in outcomes of client operations as CEL templates over `$placeholders` (ARCH-7) |
 | A generated IR document | ArchitectureIR | status | `pkg/ir.Document`: controllers, watches, effects (kind `api`, or `external` with a callee target and declared outcomes), processes, contracts and constraints with evidence and provenance |

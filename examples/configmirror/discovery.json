@@ -1,0 +1,9 @@
+[
+  {
+    "kind": "APIResourceList",
+    "groupVersion": "v1",
+    "resources": [
+      {"name": "configmaps", "singularName": "configmap", "namespaced": true, "kind": "ConfigMap", "verbs": ["create", "delete", "get", "list", "patch", "update", "watch"]}
+    ]
+  }
+]
