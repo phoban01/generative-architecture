@@ -27,6 +27,7 @@ spec:
 
 | Document | Kind | Payload | Used by |
 | --- | --- | --- | --- |
+| `examples/refsystem/project.yaml` | Project | spec | `pkg/project`: module, package patterns, catalog sources, constraints, boundaries, runtime profile and bounds; referenced paths are checked and hashed (ADOPT-1) |
 | `examples/database/model.yaml`, `examples/configmirror/system.yaml` | TransitionModel | spec | `pkg/model`, `pkg/process`, `pkg/composition` |
 | `examples/database/process.yaml` | ProcessSemantics | spec | `pkg/process` (effect summaries for extracted Go calls) |
 | `examples/database/resources.yaml` | KubernetesResourceCatalog | spec | `pkg/dynamicgen` (GVR/GVK/plural/scope bindings) |
