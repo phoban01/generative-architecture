@@ -48,7 +48,7 @@ CEL has int64 semantics while Quint has mathematical integers. Models keep integ
 `go run ./cmd/walkthrough --refresh` performs three independent comparisons on the sample controller:
 
 1. **Quint simulation:** Quint samples bounded traces of the generated model and checks the generated properties.
-2. **CEL ↔ Quint:** Go evaluates the original YAML CEL expressions with cel-go on every state of every trace. This catches translation errors without evaluating the generated Quint text in the CEL runtime.
+2. **CEL ↔ Quint:** Go evaluates the original YAML CEL expressions with cel-go on every state of every trace. This catches translation errors without evaluating the generated Quint text in the CEL runtime. `quint.Differential` runs the same comparison for any compiled `TransitionModel` and its ITF traces, counting transitions and reporting the first disagreement as a `tool` failure.
 3. **Model ↔ implementation:** Go replays each trace against the real `Reconcile` running on a fake dynamic API, pausing at every observable effect boundary. The adapter never reads expected state.
 
 The saved `report.yaml` records the model hash, input hashes and trace hashes, so native tests detect stale evidence without Quint. This is sampled differential testing, not full verification of a general CEL-to-Quint compiler.
