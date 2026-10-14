@@ -112,6 +112,17 @@ func inline(parent goflow.Program, calls map[string]Call, stack map[string]bool)
 					}
 				}
 				n.Updates = updates
+				if len(n.Bindings) > 0 {
+					bindings := make(map[string]string, len(n.Bindings))
+					for placeholder, value := range n.Bindings {
+						bound, err := expr.Rewrite(expr.Expression(value), call.Bindings)
+						if err != nil {
+							return out, err
+						}
+						bindings[placeholder] = string(bound)
+					}
+					n.Bindings = bindings
+				}
 			}
 			out.Nodes = append(out.Nodes, n)
 		}

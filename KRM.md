@@ -33,6 +33,7 @@ spec:
 | `examples/database/constraints.yaml` | ModelConstraints | spec | independent properties compiled apart from the behaviour model |
 | An abstraction document (`pkg/abstraction/testdata/database.yaml`) | Abstraction | spec | `pkg/abstraction`: bounded objects, fields, value domains, references and locals that derive model state (ADR-0005) |
 | `pkg/summaries/data/*.yaml` (embedded) | EffectSummaries | spec | `pkg/summaries`: built-in outcomes of client operations as CEL templates over `$placeholders` (ARCH-7) |
+| An external effects document (`pkg/goflow/testdata/external/effects.yaml`) | ExternalEffects | spec | `pkg/goflow`: declared outcomes of calls outside the API, keyed by callee symbol; typed extraction lowers a matching call to an `effect` node and `pkg/process` expands the outcomes (ARCH-13) |
 | A generated IR document | ArchitectureIR | status | `pkg/ir.Document`: controllers, watches, effects (kind `api`, or `external` with a callee target and declared outcomes), processes, contracts and constraints with evidence and provenance |
 | `examples/runtimegroup/profile.yaml` | RuntimeGroup | spec | `pkg/controllerruntime.BuildGroupModel` |
 | A system composition document | SystemComposition | spec | `pkg/composition.Load` |

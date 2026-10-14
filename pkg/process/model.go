@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"generative-architecture/pkg/expr"
 	"generative-architecture/pkg/goflow"
+	"generative-architecture/pkg/ir"
 	"generative-architecture/pkg/model"
+	"generative-architecture/pkg/summaries"
 	"strconv"
 )
 
@@ -18,11 +20,21 @@ type Variant struct {
 	Updates map[string]expr.Expression `yaml:"updates"`
 	Effect  string                     `yaml:"effect,omitempty"`
 }
+
+// Config is the payload of a KRM ProcessSemantics document plus the
+// libraries Expand consults for nodes it does not describe by hand.
+// Operations are hand-written variants keyed by node kind (or, for a node
+// of kind effect, by effect identifier) and always win; otherwise a node of
+// kind effect is expanded from the declared outcomes of its External effect
+// and a node of any other kind from the built-in summary of that operation
+// (see summarize).
 type Config struct {
 	PC         string               `yaml:"pc"`
 	Finished   string               `yaml:"finished"`
 	Results    []string             `yaml:"results"`
 	Operations map[string][]Variant `yaml:"operations"`
+	Summaries  summaries.Registry   `yaml:"-"`
+	External   map[string]ir.Effect `yaml:"-"`
 }
 
 // Expand adds instruction transitions to a caller-supplied model. The caller
@@ -78,9 +90,16 @@ func Expand(base model.Spec, p goflow.Program, c Config) (model.Spec, error) {
 			}
 			variants = []Variant{{Name: "return", Guard: "true", Updates: u}}
 		default:
-			variants = c.Operations[n.Kind]
+			key := n.Kind
+			if n.Kind == goflow.KindEffect {
+				key = n.Effect
+			}
+			variants = c.Operations[key]
 			if len(variants) == 0 {
-				return base, fmt.Errorf("no semantics for process operation %q", n.Kind)
+				var err error
+				if variants, err = c.summarize(n); err != nil {
+					return base, fmt.Errorf("no semantics for process operation %q at node %d: %w", n.Kind, n.ID, err)
+				}
 			}
 		}
 		for _, v := range variants {

@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"generative-architecture/pkg/expr"
+	"generative-architecture/pkg/ir"
 	"go/ast"
 	"go/format"
 	"go/parser"
@@ -16,10 +17,19 @@ import (
 	"strings"
 )
 
+// Node is one step of an extracted program. Kind names the step: branch,
+// assign, return, call, or an operation summarized by the caller (a client
+// operation key such as get or status.update, or effect for a declared
+// external effect). Effect is the identifier of the effect the step
+// performs, Consistency the read consistency of a client operation, and
+// Bindings map the $placeholders of its summary to model expressions.
 type Node struct {
 	Callee      string                     `yaml:"callee,omitempty"`
 	ID          int                        `yaml:"id"`
 	Kind        string                     `yaml:"kind"`
+	Effect      string                     `yaml:"effect,omitempty"`
+	Consistency string                     `yaml:"consistency,omitempty"`
+	Bindings    map[string]string          `yaml:"bindings,omitempty"`
 	Source      string                     `yaml:"go"`
 	Line        int                        `yaml:"line"`
 	Expression  expr.Expression            `yaml:"expression,omitempty"`
@@ -46,9 +56,11 @@ type Convert = func(ast.Expr, string) (expr.Expression, error)
 
 // Summary callbacks must verify any helpers they abstract. The same frontend
 // handles all control flow; callbacks describe effects and representation only.
-// Call is consulted first, in typed mode only, for expression statements and
-// assignments whose right-hand side is a call whose callee resolves to a
-// symbol; Statement then sees any statement Call declined.
+// In typed mode an expression statement or assignment whose right-hand side
+// is a call to a resolved symbol is matched against External first (a
+// declared external effect becomes a node of kind effect), then offered to
+// Call; Statement then sees any statement both declined. A call to a symbol
+// nothing declares is a diagnostic naming the callee.
 type Options struct {
 	File, Receiver, Method string
 	Compiler               expr.Compiler
@@ -57,6 +69,7 @@ type Options struct {
 	Errors                 map[string]bool
 	Targets                map[string]string
 	Returns                []Return
+	External               map[Callee]ir.Effect
 	Call                   func(Callee, *ast.CallExpr, Convert) (Node, bool, error)
 	Field                  func(root string, jsonPath []string) (expr.Expression, bool)
 	Statement              func(ast.Stmt, Convert) (Node, bool, error)
@@ -199,9 +212,14 @@ func (e *extractor) block(stmts []ast.Stmt, next int) (int, error) {
 	return next, nil
 }
 func (e *extractor) statement(s ast.Stmt, next int) (int, error) {
-	if e.opts.Call != nil {
-		if call := statementCall(s); call != nil {
-			if c, ok := e.callee(call); ok {
+	var callee *Callee
+	if call := statementCall(s); call != nil {
+		if c, ok := e.callee(call); ok {
+			callee = &c
+			if n, ok := e.externalCall(c); ok {
+				return e.summarized(n, s, next)
+			}
+			if e.opts.Call != nil {
 				n, ok, err := e.opts.Call(c, call, e.expression)
 				if err != nil {
 					return 0, err
@@ -297,6 +315,9 @@ func (e *extractor) statement(s ast.Stmt, next int) (int, error) {
 				return e.add(Node{Kind: "assign", Updates: map[string]expr.Expression{target: v}}, s, next, 0), nil
 			}
 		}
+	}
+	if callee != nil {
+		return 0, e.diagnose(s, "call", "unsummarized call to "+callee.String()+"; declare it as a client operation or an external effect")
 	}
 	return 0, e.diagnose(s, statementKind(s), "unsupported Go statement")
 }
