@@ -23,6 +23,7 @@ textual, so a binding is any CEL expression.
 | `$resourceVersion` | The stored object's version, modelled as a counter that every write increments |
 | `$cache` | The informer cache's copy of the object, which may lag `$object` |
 | `$cacheVersion` | The version of the cached copy |
+| `$status` | The status subresource of the stored object (or the selected status fields) |
 | `$value` | The object the caller passes in, as extracted from the Go call |
 | `$snapshot` | The caller's local copy of the object, written by reads |
 | `$snapshotVersion` | The version the caller's copy was read at; writes compare it with `$resourceVersion` |
@@ -38,3 +39,14 @@ transient failures excludes that outcome when it expands the call.
 `cached` consistency it reads `$cache` and `$cacheVersion` instead, and
 `$exists` is bound to the cache's view of the object. Both record the copy
 and its version in `$snapshot` and `$snapshotVersion`.
+
+## Writes
+
+Writes increment `$resourceVersion`. `update` and `status.update` succeed
+only when `$snapshotVersion` equals `$resourceVersion`, that is, when the
+caller's copy was read at the stored version; otherwise they report
+`conflict`. `update` replaces `$object` (the non-status fields) with
+`$value`; `status.update` replaces `$status` with `$value.status` and
+ignores the rest of the passed value, as the API server does. Both write
+the new version back into `$snapshotVersion`, as the client writes the
+response into the passed object.

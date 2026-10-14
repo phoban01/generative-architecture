@@ -1,0 +1,48 @@
+apiVersion: architecture.local/v1alpha1
+kind: EffectSummaries
+metadata:
+  name: update
+spec:
+  summaries:
+    # Update replaces the object's non-status fields with the passed value
+    # when the caller's copy is current; a stale copy is a conflict.
+    - operation: update
+      consistency: direct
+      bindings: [$exists, $object, $resourceVersion, $value, $snapshotVersion]
+      outcomes:
+        - name: ok
+          guard: $exists && $resourceVersion == $snapshotVersion
+          updates:
+            $object: $value
+            $resourceVersion: $resourceVersion + 1
+            $snapshotVersion: $resourceVersion + 1
+        - name: conflict
+          guard: $exists && $resourceVersion != $snapshotVersion
+          error: conflict
+        - name: notFound
+          guard: '!$exists'
+          error: notFound
+        - name: error
+          guard: 'true'
+          error: transient
+    # The status subresource replaces only the status fields; the rest of
+    # the passed value is ignored by the API server.
+    - operation: status.update
+      consistency: direct
+      bindings: [$exists, $status, $resourceVersion, $value, $snapshotVersion]
+      outcomes:
+        - name: ok
+          guard: $exists && $resourceVersion == $snapshotVersion
+          updates:
+            $status: $value.status
+            $resourceVersion: $resourceVersion + 1
+            $snapshotVersion: $resourceVersion + 1
+        - name: conflict
+          guard: $exists && $resourceVersion != $snapshotVersion
+          error: conflict
+        - name: notFound
+          guard: '!$exists'
+          error: notFound
+        - name: error
+          guard: 'true'
+          error: transient
