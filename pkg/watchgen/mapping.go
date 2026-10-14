@@ -9,10 +9,16 @@ import (
 	"strings"
 )
 
+// keyTypes are the accepted types of the request key literal; client.ObjectKey
+// is an alias of types.NamespacedName.
+var keyTypes = map[string]bool{"sigs.k8s.io/controller-runtime/pkg/client.ObjectKey": true, "k8s.io/apimachinery/pkg/types.NamespacedName": true}
+
 // Recognize the common type-assert, reject-empty-reference, return-one-key mapper.
 // The selected Name field is extracted, never pinned to an expected business field.
 // Other control flow and namespace transformations need another frontend pattern.
-func extractMapping(fs *token.FileSet, f *ast.File, imports map[string]string, rule *Rule) error {
+// imports maps package names to import paths for rebuilding the expected
+// source; qualified resolves selected types.
+func extractMapping(fs *token.FileSet, f *ast.File, imports map[string]string, qualified func(ast.Expr) string, rule *Rule) error {
 	fn := goflow.FindMethod(f, "", rule.Mapping)
 	if fn == nil || fn.Body == nil || len(fn.Body.List) != 3 || len(fn.Type.Params.List) != 2 {
 		var at ast.Node = f.Name
@@ -64,7 +70,7 @@ func extractMapping(fs *token.FileSet, f *ast.File, imports map[string]string, r
 		return diag(fs, pointer.X, "mapper", "mapper type must be selected")
 	}
 	pkg, ok := typ.X.(*ast.Ident)
-	if !ok || imports[pkg.Name]+"."+typ.Sel.Name != rule.GoType {
+	if !ok || qualified(typ) != rule.GoType {
 		return diag(fs, typ, "mapper", "mapper type differs from watched type")
 	}
 	ret, ok := fn.Body.List[2].(*ast.ReturnStmt)
@@ -72,14 +78,23 @@ func extractMapping(fs *token.FileSet, f *ast.File, imports map[string]string, r
 		return diag(fs, fn.Body.List[2], "mapper", "unsupported mapper return")
 	}
 	var path string
+	keyType := clientAlias + ".ObjectKey"
 	ast.Inspect(ret, func(n ast.Node) bool {
 		kv, ok := n.(*ast.KeyValueExpr)
 		if !ok {
 			return true
 		}
 		id, ok := kv.Key.(*ast.Ident)
-		if ok && id.Name == "Name" {
+		if !ok {
+			return true
+		}
+		switch id.Name {
+		case "Name":
 			path = goflow.Code(kv.Value)
+		case "NamespacedName":
+			if lit, ok := kv.Value.(*ast.CompositeLit); ok && keyTypes[qualified(lit.Type)] {
+				keyType = goflow.Code(lit.Type)
+			}
 		}
 		return true
 	})
@@ -96,8 +111,8 @@ func extractMapping(fs *token.FileSet, f *ast.File, imports map[string]string, r
 func %s(%s %s.Context,%s %s.Object)[]%s.Request{
  %s,%s:=%s.(*%s.%s)
  if !%s||%s==""{return nil}
- return []%s.Request{{NamespacedName:%s.ObjectKey{Namespace:%s.Namespace,Name:%s}}}
-}`, fn.Name.Name, ctxName, contextAlias, objName, clientAlias, reconcileAlias, local.Name, valid.Name, objName, pkg.Name, typ.Sel.Name, valid.Name, path, reconcileAlias, clientAlias, local.Name, path)
+ return []%s.Request{{NamespacedName:%s{Namespace:%s.Namespace,Name:%s}}}
+}`, fn.Name.Name, ctxName, contextAlias, objName, clientAlias, reconcileAlias, local.Name, valid.Name, objName, pkg.Name, typ.Sel.Name, valid.Name, path, reconcileAlias, keyType, local.Name, path)
 	parsed, err := parser.ParseFile(token.NewFileSet(), "expected.go", expected, 0)
 	if err != nil {
 		return err
