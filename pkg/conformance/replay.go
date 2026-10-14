@@ -30,6 +30,11 @@ type Report struct {
 	Coverage map[string]int `yaml:"coverage"`
 }
 
+// Replay checks the model and the implementation step by step. Every error it
+// returns is a *Failure whose Category says whether a property was violated
+// (safety), the trace, CEL or projection disagreed (conformance), the adapter
+// reported an unsupported construct (unsupported) or something else broke
+// (tool); see CategoryOf.
 func Replay(ctx context.Context, m *model.Compiled, trace Trace, a Adapter) (Report, error) {
 	return replay(ctx, m, trace, a, nil)
 }
@@ -39,44 +44,44 @@ func Replay(ctx context.Context, m *model.Compiled, trace Trace, a Adapter) (Rep
 // fabricated by the implementation adapter.
 func ReplayObserved(ctx context.Context, m *model.Compiled, trace Trace, a Adapter, fields []string) (Report, error) {
 	if len(fields) == 0 {
-		return Report{}, fmt.Errorf("observable fields required")
+		return Report{}, fail(CategoryTool, 0, "", fmt.Errorf("observable fields required"))
 	}
 	return replay(ctx, m, trace, a, fields)
 }
 func replay(ctx context.Context, m *model.Compiled, trace Trace, a Adapter, fields []string) (Report, error) {
 	report := Report{Coverage: map[string]int{}}
 	if trace.Status != "ok" || len(trace.States) == 0 || trace.States[0].Event != "init" {
-		return report, fmt.Errorf("expected an ok trace beginning at init")
+		return report, fail(CategoryTool, 0, "", fmt.Errorf("expected an ok trace beginning at init"))
 	}
 	expected, err := m.Initial()
 	if err != nil {
-		return report, err
+		return report, fail(CategoryTool, 0, "", err)
 	}
 	for i, state := range trace.States {
 		if err := ctx.Err(); err != nil {
-			return report, err
+			return report, fail(CategoryTool, i, state.Event, err)
 		}
 		if i > 0 {
 			expected, err = m.Next(expected, state.Event)
 			if err != nil {
-				return report, fmt.Errorf("model step %d: %w", i, err)
+				return report, fail(CategoryConformance, i, state.Event, fmt.Errorf("model step %d: %w", i, err))
 			}
 		}
 		if !reflect.DeepEqual(expected, state.Values) {
-			return report, fmt.Errorf("CEL/trace mismatch at step %d", i)
+			return report, fail(CategoryConformance, i, state.Event, fmt.Errorf("CEL/trace mismatch at step %d", i))
 		}
 		if err = m.Check(expected, state.Event); err != nil {
-			return report, fmt.Errorf("step %d: %w", i, err)
+			return report, fail(CategorySafety, i, state.Event, fmt.Errorf("step %d: %w", i, err))
 		}
 		if i > 0 {
 			if err = a.Apply(ctx, state.Event); err != nil {
-				return report, fmt.Errorf("adapter step %d (%s): %w", i, state.Event, err)
+				return report, fail("", i, state.Event, fmt.Errorf("adapter step %d (%s): %w", i, state.Event, err))
 			}
 			report.Coverage[state.Event]++
 		}
 		actual, err := a.Project(ctx)
 		if err != nil {
-			return report, err
+			return report, fail("", i, state.Event, fmt.Errorf("adapter projection at step %d (%s): %w", i, state.Event, err))
 		}
 		projected := expected
 		if fields != nil {
@@ -84,16 +89,16 @@ func replay(ctx context.Context, m *model.Compiled, trace Trace, a Adapter, fiel
 			for _, field := range fields {
 				v, ok := expected[field]
 				if !ok {
-					return report, fmt.Errorf("unknown observation field %s", field)
+					return report, fail(CategoryTool, i, state.Event, fmt.Errorf("unknown observation field %s", field))
 				}
 				if _, exists := projected[field]; exists {
-					return report, fmt.Errorf("duplicate observation field %s", field)
+					return report, fail(CategoryTool, i, state.Event, fmt.Errorf("duplicate observation field %s", field))
 				}
 				projected[field] = v
 			}
 		}
 		if !reflect.DeepEqual(projected, actual) {
-			return report, fmt.Errorf("conformance mismatch at step %d (%s): expected %v, got %v", i, state.Event, projected, actual)
+			return report, fail(CategoryConformance, i, state.Event, fmt.Errorf("conformance mismatch at step %d (%s): expected %v, got %v", i, state.Event, projected, actual))
 		}
 		report.Steps = i
 	}
