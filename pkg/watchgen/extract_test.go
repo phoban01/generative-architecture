@@ -3,6 +3,7 @@ package watchgen_test
 import (
 	"generative-architecture/pkg/effect"
 	"generative-architecture/pkg/goflow"
+	"generative-architecture/pkg/ir"
 	"generative-architecture/pkg/watchgen"
 	"os"
 	"strings"
@@ -113,7 +114,7 @@ func TestUnsupportedBuilderOperationIsLocated(t *testing.T) {
 	line := 0
 	for i, l := range lines {
 		if strings.Contains(l, "Complete(r)") {
-			lines[i] = strings.Replace(l, "Complete(r)", "Owns(&apiv1.DatabaseInstance{}).Complete(r)", 1)
+			lines[i] = strings.Replace(l, "Complete(r)", "WithLogConstructor(nil).Complete(r)", 1)
 			line = i + 1
 		}
 	}
@@ -125,8 +126,57 @@ func TestUnsupportedBuilderOperationIsLocated(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected a diagnostic, got %T: %v", err, err)
 	}
-	if d.Construct != "Owns" || d.Line != line || d.File != "wiring.go" {
-		t.Fatalf("unexpected diagnostic %+v (want Owns at line %d)", d, line)
+	if d.Construct != "WithLogConstructor" || d.Line != line || d.File != "wiring.go" {
+		t.Fatalf("unexpected diagnostic %+v (want WithLogConstructor at line %d)", d, line)
+	}
+}
+
+func TestOwnsMapsToPrimaryOwner(t *testing.T) {
+	source, resources := fixture(t)
+	extract := func(s string) (watchgen.Result, error) {
+		return watchgen.Extract([]byte(s), "DatabaseReconciler", "SetupWithManager", resources)
+	}
+	withImport := strings.Replace(string(source), "import (", "import (\n builder \"sigs.k8s.io/controller-runtime/pkg/builder\"\n predicate \"sigs.k8s.io/controller-runtime/pkg/predicate\"", 1)
+	owns := strings.Replace(withImport, "Complete(r)", "Owns(&apiv1.DatabaseInstance{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).Complete(r)", 1)
+	result, err := extract(owns)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Rules) != 3 {
+		t.Fatalf("expected three rules, got %+v", result.Rules)
+	}
+	rule := result.Rules[2]
+	if rule.Mapping != "owner" || rule.OwnerKind != "Database" || rule.Resource.Kind != "DatabaseInstance" || !rule.OnlyController || len(rule.NamePath) != 0 {
+		t.Fatalf("unexpected owner rule %+v", rule)
+	}
+	if rule.Owner == nil || *rule.Owner != result.Rules[0].Resource {
+		t.Fatalf("owner resource is not the primary resource: %+v", rule)
+	}
+	if len(rule.Predicates) != 1 || rule.Predicates[0] != "generationChanged" {
+		t.Fatalf("owner watch predicates lost: %+v", rule)
+	}
+	watches := result.IR("database", "wiring.go")
+	w := watches[2]
+	if w.Primary || w.Mapping.Kind != ir.MappingOwner || w.Mapping.OwnerGVK == nil || w.Mapping.OwnerGVK.Kind != "Database" || w.Mapping.OwnerGVK.Group != "demo.architecture.local" {
+		t.Fatalf("owner mapping lost in IR: %+v", w)
+	}
+	if err := w.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	// Owns before For has no owner kind yet; unsupported options and objects fail.
+	for _, changed := range []string{
+		strings.Replace(string(source), "For(database).", "Owns(&apiv1.DatabaseInstance{}).For(database).", 1),
+		strings.Replace(string(source), "Complete(r)", "Owns(&apiv1.DatabaseInstance{}, builder.MatchEveryOwner).Complete(r)", 1),
+		strings.Replace(string(source), "Complete(r)", "Owns(&apiv1.DatabaseInstance{Spec: spec}).Complete(r)", 1),
+		strings.Replace(string(source), "Complete(r)", "Owns().Complete(r)", 1),
+	} {
+		if _, err := extract(changed); err == nil {
+			t.Fatalf("unsupported Owns accepted: %s", changed)
+		}
+	}
+	_, err = extract(strings.Replace(string(source), "For(database).", "Owns(&apiv1.DatabaseInstance{}).For(database).", 1))
+	if d, ok := goflow.AsDiagnostic(err); !ok || d.Construct != "Owns" {
+		t.Fatalf("expected an Owns diagnostic, got %v", err)
 	}
 }
 

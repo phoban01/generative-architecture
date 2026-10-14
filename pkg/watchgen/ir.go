@@ -16,7 +16,14 @@ func (r Result) IR(controller, file string) []ir.Watch {
 	out := make([]ir.Watch, 0, len(r.Rules))
 	for i, rule := range r.Rules {
 		mapping := ir.KeyMapping{Kind: ir.MappingSelf}
-		if rule.Mapping != "self" {
+		switch rule.Mapping {
+		case "self":
+		case "owner":
+			mapping = ir.KeyMapping{Kind: ir.MappingOwner}
+			if rule.Owner != nil {
+				mapping.OwnerGVK = &ir.GVK{Group: rule.Owner.Group, Version: rule.Owner.Version, Kind: rule.Owner.Kind}
+			}
+		default:
 			mapping = ir.KeyMapping{Kind: ir.MappingField, FieldPath: append([]string(nil), rule.NamePath...)}
 		}
 		predicates := make([]ir.Predicate, 0, len(rule.Predicates))
