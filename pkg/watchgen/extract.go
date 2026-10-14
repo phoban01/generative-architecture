@@ -135,19 +135,61 @@ func ExtractWithGVKs(source []byte, receiver, method string, resources, bindings
 	primary := false
 	var primaryResource effect.Resource
 	globalPredicates := []string{}
-	parsePredicate := func(e ast.Expr) (string, error) {
+	// parsePredicate summarizes a standard predicate, or an And/Or/Not
+	// composition of them, as a small expression such as or(a, not(b)).
+	// Filter functions (Funcs, NewPredicateFuncs) carry Go code and fail.
+	var parsePredicate func(ast.Expr) (string, error)
+	parsePredicate = func(e ast.Expr) (string, error) {
+		if call, ok := e.(*ast.CallExpr); ok {
+			name := qualified(call.Fun)
+			if call.Ellipsis.IsValid() || !strings.HasPrefix(name, "sigs.k8s.io/controller-runtime/pkg/predicate.") {
+				return "", diag(fs, e, "predicate", "unsupported predicate expression")
+			}
+			op := strings.TrimPrefix(name, "sigs.k8s.io/controller-runtime/pkg/predicate.")
+			switch op {
+			case "And", "Or":
+				if len(call.Args) == 0 {
+					return "", diag(fs, e, "predicate", op+" requires at least one predicate")
+				}
+			case "Not":
+				if len(call.Args) != 1 {
+					return "", diag(fs, e, "predicate", "Not requires exactly one predicate")
+				}
+			case "NewPredicateFuncs":
+				return "", diag(fs, e, "predicate", "unsupported predicate NewPredicateFuncs: filter functions are not summarized")
+			default:
+				return "", diag(fs, e, "predicate", "unsupported predicate "+op)
+			}
+			parts := make([]string, 0, len(call.Args))
+			for _, arg := range call.Args {
+				p, err := parsePredicate(arg)
+				if err != nil {
+					return "", err
+				}
+				parts = append(parts, p)
+			}
+			return strings.ToLower(op) + "(" + strings.Join(parts, ", ") + ")", nil
+		}
 		lit, ok := e.(*ast.CompositeLit)
 		if !ok || len(lit.Elts) != 0 {
 			return "", diag(fs, e, "predicate", "unsupported predicate expression")
 		}
-		name := qualified(lit.Type)
-		switch name {
-		case "sigs.k8s.io/controller-runtime/pkg/predicate.GenerationChangedPredicate":
-			return "generationChanged", nil
-		case "sigs.k8s.io/controller-runtime/pkg/predicate.ResourceVersionChangedPredicate":
-			return "resourceVersionChanged", nil
+		typ := lit.Type
+		if index, ok := typ.(*ast.IndexExpr); ok { // Typed<Name>Predicate[*T]{}
+			typ = index.X
 		}
-		return "", diag(fs, e, "predicate", "unsupported predicate "+name)
+		name := strings.TrimPrefix(qualified(typ), "sigs.k8s.io/controller-runtime/pkg/predicate.")
+		switch strings.TrimPrefix(name, "Typed") {
+		case "GenerationChangedPredicate":
+			return "generationChanged", nil
+		case "ResourceVersionChangedPredicate":
+			return "resourceVersionChanged", nil
+		case "LabelChangedPredicate":
+			return "labelChanged", nil
+		case "AnnotationChangedPredicate":
+			return "annotationChanged", nil
+		}
+		return "", diag(fs, e, "predicate", "unsupported predicate "+qualified(typ))
 	}
 	// parseOptions reads per-watch builder options; only WithPredicates is supported.
 	parseOptions := func(args []ast.Expr) ([]string, error) {

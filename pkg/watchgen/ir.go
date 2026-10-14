@@ -1,6 +1,10 @@
 package watchgen
 
-import "generative-architecture/pkg/ir"
+import (
+	"strings"
+
+	"generative-architecture/pkg/ir"
+)
 
 // Generator names this frontend in provenance records.
 const Generator = "watchgen"
@@ -28,7 +32,7 @@ func (r Result) IR(controller, file string) []ir.Watch {
 		}
 		predicates := make([]ir.Predicate, 0, len(rule.Predicates))
 		for _, p := range rule.Predicates {
-			predicates = append(predicates, ir.Predicate{Kind: p})
+			predicates = append(predicates, irPredicate(p))
 		}
 		w := ir.Watch{
 			Controller: controller,
@@ -43,4 +47,14 @@ func (r Result) IR(controller, file string) []ir.Watch {
 		out = append(out, w)
 	}
 	return out
+}
+
+// irPredicate converts a predicate summary into an IR predicate. A composed
+// expression such as or(a, not(b)) keeps its operator as the kind and the
+// whole expression as an argument.
+func irPredicate(p string) ir.Predicate {
+	if i := strings.IndexByte(p, '('); i > 0 && strings.HasSuffix(p, ")") {
+		return ir.Predicate{Kind: p[:i], Args: map[string]string{"expression": p}}
+	}
+	return ir.Predicate{Kind: p}
 }
