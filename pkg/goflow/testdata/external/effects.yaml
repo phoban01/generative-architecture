@@ -1,0 +1,17 @@
+apiVersion: architecture.local/v1alpha1
+kind: ExternalEffects
+metadata:
+  name: external-fixture
+spec:
+  effects:
+    - id: provision
+      target:
+        package: generative-architecture/pkg/goflow/testdata/external/provisioner
+        func: Provision
+      outcomes:
+        - name: provisioned
+          guard: '!provisioned'
+          updates: {provisioned: 'true'}
+        - name: failed
+          guard: 'true'
+          error: true

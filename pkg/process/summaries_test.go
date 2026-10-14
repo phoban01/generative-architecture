@@ -7,6 +7,7 @@ import (
 
 	"generative-architecture/pkg/expr"
 	"generative-architecture/pkg/goflow"
+	"generative-architecture/pkg/ir"
 	"generative-architecture/pkg/model"
 	"generative-architecture/pkg/process"
 	"generative-architecture/pkg/summaries"
@@ -114,5 +115,57 @@ func TestExpandUsesSummaryWhenNoOperationIsWritten(t *testing.T) {
 		if _, err := process.Expand(model.Spec{Name: "Get", State: getState()}, p, process.Config{PC: "pc", Finished: "done", Summaries: summaries.Builtin()}); err == nil {
 			t.Fatalf("missing %s accepted", name)
 		}
+	}
+}
+
+func TestExpandDeclaredExternalEffect(t *testing.T) {
+	provision := ir.Effect{ID: "provision", Kind: ir.KindExternal, Actor: "controller", Evidence: ir.Declared,
+		Target: &ir.Callee{Package: "example.com/provisioner", Func: "Provision"},
+		Outcomes: []ir.Outcome{
+			{Name: "provisioned", Guard: "!provisioned", Updates: map[string]string{"provisioned": "true"}},
+			{Name: "failed", Error: true},
+		}}
+	p := goflow.Program{Entry: 0, Nodes: []goflow.Node{
+		{ID: 0, Kind: goflow.KindEffect, Effect: "provision", Next: 1},
+		{ID: 1, Kind: "return"},
+	}}
+	base := func() model.Spec {
+		return model.Spec{Name: "Provision", State: map[string]model.Variable{"provisioned": {Type: "bool", Initial: "false"}}}
+	}
+	spec, err := process.Expand(base(), p, process.Config{PC: "pc", Finished: "done", External: map[string]ir.Effect{"provision": provision}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, a := range spec.Actions {
+		names = append(names, a.Name)
+	}
+	if !reflect.DeepEqual(names, []string{"node0_provisioned", "node0_failed", "node1_return"}) {
+		t.Fatalf("declared outcomes not expanded in order: %v", names)
+	}
+	// An outcome without a guard is always enabled.
+	if g := spec.Actions[1].Guard; g != "!done && pc == 0 && (true)" {
+		t.Fatalf("unguarded outcome not always enabled: %s", g)
+	}
+	m, err := model.Compile(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state, err := m.Initial()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if next, err := m.Next(state, "node0_provisioned"); err != nil || next["provisioned"] != true {
+		t.Fatalf("provisioned outcome did not apply its updates: %v %v", next, err)
+	}
+
+	// Hand-written semantics keyed by the effect identifier still win, and
+	// an effect no document declares fails closed.
+	custom := process.Config{PC: "pc", Finished: "done", External: map[string]ir.Effect{"provision": provision}, Operations: map[string][]process.Variant{"provision": {{Name: "custom", Guard: "true"}}}}
+	if spec, err = process.Expand(base(), p, custom); err != nil || len(spec.Actions) != 2 || spec.Actions[0].Name != "node0_custom" {
+		t.Fatalf("hand-written effect semantics not preferred: %+v %v", spec.Actions, err)
+	}
+	if _, err := process.Expand(base(), p, process.Config{PC: "pc", Finished: "done"}); err == nil || !strings.Contains(err.Error(), "provision") {
+		t.Fatalf("undeclared external effect accepted: %v", err)
 	}
 }
