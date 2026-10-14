@@ -45,7 +45,11 @@ func guardsParse(t *testing.T, s Summary, vars map[string]any) {
 			t.Fatalf("%s/%s %s: guard %q is not boolean: %v", s.Operation, s.Consistency, o.Name, o.Guard, v)
 		}
 		for target, value := range o.Updates {
-			evalTemplate(t, value, b, vars)
+			// Self-equality accepts any result type, including lists the
+			// evaluator does not convert to Go values.
+			if v := evalTemplate(t, "("+value+") == ("+value+")", b, vars); v != true {
+				t.Fatalf("%s/%s %s: update %q: %v", s.Operation, s.Consistency, o.Name, value, v)
+			}
 			if _, err := Substitute(target, b); err != nil {
 				t.Fatal(err)
 			}

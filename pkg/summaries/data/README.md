@@ -27,6 +27,9 @@ textual, so a binding is any CEL expression.
 | `$value` | The object the caller passes in, as extracted from the Go call |
 | `$snapshot` | The caller's local copy of the object, written by reads |
 | `$snapshotVersion` | The version the caller's copy was read at; writes compare it with `$resourceVersion` |
+| `$options` | The call's options as a map: `resourceVersion` (a version precondition), `fieldManager`, `force`, `namespace`, `labelSelector`; absent keys are tested with `has()` |
+| `$owners` | For server-side apply: a map from field manager to the fields it last applied; `$owners[$options.fieldManager]` is an update target |
+| `$contested` | For server-side apply: whether a field the apply sets is owned by another manager |
 
 Every outcome has a guard of its own, so one call can have several enabled
 outcomes; the `error` outcome (guard `true`, class `transient`) is always
@@ -50,3 +53,21 @@ caller's copy was read at the stored version; otherwise they report
 ignores the rest of the passed value, as the API server does. Both write
 the new version back into `$snapshotVersion`, as the client writes the
 response into the passed object.
+
+`delete` clears `$exists` and reports `notFound` for an absent object.
+
+## Patches
+
+`patch` is a merge patch: `$value` holds only the fields the patch sets, and
+`$object` is bound to those same fields, so fields the patch leaves out
+are not touched. A merge patch has no version precondition unless the
+patch carries one as `$options.resourceVersion`; then a mismatch is a
+`conflict`.
+
+`apply` is server-side apply: it creates the object when absent, sets the
+applied fields and records that `$options.fieldManager` owns them in
+`$owners[$options.fieldManager]`. When another manager already owns one of
+those fields (`$contested`) the apply is a `conflict` unless
+`$options.force` is set. Deciding `$contested` needs the model's field
+ownership, so it is a placeholder the binder derives from `$owners` rather
+than a comprehension in the template.
