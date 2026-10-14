@@ -10,22 +10,32 @@ import (
 	"go/parser"
 	"go/token"
 	"strconv"
+	"strings"
 )
 
 type Rule struct {
 	Resource      effect.Resource `yaml:"resource"`
 	GoType        string          `yaml:"goType"`
 	Unstructured  bool            `yaml:"unstructured,omitempty"`
-	Mapping       string          `yaml:"mapping"` // self, or a selected Go mapping function
+	Mapping       string          `yaml:"mapping"` // self, owner, or a selected Go mapping function
 	Line          int             `yaml:"line"`
 	NamePath      []string        `yaml:"namePath,omitempty"`
 	Predicates    []string        `yaml:"predicates,omitempty"`
 	MappingSHA256 string          `yaml:"mappingSha256,omitempty"`
+	// Owner mappings enqueue the owner reference of the given kind. The
+	// owner resource is kept so IR records carry its full GVK.
+	OwnerKind      string           `yaml:"ownerKind,omitempty"`
+	Owner          *effect.Resource `yaml:"owner,omitempty"`
+	OnlyController bool             `yaml:"onlyController,omitempty"`
 }
 type Result struct {
-	Rules        []Rule `yaml:"rules"`
-	SourceSHA256 string `yaml:"sourceSha256"`
-	MethodSHA256 string `yaml:"methodSha256"`
+	Name  string `yaml:"name,omitempty"` // controller name given by Named, if any
+	Rules []Rule `yaml:"rules"`
+	// Options holds literal controller.Options fields given by WithOptions,
+	// keyed by lower-camel field name; rateLimiter only records presence.
+	Options      map[string]string `yaml:"options,omitempty"`
+	SourceSHA256 string            `yaml:"sourceSha256"`
+	MethodSHA256 string            `yaml:"methodSha256"`
 }
 
 // Extract reads a single fluent builder return and supported local field-reference
@@ -52,7 +62,7 @@ func ExtractWithGVKs(source []byte, receiver, method string, resources, bindings
 			return out, err
 		}
 		if i.Name == nil {
-			defaults := map[string]string{"context": "context", "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured": "unstructured", "k8s.io/apimachinery/pkg/runtime/schema": "schema", "sigs.k8s.io/controller-runtime": "controllerruntime", "sigs.k8s.io/controller-runtime/pkg/client": "client", "sigs.k8s.io/controller-runtime/pkg/handler": "handler", "sigs.k8s.io/controller-runtime/pkg/reconcile": "reconcile", "sigs.k8s.io/controller-runtime/pkg/builder": "builder", "sigs.k8s.io/controller-runtime/pkg/predicate": "predicate"}
+			defaults := map[string]string{"context": "context", "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured": "unstructured", "k8s.io/apimachinery/pkg/runtime/schema": "schema", "sigs.k8s.io/controller-runtime": "controllerruntime", "sigs.k8s.io/controller-runtime/pkg/client": "client", "sigs.k8s.io/controller-runtime/pkg/handler": "handler", "sigs.k8s.io/controller-runtime/pkg/reconcile": "reconcile", "sigs.k8s.io/controller-runtime/pkg/builder": "builder", "sigs.k8s.io/controller-runtime/pkg/predicate": "predicate", "sigs.k8s.io/controller-runtime/pkg/controller": "controller", "sigs.k8s.io/controller-runtime/pkg/source": "source"}
 			name, ok := defaults[path]
 			if !ok {
 				return out, diag(fs, i, "import", "supply an explicit import alias for package "+path)
@@ -123,20 +133,142 @@ func ExtractWithGVKs(source []byte, receiver, method string, resources, bindings
 	}
 	var visit func(ast.Expr) error
 	primary := false
+	var primaryResource effect.Resource
 	globalPredicates := []string{}
-	parsePredicate := func(e ast.Expr) (string, error) {
+	// parsePredicate summarizes a standard predicate, or an And/Or/Not
+	// composition of them, as a small expression such as or(a, not(b)).
+	// Filter functions (Funcs, NewPredicateFuncs) carry Go code and fail.
+	var parsePredicate func(ast.Expr) (string, error)
+	parsePredicate = func(e ast.Expr) (string, error) {
+		if call, ok := e.(*ast.CallExpr); ok {
+			name := qualified(call.Fun)
+			if call.Ellipsis.IsValid() || !strings.HasPrefix(name, "sigs.k8s.io/controller-runtime/pkg/predicate.") {
+				return "", diag(fs, e, "predicate", "unsupported predicate expression")
+			}
+			op := strings.TrimPrefix(name, "sigs.k8s.io/controller-runtime/pkg/predicate.")
+			switch op {
+			case "And", "Or":
+				if len(call.Args) == 0 {
+					return "", diag(fs, e, "predicate", op+" requires at least one predicate")
+				}
+			case "Not":
+				if len(call.Args) != 1 {
+					return "", diag(fs, e, "predicate", "Not requires exactly one predicate")
+				}
+			case "NewPredicateFuncs":
+				return "", diag(fs, e, "predicate", "unsupported predicate NewPredicateFuncs: filter functions are not summarized")
+			default:
+				return "", diag(fs, e, "predicate", "unsupported predicate "+op)
+			}
+			parts := make([]string, 0, len(call.Args))
+			for _, arg := range call.Args {
+				p, err := parsePredicate(arg)
+				if err != nil {
+					return "", err
+				}
+				parts = append(parts, p)
+			}
+			return strings.ToLower(op) + "(" + strings.Join(parts, ", ") + ")", nil
+		}
 		lit, ok := e.(*ast.CompositeLit)
 		if !ok || len(lit.Elts) != 0 {
 			return "", diag(fs, e, "predicate", "unsupported predicate expression")
 		}
-		name := qualified(lit.Type)
-		switch name {
-		case "sigs.k8s.io/controller-runtime/pkg/predicate.GenerationChangedPredicate":
-			return "generationChanged", nil
-		case "sigs.k8s.io/controller-runtime/pkg/predicate.ResourceVersionChangedPredicate":
-			return "resourceVersionChanged", nil
+		typ := lit.Type
+		if index, ok := typ.(*ast.IndexExpr); ok { // Typed<Name>Predicate[*T]{}
+			typ = index.X
 		}
-		return "", diag(fs, e, "predicate", "unsupported predicate "+name)
+		name := strings.TrimPrefix(qualified(typ), "sigs.k8s.io/controller-runtime/pkg/predicate.")
+		switch strings.TrimPrefix(name, "Typed") {
+		case "GenerationChangedPredicate":
+			return "generationChanged", nil
+		case "ResourceVersionChangedPredicate":
+			return "resourceVersionChanged", nil
+		case "LabelChangedPredicate":
+			return "labelChanged", nil
+		case "AnnotationChangedPredicate":
+			return "annotationChanged", nil
+		}
+		return "", diag(fs, e, "predicate", "unsupported predicate "+qualified(typ))
+	}
+	// parseOptions reads per-watch builder options; only WithPredicates is supported.
+	parseOptions := func(args []ast.Expr) ([]string, error) {
+		predicates := []string{}
+		for _, arg := range args {
+			opt, ok := arg.(*ast.CallExpr)
+			if !ok || qualified(opt.Fun) != "sigs.k8s.io/controller-runtime/pkg/builder.WithPredicates" || len(opt.Args) == 0 || opt.Ellipsis.IsValid() {
+				return nil, diag(fs, arg, "option", "unsupported watch option")
+			}
+			for _, arg := range opt.Args {
+				p, err := parsePredicate(arg)
+				if err != nil {
+					return nil, err
+				}
+				predicates = append(predicates, p)
+			}
+		}
+		return predicates, nil
+	}
+	// newRule starts a self-mapped rule for the watched object e at the builder call sel.
+	newRule := func(sel *ast.Ident, e ast.Expr, predicates []string) (Rule, error) {
+		name, r, err := resource(e)
+		if err != nil {
+			return Rule{}, err
+		}
+		return Rule{Resource: r, GoType: name, Unstructured: name == "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured.Unstructured", Mapping: "self", Line: fs.Position(sel.Pos()).Line, NamePath: []string{"Name"}, Predicates: predicates}, nil
+	}
+	// managerCall matches mgr.<method>() with no arguments.
+	managerCall := func(e ast.Expr, method string) bool {
+		call, ok := e.(*ast.CallExpr)
+		if !ok || len(call.Args) != 0 {
+			return false
+		}
+		sel, ok := call.Fun.(*ast.SelectorExpr)
+		return ok && isName(sel.X, managerName) && sel.Sel.Name == method
+	}
+	// parseHandler sets the key mapping of rule from a standard event handler:
+	// a local map function, the object itself, or an owner reference.
+	parseHandler := func(e ast.Expr, rule *Rule) error {
+		if lit, ok := e.(*ast.CompositeLit); ok {
+			if qualified(lit.Type) != "sigs.k8s.io/controller-runtime/pkg/handler.EnqueueRequestForObject" || len(lit.Elts) != 0 {
+				return diag(fs, e, "handler", "unsupported watch handler")
+			}
+			return nil // the rule already maps to the object itself
+		}
+		h, ok := e.(*ast.CallExpr)
+		if !ok || h.Ellipsis.IsValid() {
+			return diag(fs, e, "handler", "unsupported watch handler")
+		}
+		switch qualified(h.Fun) {
+		case "sigs.k8s.io/controller-runtime/pkg/handler.EnqueueRequestsFromMapFunc":
+			if len(h.Args) != 1 {
+				return diag(fs, e, "handler", "unsupported watch handler")
+			}
+			id, ok := h.Args[0].(*ast.Ident)
+			if !ok {
+				return diag(fs, h.Args[0], "handler", "mapping must name a local function")
+			}
+			rule.Mapping = id.Name
+			return extractMapping(fs, f, imports, rule)
+		case "sigs.k8s.io/controller-runtime/pkg/handler.EnqueueRequestForOwner":
+			if len(h.Args) < 3 || len(h.Args) > 4 || !managerCall(h.Args[0], "GetScheme") || !managerCall(h.Args[1], "GetRESTMapper") {
+				return diag(fs, e, "handler", "expected EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), owner, ...)")
+			}
+			_, owner, err := resource(h.Args[2])
+			if err != nil {
+				return err
+			}
+			rule.Mapping, rule.NamePath, rule.OwnerKind, rule.Owner = "owner", nil, owner.Kind, &owner
+			if len(h.Args) == 4 {
+				opt, ok := h.Args[3].(*ast.CallExpr)
+				if !ok || qualified(opt.Fun) != "sigs.k8s.io/controller-runtime/pkg/handler.OnlyControllerOwner" || len(opt.Args) != 0 {
+					return diag(fs, h.Args[3], "handler", "unsupported owner handler option")
+				}
+				rule.OnlyController = true
+			}
+			return nil
+		}
+		return diag(fs, e, "handler", "unsupported watch handler")
 	}
 	visit = func(e ast.Expr) error {
 		call, ok := e.(*ast.CallExpr)
@@ -161,53 +293,130 @@ func ExtractWithGVKs(source []byte, receiver, method string, resources, bindings
 			if len(call.Args) != 1 || e != ret.Results[0] || !isName(call.Args[0], receiverName) {
 				return diag(fs, sel.Sel, "Complete", "Complete must terminate setup with its receiver")
 			}
-		case "For", "Watches":
-			count := 1
-			if sel.Sel.Name == "Watches" {
-				count = 2
+		case "Named":
+			if len(call.Args) != 1 {
+				return diag(fs, sel.Sel, "Named", "Named takes exactly one controller name")
 			}
-			if len(call.Args) < count {
-				return diag(fs, sel.Sel, sel.Sel.Name, "incomplete watch")
+			lit, ok := call.Args[0].(*ast.BasicLit)
+			if !ok || lit.Kind != token.STRING {
+				return diag(fs, call.Args[0], "Named", "controller name must be a string literal")
 			}
-			predicates := []string{}
-			for _, arg := range call.Args[count:] {
-				opt, ok := arg.(*ast.CallExpr)
-				if !ok || qualified(opt.Fun) != "sigs.k8s.io/controller-runtime/pkg/builder.WithPredicates" || len(opt.Args) == 0 {
-					return diag(fs, arg, "option", "unsupported watch option")
-				}
-				for _, arg := range opt.Args {
-					p, err := parsePredicate(arg)
-					if err != nil {
-						return err
-					}
-					predicates = append(predicates, p)
-				}
-			}
-			name, r, err := resource(call.Args[0])
+			name, err := strconv.Unquote(lit.Value)
 			if err != nil {
 				return err
 			}
-			rule := Rule{Resource: r, GoType: name, Unstructured: name == "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured.Unstructured", Mapping: "self", Line: fs.Position(sel.Sel.Pos()).Line, NamePath: []string{"Name"}, Predicates: predicates}
-			if sel.Sel.Name == "For" {
-				if primary {
-					return diag(fs, sel.Sel, "For", "duplicate primary watch")
-				}
-				primary = true
-			} else {
-				h, ok := call.Args[1].(*ast.CallExpr)
-				if !ok || qualified(h.Fun) != "sigs.k8s.io/controller-runtime/pkg/handler.EnqueueRequestsFromMapFunc" || len(h.Args) != 1 {
-					return diag(fs, call.Args[1], "handler", "unsupported watch handler")
-				}
-				id, ok := h.Args[0].(*ast.Ident)
-				if !ok {
-					return diag(fs, h.Args[0], "handler", "mapping must name a local function")
-				}
-				rule.Mapping = id.Name
-				if err := extractMapping(fs, f, imports, &rule); err != nil {
-					return err
-				}
+			if name == "" {
+				return diag(fs, call.Args[0], "Named", "controller name must not be empty")
+			}
+			if out.Name != "" {
+				return diag(fs, sel.Sel, "Named", "duplicate controller name")
+			}
+			out.Name = name
+		case "For":
+			if len(call.Args) < 1 {
+				return diag(fs, sel.Sel, "For", "incomplete watch")
+			}
+			if primary {
+				return diag(fs, sel.Sel, "For", "duplicate primary watch")
+			}
+			if len(out.Rules) > 0 {
+				return diag(fs, sel.Sel, "For", "the primary For watch must precede other watches")
+			}
+			predicates, err := parseOptions(call.Args[1:])
+			if err != nil {
+				return err
+			}
+			rule, err := newRule(sel.Sel, call.Args[0], predicates)
+			if err != nil {
+				return err
+			}
+			primary, primaryResource = true, rule.Resource
+			out.Rules = append(out.Rules, rule)
+		case "Owns":
+			if len(call.Args) < 1 {
+				return diag(fs, sel.Sel, "Owns", "incomplete watch")
+			}
+			if !primary {
+				return diag(fs, sel.Sel, "Owns", "Owns must follow the primary For watch")
+			}
+			predicates, err := parseOptions(call.Args[1:])
+			if err != nil {
+				return err
+			}
+			rule, err := newRule(sel.Sel, call.Args[0], predicates)
+			if err != nil {
+				return err
+			}
+			// Owns enqueues the controlling owner reference of the primary kind.
+			owner := primaryResource
+			rule.Mapping, rule.NamePath, rule.OwnerKind, rule.Owner, rule.OnlyController = "owner", nil, owner.Kind, &owner, true
+			out.Rules = append(out.Rules, rule)
+		case "Watches":
+			if len(call.Args) < 2 {
+				return diag(fs, sel.Sel, "Watches", "incomplete watch")
+			}
+			predicates, err := parseOptions(call.Args[2:])
+			if err != nil {
+				return err
+			}
+			rule, err := newRule(sel.Sel, call.Args[0], predicates)
+			if err != nil {
+				return err
+			}
+			if err := parseHandler(call.Args[1], &rule); err != nil {
+				return err
 			}
 			out.Rules = append(out.Rules, rule)
+		case "WatchesRawSource":
+			if len(call.Args) != 1 {
+				return diag(fs, sel.Sel, "WatchesRawSource", "WatchesRawSource takes exactly one source")
+			}
+			src, ok := call.Args[0].(*ast.CallExpr)
+			if !ok || src.Ellipsis.IsValid() || qualified(src.Fun) != "sigs.k8s.io/controller-runtime/pkg/source.Kind" || len(src.Args) < 3 {
+				return diag(fs, call.Args[0], "WatchesRawSource", "expected source.Kind(mgr.GetCache(), object, handler, predicates...)")
+			}
+			if !managerCall(src.Args[0], "GetCache") {
+				return diag(fs, src.Args[0], "WatchesRawSource", "raw source must read the manager cache")
+			}
+			predicates := []string{}
+			for _, arg := range src.Args[3:] {
+				p, err := parsePredicate(arg)
+				if err != nil {
+					return err
+				}
+				predicates = append(predicates, p)
+			}
+			rule, err := newRule(sel.Sel, src.Args[1], predicates)
+			if err != nil {
+				return err
+			}
+			// A typed object handler must be instantiated with the watched type.
+			if lit, ok := src.Args[2].(*ast.CompositeLit); ok {
+				if index, ok := lit.Type.(*ast.IndexExpr); ok {
+					ptr, isPtr := index.Index.(*ast.StarExpr)
+					if qualified(index.X) != "sigs.k8s.io/controller-runtime/pkg/handler.TypedEnqueueRequestForObject" || len(lit.Elts) != 0 || !isPtr || qualified(ptr.X) != rule.GoType {
+						return diag(fs, src.Args[2], "handler", "unsupported typed watch handler")
+					}
+					out.Rules = append(out.Rules, rule)
+					return nil
+				}
+			}
+			if err := parseHandler(src.Args[2], &rule); err != nil {
+				return err
+			}
+			out.Rules = append(out.Rules, rule)
+		case "WithOptions":
+			if len(call.Args) != 1 {
+				return diag(fs, sel.Sel, "WithOptions", "WithOptions takes exactly one controller.Options literal")
+			}
+			if out.Options != nil {
+				return diag(fs, sel.Sel, "WithOptions", "duplicate controller options")
+			}
+			options, err := parseOptionsLiteral(fs, call.Args[0], qualified)
+			if err != nil {
+				return err
+			}
+			out.Options = options
 		case "WithEventFilter":
 			if len(call.Args) != 1 {
 				return diag(fs, sel.Sel, "WithEventFilter", "invalid global predicate")
@@ -243,6 +452,62 @@ func ExtractWithGVKs(source []byte, receiver, method string, resources, bindings
 		out.Rules[i].Predicates = append(out.Rules[i].Predicates, globalPredicates...)
 	}
 	return out, nil
+}
+
+// parseOptionsLiteral reads a keyed controller.Options composite literal.
+// MaxConcurrentReconciles must be an int literal and RateLimiter records only
+// its presence; other fields are kept when literal and diagnosed by name
+// otherwise, since their runtime values cannot be summarized.
+func parseOptionsLiteral(fs *token.FileSet, e ast.Expr, qualified func(ast.Expr) string) (map[string]string, error) {
+	lit, ok := e.(*ast.CompositeLit)
+	if !ok || qualified(lit.Type) != "sigs.k8s.io/controller-runtime/pkg/controller.Options" {
+		return nil, diag(fs, e, "WithOptions", "expected a controller.Options literal")
+	}
+	options := map[string]string{}
+	for _, element := range lit.Elts {
+		kv, ok := element.(*ast.KeyValueExpr)
+		if !ok {
+			return nil, diag(fs, element, "WithOptions", "controller options require keyed fields")
+		}
+		key, ok := kv.Key.(*ast.Ident)
+		if !ok {
+			return nil, diag(fs, kv.Key, "WithOptions", "invalid controller option field")
+		}
+		name := strings.ToLower(key.Name[:1]) + key.Name[1:]
+		if _, seen := options[name]; seen {
+			return nil, diag(fs, key, "WithOptions", "duplicate controller option field "+key.Name)
+		}
+		if key.Name == "RateLimiter" {
+			options[name] = "true"
+			continue
+		}
+		value, ok := literalValue(kv.Value)
+		if !ok || (key.Name == "MaxConcurrentReconciles" && !isIntLiteral(kv.Value)) {
+			return nil, diag(fs, kv.Value, "WithOptions", "controller option "+key.Name+" must be a literal")
+		}
+		options[name] = value
+	}
+	return options, nil
+}
+
+// literalValue returns the value of a basic literal or boolean identifier.
+func literalValue(e ast.Expr) (string, bool) {
+	switch v := e.(type) {
+	case *ast.BasicLit:
+		if v.Kind == token.STRING {
+			s, err := strconv.Unquote(v.Value)
+			return s, err == nil
+		}
+		return v.Value, true
+	case *ast.Ident:
+		return v.Name, v.Name == "true" || v.Name == "false"
+	}
+	return "", false
+}
+
+func isIntLiteral(e ast.Expr) bool {
+	v, ok := e.(*ast.BasicLit)
+	return ok && v.Kind == token.INT
 }
 
 // diag reports an unsupported construct at the position of n.
