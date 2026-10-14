@@ -195,7 +195,7 @@ func (e *extractor) statement(s ast.Stmt, next int) (int, error) {
 					return 0, err
 				}
 				if ok {
-					return e.add(n, s, next, 0), nil
+					return e.summarized(n, s, next)
 				}
 			}
 		}
@@ -206,7 +206,7 @@ func (e *extractor) statement(s ast.Stmt, next int) (int, error) {
 			return 0, err
 		}
 		if ok {
-			return e.add(n, s, next, 0), nil
+			return e.summarized(n, s, next)
 		}
 	}
 	switch x := s.(type) {
@@ -307,6 +307,9 @@ func Extract(source []byte, opts Options) (*Program, error) {
 func (e *extractor) run(source []byte, method *ast.FuncDecl) (*Program, error) {
 	e.opts.Scope = copyScope(e.opts.Scope)
 	e.opts.Errors = copyErrors(e.opts.Errors)
+	if e.info != nil {
+		e.declareErrors(method.Body)
+	}
 	e.program.SourceSHA256 = Hash(source)
 	e.program.MethodSHA256 = Hash([]byte(Code(method)))
 	var err error
@@ -375,6 +378,19 @@ func VerifyDeclarations(source []byte, expected map[string]string) (map[string]s
 		out[name] = Hash([]byte(actual))
 	}
 	return out, nil
+}
+
+// summarized adds a node a summary callback produced for s. In typed mode an
+// assignment binds each left-hand name to the node's Results so the summary
+// can update the corresponding model symbols.
+func (e *extractor) summarized(n Node, s ast.Stmt, next int) (int, error) {
+	if x, ok := s.(*ast.AssignStmt); ok && e.info != nil {
+		var err error
+		if n, err = e.bindResults(n, x); err != nil {
+			return 0, err
+		}
+	}
+	return e.add(n, s, next, 0), nil
 }
 
 // statementCall returns the call a statement consists of: an expression

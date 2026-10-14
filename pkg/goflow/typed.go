@@ -89,6 +89,66 @@ func calleeOf(obj types.Object, recv types.Type) (Callee, bool) {
 	return c, true
 }
 
+// declareErrors registers every name an assignment in body binds to a value
+// of type error: it joins Errors and is declared as a bool in Scope so that
+// err != nil lowers to it. Statements are lowered last-first, so this runs
+// before the body is translated. The assignment itself must still be
+// summarized for extraction to succeed.
+func (e *extractor) declareErrors(body *ast.BlockStmt) {
+	ast.Inspect(body, func(n ast.Node) bool {
+		x, ok := n.(*ast.AssignStmt)
+		if !ok {
+			return true
+		}
+		for _, lhs := range x.Lhs {
+			id, ok := lhs.(*ast.Ident)
+			if !ok || id.Name == "_" {
+				continue
+			}
+			if obj := e.info.ObjectOf(id); obj != nil && isErrorType(obj.Type()) {
+				e.opts.Errors[id.Name] = true
+				if _, ok := e.opts.Scope[id.Name]; !ok {
+					e.opts.Scope[id.Name] = expr.Symbol{Type: "bool", Quint: id.Name}
+				}
+			}
+		}
+		return true
+	})
+}
+
+// bindResults records one Results target per left-hand side of a summarized
+// assignment: "" for the blank identifier, otherwise the Scope symbol the name
+// maps to (through Targets when present).
+func (e *extractor) bindResults(n Node, x *ast.AssignStmt) (Node, error) {
+	if len(n.Results) > 0 {
+		return n, e.diagnose(x, "assign", "summary may not set results for an assignment")
+	}
+	for _, lhs := range x.Lhs {
+		id, ok := lhs.(*ast.Ident)
+		if !ok {
+			return n, e.diagnose(lhs, "assign", "unsupported assignment target")
+		}
+		if id.Name == "_" {
+			n.Results = append(n.Results, "")
+			continue
+		}
+		target := id.Name
+		if t, ok := e.opts.Targets[id.Name]; ok {
+			target = t
+		}
+		if _, ok := e.opts.Scope[target]; !ok {
+			return n, e.diagnose(lhs, "assign", "unknown assignment target "+target)
+		}
+		n.Results = append(n.Results, expr.Expression(target))
+	}
+	return n, nil
+}
+
+// isErrorType reports whether t is the predeclared error interface.
+func isErrorType(t types.Type) bool {
+	return types.Identical(t, types.Universe.Lookup("error").Type())
+}
+
 // typedIdent resolves an identifier through type information. It reports
 // false when the identifier is not a symbol it understands, in which case
 // translate falls back to name-based resolution.

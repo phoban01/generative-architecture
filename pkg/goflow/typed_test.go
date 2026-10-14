@@ -107,6 +107,15 @@ func TestCallResolvesCalleeBySymbol(t *testing.T) {
 	if instance == nil || instance.Kind != "readInstance" {
 		t.Fatalf("DatabaseInstance call not mapped by callee: %+v", typed.Nodes)
 	}
+	if !reflect.DeepEqual(instance.Results, []expr.Expression{"instanceFound", "endpoint"}) {
+		t.Fatalf("assignment targets not bound: %+v", instance)
+	}
+	// Text mode does not bind assignment targets; ignore them when comparing.
+	for i := range typed.Nodes {
+		if typed.Nodes[i].Kind != "return" {
+			typed.Nodes[i].Results = nil
+		}
+	}
 	// The symbol-resolved program matches the text-matched one node for node.
 	source, err := os.ReadFile(l.Path)
 	if err != nil {
