@@ -42,6 +42,7 @@ spec:
 | `examples/database/generated/watches.yaml` | ExtractedWatches | status | registrations, mapper field paths, predicates, hashes |
 | `examples/database/generated/dynamic-client.yaml` | ExtractedDynamicAccess | status | dynamic-client methods, resources, verbs, hashes |
 | `examples/*/report.yaml` | VerificationReport | status | trace counts, coverage, input and trace hashes |
+| An evidence receipt document | EvidenceReceipt | status | `pkg/receipt`: the consumed input closure (selected packages, their in-module transitive imports, go.mod/go.sum, extra documents) with SHA-256 per file and exact tool versions; `Verify` reports changed, missing and added files (EVID-5) |
 
 The Go loader (`pkg/krm`) validates the expected kind, supported API version, required payload, names, labels and annotation keys. It rejects unknown typed fields, duplicate keys, aliases, multiple YAML documents and malformed CEL scalars. Documents use cluster-scoped local identities, so nonempty namespaces are rejected explicitly. Payload maps such as state names remain intentionally extensible. The loader is not a general Kubernetes admission or schema implementation.
 
