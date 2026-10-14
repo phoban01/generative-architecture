@@ -11,6 +11,7 @@ import (
 	"go/format"
 	"go/parser"
 	"go/token"
+	"go/types"
 	"strconv"
 	"strings"
 )
@@ -78,6 +79,7 @@ type extractor struct {
 	opts    Options
 	program Program
 	fset    *token.FileSet
+	info    *types.Info // nil in text mode; set by ExtractTyped
 }
 
 func (e *extractor) expression(n ast.Expr, want string) (expr.Expression, error) {
@@ -99,6 +101,11 @@ func (e *extractor) translate(n ast.Expr) (expr.Expression, error) {
 		v, err := e.translate(x.X)
 		return "(" + v + ")", err
 	case *ast.Ident:
+		if e.info != nil {
+			if v, ok, err := e.typedIdent(x); ok || err != nil {
+				return v, err
+			}
+		}
 		if x.Name == "true" || x.Name == "false" {
 			return expr.Expression(x.Name), nil
 		}
@@ -258,6 +265,9 @@ func (e *extractor) statement(s ast.Stmt, next int) (int, error) {
 	}
 	return 0, e.diagnose(s, statementKind(s), "unsupported Go statement")
 }
+
+// Extract lowers the selected method of a single parsed file. Identifiers are
+// resolved by name against Options; see ExtractTyped for symbol resolution.
 func Extract(source []byte, opts Options) (*Program, error) {
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, opts.File, source, parser.ParseComments)
@@ -268,9 +278,17 @@ func Extract(source []byte, opts Options) (*Program, error) {
 	if method == nil || method.Body == nil {
 		return nil, fmt.Errorf("method not found: %s.%s", opts.Receiver, opts.Method)
 	}
-	e := &extractor{opts: opts, fset: fset}
+	return (&extractor{opts: opts, fset: fset}).run(source, method)
+}
+
+// run lowers method's body. Scope and Errors are copied so that symbols the
+// extractor declares itself never leak back into the caller's Options.
+func (e *extractor) run(source []byte, method *ast.FuncDecl) (*Program, error) {
+	e.opts.Scope = copyScope(e.opts.Scope)
+	e.opts.Errors = copyErrors(e.opts.Errors)
 	e.program.SourceSHA256 = Hash(source)
 	e.program.MethodSHA256 = Hash([]byte(Code(method)))
+	var err error
 	e.program.Entry, err = e.block(method.Body.List, -1)
 	if err != nil {
 		return nil, err
@@ -336,6 +354,21 @@ func VerifyDeclarations(source []byte, expected map[string]string) (map[string]s
 		out[name] = Hash([]byte(actual))
 	}
 	return out, nil
+}
+
+func copyScope(s map[string]expr.Symbol) map[string]expr.Symbol {
+	out := make(map[string]expr.Symbol, len(s))
+	for k, v := range s {
+		out[k] = v
+	}
+	return out
+}
+func copyErrors(s map[string]bool) map[string]bool {
+	out := make(map[string]bool, len(s))
+	for k, v := range s {
+		out[k] = v
+	}
+	return out
 }
 
 // statementKind names a statement for diagnostics.
