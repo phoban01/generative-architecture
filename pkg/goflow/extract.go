@@ -40,8 +40,15 @@ type Return struct {
 	Error bool
 }
 
+// Convert lowers a Go expression that must have the given model type. It is an
+// alias so callbacks written against the plain function type keep compiling.
+type Convert = func(ast.Expr, string) (expr.Expression, error)
+
 // Summary callbacks must verify any helpers they abstract. The same frontend
 // handles all control flow; callbacks describe effects and representation only.
+// Call is consulted first, in typed mode only, for expression statements and
+// assignments whose right-hand side is a call whose callee resolves to a
+// symbol; Statement then sees any statement Call declined.
 type Options struct {
 	File, Receiver, Method string
 	Compiler               expr.Compiler
@@ -50,7 +57,8 @@ type Options struct {
 	Errors                 map[string]bool
 	Targets                map[string]string
 	Returns                []Return
-	Statement              func(ast.Stmt, func(ast.Expr, string) (expr.Expression, error)) (Node, bool, error)
+	Call                   func(Callee, *ast.CallExpr, Convert) (Node, bool, error)
+	Statement              func(ast.Stmt, Convert) (Node, bool, error)
 }
 
 func Code(n ast.Node) string {
@@ -179,6 +187,19 @@ func (e *extractor) block(stmts []ast.Stmt, next int) (int, error) {
 	return next, nil
 }
 func (e *extractor) statement(s ast.Stmt, next int) (int, error) {
+	if e.opts.Call != nil {
+		if call := statementCall(s); call != nil {
+			if c, ok := e.callee(call); ok {
+				n, ok, err := e.opts.Call(c, call, e.expression)
+				if err != nil {
+					return 0, err
+				}
+				if ok {
+					return e.add(n, s, next, 0), nil
+				}
+			}
+		}
+	}
 	if e.opts.Statement != nil {
 		n, ok, err := e.opts.Statement(s, e.expression)
 		if err != nil {
@@ -354,6 +375,24 @@ func VerifyDeclarations(source []byte, expected map[string]string) (map[string]s
 		out[name] = Hash([]byte(actual))
 	}
 	return out, nil
+}
+
+// statementCall returns the call a statement consists of: an expression
+// statement that is a call, or an assignment from a single call.
+func statementCall(s ast.Stmt) *ast.CallExpr {
+	switch x := s.(type) {
+	case *ast.ExprStmt:
+		if call, ok := x.X.(*ast.CallExpr); ok {
+			return call
+		}
+	case *ast.AssignStmt:
+		if len(x.Rhs) == 1 && (x.Tok == token.ASSIGN || x.Tok == token.DEFINE) {
+			if call, ok := x.Rhs[0].(*ast.CallExpr); ok {
+				return call
+			}
+		}
+	}
+	return nil
 }
 
 func copyScope(s map[string]expr.Symbol) map[string]expr.Symbol {

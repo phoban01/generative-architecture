@@ -32,6 +32,63 @@ func ExtractTyped(l Loaded, opts Options) (*Program, error) {
 	return e.run(source, l.Func)
 }
 
+// Callee identifies a called function or method by symbol: the package that
+// declares it, the receiver type name without pointer (empty for functions)
+// and the function or method name.
+type Callee struct {
+	Package  string `yaml:"package,omitempty"`
+	Receiver string `yaml:"receiver,omitempty"`
+	Method   string `yaml:"method"`
+}
+
+// callee resolves the symbol a call invokes. It reports false in text mode and
+// for calls that are not to a declared function or method, such as calls of
+// function values, conversions and builtins.
+func (e *extractor) callee(call *ast.CallExpr) (Callee, bool) {
+	if e.info == nil {
+		return Callee{}, false
+	}
+	var obj types.Object
+	switch f := ast.Unparen(call.Fun).(type) {
+	case *ast.Ident:
+		obj = e.info.Uses[f]
+	case *ast.SelectorExpr:
+		if sel, ok := e.info.Selections[f]; ok {
+			if sel.Kind() != types.MethodVal {
+				return Callee{}, false
+			}
+			return calleeOf(sel.Obj(), sel.Recv())
+		}
+		obj = e.info.Uses[f.Sel]
+	}
+	return calleeOf(obj, nil)
+}
+
+// calleeOf builds a Callee for a function object; recv overrides the
+// receiver type for a method selected through an interface or embedding.
+func calleeOf(obj types.Object, recv types.Type) (Callee, bool) {
+	fn, ok := obj.(*types.Func)
+	if !ok {
+		return Callee{}, false
+	}
+	c := Callee{Method: fn.Name()}
+	if fn.Pkg() != nil {
+		c.Package = fn.Pkg().Path()
+	}
+	if recv == nil && fn.Signature().Recv() != nil {
+		recv = fn.Signature().Recv().Type()
+	}
+	if recv != nil {
+		if p, ok := types.Unalias(recv).(*types.Pointer); ok {
+			recv = p.Elem()
+		}
+		if named, ok := types.Unalias(recv).(*types.Named); ok {
+			c.Receiver = named.Obj().Name()
+		}
+	}
+	return c, true
+}
+
 // typedIdent resolves an identifier through type information. It reports
 // false when the identifier is not a symbol it understands, in which case
 // translate falls back to name-based resolution.
