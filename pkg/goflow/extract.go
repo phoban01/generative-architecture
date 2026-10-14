@@ -16,10 +16,19 @@ import (
 	"strings"
 )
 
+// Node is one step of an extracted program. Kind names the step: branch,
+// assign, return, call, or an operation summarized by the caller (a client
+// operation key such as get or status.update, or effect for a declared
+// external effect). Effect is the identifier of the effect the step
+// performs, Consistency the read consistency of a client operation, and
+// Bindings map the $placeholders of its summary to model expressions.
 type Node struct {
 	Callee      string                     `yaml:"callee,omitempty"`
 	ID          int                        `yaml:"id"`
 	Kind        string                     `yaml:"kind"`
+	Effect      string                     `yaml:"effect,omitempty"`
+	Consistency string                     `yaml:"consistency,omitempty"`
+	Bindings    map[string]string          `yaml:"bindings,omitempty"`
 	Source      string                     `yaml:"go"`
 	Line        int                        `yaml:"line"`
 	Expression  expr.Expression            `yaml:"expression,omitempty"`
