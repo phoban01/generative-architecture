@@ -89,6 +89,10 @@ The generated LikeC4 sources cover the extracted reconcile flow, the watch route
 
 **Generated models, trace fixtures and YAML reports are intentionally retained.** Native tests and replay commands depend on them, and their hashes detect stale evidence. ITF traces retain Quint's JSON interchange format. Use `make clean` to remove local binaries and the rendered site.
 
+## Contributing and licence
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the issue conventions, the test requirement and how to refresh evidence. The project is licensed under the [Apache License 2.0](LICENSE).
+
 ## Scope
 
 The sample is bounded to one `Database`, one `DatabaseInstance`, one endpoint value and four reconcile invocations. API errors, informer and cache behaviour, multiple keys and workers, and upstream project conformance are outside it; some are exercised by the other examples. Go markers identify owned resources, processes and structural contract implementations. Versioned contract ports support automatic unambiguous joins; YAML supplies remaining assumptions and explicit bindings. Dynamic registrations, arbitrary mappers and upstream conformance are not automatically inferred.
