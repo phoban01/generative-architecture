@@ -1,0 +1,70 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.20.1
+  name: databases.refsystem.example.org
+spec:
+  group: refsystem.example.org
+  names:
+    kind: Database
+    listKind: DatabaseList
+    plural: databases
+    singular: database
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Database requests a database for a tenant.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: DatabaseSpec is the desired state of a Database.
+            properties:
+              size:
+                description: Size names the capacity profile of the database.
+                type: string
+              tenant:
+                description: Tenant is the name of the owning Tenant.
+                type: string
+            required:
+            - size
+            - tenant
+            type: object
+          status:
+            description: DatabaseStatus is the observed state of a Database.
+            properties:
+              ready:
+                description: Ready is true once the database accepts connections.
+                type: boolean
+              secretName:
+                description: SecretName names the Secret holding the connection credentials.
+                type: string
+            required:
+            - ready
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

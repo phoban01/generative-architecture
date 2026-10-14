@@ -1,8 +1,12 @@
 .PHONY: api-generate walkthrough library-demo general-demo consumer-test test check verify render serve build clean
 
-# Standard controller-gen handles Kubernetes deepcopy methods for the sample API.
+# Standard controller-gen handles Kubernetes deepcopy methods for the example APIs
+# and the CRD manifests of the reference system.
+CONTROLLER_GEN = go run sigs.k8s.io/controller-tools/cmd/controller-gen@v0.20.1
 api-generate:
-	go run sigs.k8s.io/controller-tools/cmd/controller-gen@v0.20.1 object paths=./examples/database/api/v1alpha1
+	$(CONTROLLER_GEN) object paths=./examples/database/api/v1alpha1
+	$(CONTROLLER_GEN) object paths=./examples/refsystem/api/v1alpha1
+	$(CONTROLLER_GEN) crd paths=./examples/refsystem/api/... output:crd:dir=./examples/refsystem/config/crd
 
 # Sample controller: extract the process, watches and dynamic-client accesses from
 # Go, generate the model and diagrams, then replay five schedules without Quint.

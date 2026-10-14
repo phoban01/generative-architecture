@@ -17,6 +17,7 @@ See [the project plan](PROJECT-PLAN.md) for the requirements index, milestones a
 | Example | Role |
 | --- | --- |
 | `examples/database/` | The sample controller. Process, watches and dynamic-client accesses are extracted from Go; constraints are authored separately; replay runs the real reconcile against a fake dynamic API. |
+| `examples/refsystem/` | Neutral multi-controller reference system: API types and CRDs now, controllers and composition in later milestones |
 | `examples/configmirror/` | An ordinary controller with a handwritten behaviour model: the observer/runtime integration reference, not the generation example. |
 | `examples/runtimegroup/` | A multi-controller runtime profile checked against real controller-runtime workers and client-go FIFO queues. |
 | `testdata/consumer/` | A separate Go module that imports the public packages. |
@@ -89,6 +90,7 @@ The generated LikeC4 sources cover the extracted reconcile flow, the watch route
 | --- | --- |
 | `pkg/`, `LIBRARY.md`, `START-HERE.md` | Public APIs, library reference and first walkthrough |
 | `examples/database/` | Sample controller: source, authored semantics, generated models, traces and report |
+| `examples/refsystem/` | Reference system: API types, scheme and CRD manifests |
 | `examples/configmirror/`, `examples/runtimegroup/`, `testdata/consumer/` | Handwritten-model controller, runtime profile and external-module smoke test |
 | `pkg/sourcegen/`, `pkg/goflow/`, `pkg/process/`, `pkg/watchgen/`, `pkg/dynamicgen/` | Structure, behaviour, watch and API-access extraction |
 | `pkg/contracts/`, `pkg/composition/`, `pkg/model/`, `pkg/expr/` | Contract checks, composition, model compilation, CEL subset |
