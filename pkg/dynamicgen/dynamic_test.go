@@ -7,6 +7,7 @@ import (
 
 	"generative-architecture/pkg/dynamicgen"
 	"generative-architecture/pkg/effect"
+	"generative-architecture/pkg/goflow"
 	"generative-architecture/pkg/krm"
 	"generative-architecture/pkg/model"
 )
@@ -72,5 +73,36 @@ func TestCatalogRejectsAmbiguousDiscovery(t *testing.T) {
 	b.Resource.Kind = "B"
 	if _, err := (dynamicgen.Catalog{Bindings: []dynamicgen.Binding{a, b}}).Mapper(); err == nil {
 		t.Fatal("ambiguous resource accepted")
+	}
+}
+
+func TestUnsupportedDynamicOperationIsLocated(t *testing.T) {
+	source, err := os.ReadFile("../../examples/database/dynamic_store.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var catalog dynamicgen.Catalog
+	if _, err = krm.Read("../../examples/database/resources.yaml", "KubernetesResourceCatalog", &catalog); err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(string(source), "\n")
+	line := 0
+	for i, l := range lines {
+		if strings.Contains(l, ".UpdateStatus(") {
+			lines[i] = strings.Replace(l, ".UpdateStatus(", ".Patch(", 1)
+			line = i + 1
+		}
+	}
+	if line == 0 {
+		t.Fatal("fixture has no UpdateStatus call")
+	}
+	methods := map[string]string{"UpdateDatabaseStatus": "publish"}
+	_, err = dynamicgen.Extract([]byte(strings.Join(lines, "\n")), "DynamicStore", "s.Client", methods, catalog)
+	d, ok := goflow.AsDiagnostic(err)
+	if !ok {
+		t.Fatalf("expected a diagnostic, got %T: %v", err, err)
+	}
+	if d.Construct != "Patch" || d.Line != line || d.File != "dynamic_store.go" {
+		t.Fatalf("unexpected diagnostic %+v (want Patch at line %d)", d, line)
 	}
 }

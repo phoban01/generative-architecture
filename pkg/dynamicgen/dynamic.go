@@ -109,7 +109,7 @@ func Extract(source []byte, receiver, clientExpression string, methods map[strin
 	for _, name := range names {
 		fn := goflow.FindMethod(f, receiver, name)
 		if fn == nil || fn.Body == nil {
-			return out, fmt.Errorf("dynamic method not found: %s.%s", receiver, name)
+			return out, goflow.NewDiagnostic(fs, f.Name, "method", fmt.Sprintf("dynamic method not found: %s.%s", receiver, name))
 		}
 		roots := map[ast.Expr]bool{}
 		var failure error
@@ -140,22 +140,22 @@ func Extract(source []byte, receiver, clientExpression string, methods map[strin
 			}
 			roots[part.X] = true
 			if len(chain.Args) != 1 || chain.Ellipsis.IsValid() || call.Ellipsis.IsValid() {
-				failure = fmt.Errorf("unsupported dynamic resource call")
+				failure = goflow.NewDiagnostic(fs, chain, "Resource", "unsupported dynamic resource call")
 				return false
 			}
 			binding, err := catalog.Resolve(goflow.Code(chain.Args[0]))
 			if err != nil {
-				failure = err
+				failure = goflow.NewDiagnostic(fs, chain.Args[0], "Resource", err.Error())
 				return false
 			}
 			if (binding.Scope == "Namespaced" && namespace == "") || (binding.Scope == "Cluster" && namespace != "") {
-				failure = fmt.Errorf("dynamic namespace call disagrees with declared scope")
+				failure = goflow.NewDiagnostic(fs, sel.Sel, sel.Sel.Name, "dynamic namespace call disagrees with the declared scope of "+binding.Expression)
 				return false
 			}
 			operations := map[string]string{"Get": "get", "Create": "create", "Update": "update", "UpdateStatus": "status.update"}
 			op, ok := operations[sel.Sel.Name]
 			if !ok || len(call.Args) != 3 {
-				failure = fmt.Errorf("unsupported dynamic operation %s or arguments", sel.Sel.Name)
+				failure = goflow.NewDiagnostic(fs, sel.Sel, sel.Sel.Name, "unsupported dynamic operation or arguments")
 				return false
 			}
 			out.Accesses = append(out.Accesses, Access{Method: name, Effect: methods[name], Operation: op, Binding: binding, Namespace: namespace, Line: fs.Position(sel.Sel.Pos()).Line, MethodSHA256: goflow.Hash([]byte(goflow.Code(fn)))})
@@ -170,7 +170,7 @@ func Extract(source []byte, receiver, clientExpression string, methods map[strin
 			if ok && goflow.Code(e) == clientExpression {
 				count++
 				if !roots[e] {
-					failure = fmt.Errorf("unsupported/escaped dynamic client in %s", name)
+					failure = goflow.NewDiagnostic(fs, e, "client", "unsupported or escaped dynamic client in "+name)
 				}
 			}
 			return true
@@ -179,7 +179,7 @@ func Extract(source []byte, receiver, clientExpression string, methods map[strin
 			return out, failure
 		}
 		if count == 0 {
-			return out, fmt.Errorf("no dynamic access in selected method %s", name)
+			return out, goflow.NewDiagnostic(fs, fn.Name, "method", "no dynamic access in selected method "+name)
 		}
 	}
 	return out, nil
