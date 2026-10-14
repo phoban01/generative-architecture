@@ -21,6 +21,7 @@ Choose a hosting/module path before publishing. KRM documents use `architecture.
 | `dynamicgen` | Extract selected dynamic-client resource operations; resolve bounded GVR/GVK catalogs; check joins to effect summaries |
 | `watchgen` | Extract supported controller-runtime builder registrations, common predicates and local field-reference key mappings |
 | `sourcegen` | Extract Go type/GVK/controller markers, record schemas and contract implementation evidence; a `+kubebuilder:object:root=true` type (other than a list) is a resource without `+arch:resource` |
+| `adaptergen` | Generate replay adapter code from the IR and abstraction: projections that read scalar JSON paths through API clients, environment actions and effect-boundary gating; generated code never reads expected model state |
 | `composition` | Namespace processes, bind shared state through versioned contracts, and connect unambiguous providers automatically |
 | `model`, `expr` | Validate typed state/transitions; compile CEL to Quint; generate LikeC4; independently evaluate original CEL |
 | `effect` | Identify versioned operations and pause at observable boundaries; actor identities distinguish controllers |
