@@ -134,6 +134,12 @@ func (e *extractor) translate(n ast.Expr) (expr.Expression, error) {
 		if err == nil {
 			return v + "." + expr.Expression(x.Sel.Name), nil
 		}
+	case *ast.CallExpr:
+		if e.info != nil {
+			if v, ok, err := e.idiom(x); ok || err != nil {
+				return v, err
+			}
+		}
 	case *ast.UnaryExpr:
 		if x.Op == token.NOT || x.Op == token.SUB {
 			v, err := e.translate(x.X)
