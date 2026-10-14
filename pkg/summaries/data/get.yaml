@@ -1,0 +1,39 @@
+apiVersion: architecture.local/v1alpha1
+kind: EffectSummaries
+metadata:
+  name: get
+spec:
+  summaries:
+    # Direct reads observe the API server's object and its version.
+    - operation: get
+      consistency: direct
+      bindings: [$exists, $object, $resourceVersion, $snapshot, $snapshotVersion]
+      outcomes:
+        - name: found
+          guard: $exists
+          updates:
+            $snapshot: $object
+            $snapshotVersion: $resourceVersion
+        - name: notFound
+          guard: '!$exists'
+          error: notFound
+        - name: error
+          guard: 'true'
+          error: transient
+    # Cached reads observe the informer cache, which may lag the API server:
+    # $exists, $cache and $cacheVersion are bound to the cache's view.
+    - operation: get
+      consistency: cached
+      bindings: [$exists, $cache, $cacheVersion, $snapshot, $snapshotVersion]
+      outcomes:
+        - name: found
+          guard: $exists
+          updates:
+            $snapshot: $cache
+            $snapshotVersion: $cacheVersion
+        - name: notFound
+          guard: '!$exists'
+          error: notFound
+        - name: error
+          guard: 'true'
+          error: transient
