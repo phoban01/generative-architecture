@@ -93,7 +93,7 @@ The generated LikeC4 sources cover the extracted reconcile flow, the watch route
 | `pkg/sourcegen/`, `pkg/goflow/`, `pkg/process/`, `pkg/watchgen/`, `pkg/dynamicgen/` | Structure, behaviour, watch and API-access extraction |
 | `pkg/contracts/`, `pkg/composition/`, `pkg/model/`, `pkg/expr/` | Contract checks, composition, model compilation, CEL subset |
 | `pkg/effect/`, `pkg/controllerruntime/`, `pkg/conformance/`, `pkg/quint/`, `pkg/krm/` | Effect gating, runtime harness, replay, Quint driver, strict KRM loading |
-| `cmd/` | `walkthrough`, `library-demo`, `general-demo` entry points |
+| `cmd/` | `arch`, the generic CLI (subcommands land milestone by milestone), plus the `walkthrough`, `library-demo` and `general-demo` entry points |
 | `docs/adr/`, `docs/reviews/` | Decision records and plan reviews |
 
 **Generated models, trace fixtures and YAML reports are intentionally retained.** Native tests and replay commands depend on them, and their hashes detect stale evidence. ITF traces retain Quint's JSON interchange format. Use `make clean` to remove local binaries and the rendered site.

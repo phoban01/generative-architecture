@@ -44,6 +44,7 @@ serve:
 	$(LIKEC4) start examples/database/generated
 
 build:
+	go build -o bin/arch ./cmd/arch
 	go build -o bin/walkthrough ./cmd/walkthrough
 	go build -o bin/library-demo ./cmd/library-demo
 	go build -o bin/general-demo ./cmd/general-demo

@@ -1,0 +1,93 @@
+// Command arch is the generic command-line entry point for the library. It
+// operates on a project document and imports nothing from examples/.
+package main
+
+import (
+	"errors"
+	"flag"
+	"fmt"
+	"io"
+	"os"
+	"sort"
+)
+
+// globals are the flags shared by every subcommand.
+type globals struct {
+	project string
+	out     string
+}
+
+// command is a subcommand entry point. It receives the global options and
+// the remaining arguments after the subcommand name.
+type command struct {
+	name    string
+	summary string
+	run     func(g globals, args []string) error
+}
+
+var commands = []command{
+	{"init", "write a starter project document", runInit},
+	{"extract", "extract behaviour, effects and watches from Go source", runExtract},
+	{"generate", "generate models and workspaces from the extracted IR", runGenerate},
+	{"render", "build the LikeC4 site for a generated workspace", runRender},
+	{"serve", "serve the LikeC4 workspace for interactive viewing", runServe},
+	{"check", "replay hash-checked evidence without external tools", runCheck},
+	{"replay", "replay recorded traces against the implementation", runReplay},
+	{"diff", "compare generated artifacts with the committed ones", runDiff},
+	{"support", "report included, summarized and unsupported constructs", runSupport},
+}
+
+// notImplemented is returned by every subcommand until its milestone lands.
+func notImplemented(name string) error {
+	return fmt.Errorf("arch %s: %w: not implemented; tracked in milestone M7", name, errors.ErrUnsupported)
+}
+
+func usage(w io.Writer, fs *flag.FlagSet) {
+	fmt.Fprintln(w, "usage: arch [--project <path>] [--out <dir>] <command> [args]")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "commands:")
+	names := make([]command, len(commands))
+	copy(names, commands)
+	sort.Slice(names, func(i, j int) bool { return names[i].name < names[j].name })
+	for _, c := range names {
+		fmt.Fprintf(w, "  %-9s %s\n", c.name, c.summary)
+	}
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "flags:")
+	fs.SetOutput(w)
+	fs.PrintDefaults()
+}
+
+// run parses args (without the program name) and dispatches. It returns
+// flag.ErrHelp when usage was printed because no command was given.
+func run(args []string, stdout, stderr io.Writer) error {
+	fs := flag.NewFlagSet("arch", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	var g globals
+	fs.StringVar(&g.project, "project", "project.yaml", "project document to operate on")
+	fs.StringVar(&g.out, "out", "generated", "directory for generated artifacts")
+	fs.Usage = func() { usage(stderr, fs) }
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	rest := fs.Args()
+	if len(rest) == 0 {
+		usage(stdout, fs)
+		return flag.ErrHelp
+	}
+	for _, c := range commands {
+		if c.name == rest[0] {
+			return c.run(g, rest[1:])
+		}
+	}
+	return fmt.Errorf("unknown command %q; run arch without arguments for usage", rest[0])
+}
+
+func main() {
+	err := run(os.Args[1:], os.Stdout, os.Stderr)
+	if err == nil || errors.Is(err, flag.ErrHelp) {
+		return
+	}
+	fmt.Fprintln(os.Stderr, err)
+	os.Exit(1)
+}
