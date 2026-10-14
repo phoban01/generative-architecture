@@ -34,3 +34,25 @@ func (Controller) Check(err error) bool { if err != nil {return false}; return t
 		t.Fatal("helper drift accepted")
 	}
 }
+
+func TestDiagnosticLocatesUnsupportedLoop(t *testing.T) {
+	src := []byte("package p\n\nfunc (c Controller) F() bool {\n\t// comment\n\tfor {\n\t}\n\treturn true\n}\n")
+	_, err := Extract(src, Options{File: "controller.go", Receiver: "Controller", Method: "F", Returns: []Return{{Type: "bool"}}})
+	if err == nil {
+		t.Fatal("loop accepted")
+	}
+	d, ok := AsDiagnostic(err)
+	if !ok {
+		t.Fatalf("expected *Diagnostic, got %T: %v", err, err)
+	}
+	if d.Line != 5 || d.File != "controller.go" || d.Construct != "for" {
+		t.Fatalf("unexpected diagnostic %+v", d)
+	}
+	item := d.Item()
+	if item.Location.Line != 5 || item.Kind != "for" || item.Reason == "" {
+		t.Fatalf("unexpected item %+v", item)
+	}
+	if _, ok := AsDiagnostic(os.ErrNotExist); ok {
+		t.Fatal("plain error treated as diagnostic")
+	}
+}

@@ -150,7 +150,7 @@ func (e *extractor) translate(n ast.Expr) (expr.Expression, error) {
 			return "(" + a + " " + expr.Expression(x.Op.String()) + " " + b + ")", nil
 		}
 	}
-	return "", fmt.Errorf("unsupported Go expression: %s", Code(n))
+	return "", e.diagnose(n, "expression", "unsupported Go expression")
 }
 func (e *extractor) add(n Node, source ast.Node, next, other int) int {
 	n.ID = len(e.program.Nodes)
@@ -195,7 +195,7 @@ func (e *extractor) statement(s ast.Stmt, next int) (int, error) {
 			case *ast.IfStmt:
 				no, err = e.statement(y, next)
 			default:
-				err = fmt.Errorf("unsupported else")
+				err = e.diagnose(x.Else, "else", "unsupported else clause")
 			}
 			if err != nil {
 				return 0, err
@@ -212,7 +212,7 @@ func (e *extractor) statement(s ast.Stmt, next int) (int, error) {
 		return branch, nil
 	case *ast.ReturnStmt:
 		if len(x.Results) != len(e.opts.Returns) {
-			return 0, fmt.Errorf("unsupported return arity: %s", Code(s))
+			return 0, e.diagnose(s, "return", fmt.Sprintf("unsupported return arity %d; expected %d", len(x.Results), len(e.opts.Returns)))
 		}
 		values := []expr.Expression{}
 		for i, result := range x.Results {
@@ -223,7 +223,7 @@ func (e *extractor) statement(s ast.Stmt, next int) (int, error) {
 				v = "false"
 			} else {
 				if r.Error && !e.opts.Errors[Code(result)] {
-					return 0, fmt.Errorf("unsummarized returned error: %s", Code(result))
+					return 0, e.diagnose(result, "error", "unsummarized returned error")
 				}
 				v, err = e.expression(result, r.Type)
 			}
@@ -246,7 +246,7 @@ func (e *extractor) statement(s ast.Stmt, next int) (int, error) {
 			if ok {
 				symbol, ok := e.opts.Scope[target]
 				if !ok {
-					return 0, fmt.Errorf("unknown assignment target %s", target)
+					return 0, e.diagnose(x, "assign", "unknown assignment target "+target)
 				}
 				v, err := e.expression(x.Rhs[0], symbol.Type)
 				if err != nil {
@@ -256,7 +256,7 @@ func (e *extractor) statement(s ast.Stmt, next int) (int, error) {
 			}
 		}
 	}
-	return 0, fmt.Errorf("unsupported Go statement at line %d: %s", e.fset.Position(s.Pos()).Line, Code(s))
+	return 0, e.diagnose(s, statementKind(s), "unsupported Go statement")
 }
 func Extract(source []byte, opts Options) (*Program, error) {
 	fset := token.NewFileSet()
@@ -277,7 +277,7 @@ func Extract(source []byte, opts Options) (*Program, error) {
 	}
 	for _, n := range e.program.Nodes {
 		if n.Kind != "return" && (n.Next < 0 || (n.Kind == "branch" && n.Else < 0)) {
-			return nil, fmt.Errorf("unsupported fallthrough")
+			return nil, &Diagnostic{File: e.opts.File, Line: n.Line, Construct: "fallthrough", Reason: "unsupported fallthrough: control reaches the end of the method without a return", Source: n.Source}
 		}
 	}
 	return &e.program, nil
@@ -336,4 +336,35 @@ func VerifyDeclarations(source []byte, expected map[string]string) (map[string]s
 		out[name] = Hash([]byte(actual))
 	}
 	return out, nil
+}
+
+// statementKind names a statement for diagnostics.
+func statementKind(s ast.Stmt) string {
+	switch s.(type) {
+	case *ast.ForStmt:
+		return "for"
+	case *ast.RangeStmt:
+		return "range"
+	case *ast.SwitchStmt, *ast.TypeSwitchStmt:
+		return "switch"
+	case *ast.SelectStmt:
+		return "select"
+	case *ast.GoStmt:
+		return "go"
+	case *ast.DeferStmt:
+		return "defer"
+	case *ast.AssignStmt:
+		return "assign"
+	case *ast.ExprStmt:
+		return "call"
+	case *ast.DeclStmt:
+		return "declaration"
+	case *ast.LabeledStmt, *ast.BranchStmt:
+		return "label"
+	case *ast.IncDecStmt:
+		return "incdec"
+	case *ast.SendStmt:
+		return "send"
+	}
+	return "statement"
 }
