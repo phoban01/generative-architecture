@@ -250,6 +250,8 @@ func (e *extractor) statement(s ast.Stmt, next int) (int, error) {
 			return e.statement(x.Init, branch)
 		}
 		return branch, nil
+	case *ast.SwitchStmt:
+		return e.switchStmt(x, next)
 	case *ast.ReturnStmt:
 		if len(x.Results) != len(e.opts.Returns) {
 			return 0, e.diagnose(s, "return", fmt.Sprintf("unsupported return arity %d; expected %d", len(x.Results), len(e.opts.Returns)))
@@ -390,6 +392,100 @@ func VerifyDeclarations(source []byte, expected map[string]string) (map[string]s
 		out[name] = Hash([]byte(actual))
 	}
 	return out, nil
+}
+
+// switchStmt lowers a switch to a chain of branch nodes, one per case
+// expression, tried in source order; a case list shares one body. With a tag
+// each branch tests tag == literal (constants lower to literals in typed
+// mode); without one each case expression is itself the condition. The
+// default clause, wherever it appears, is the final else. fallthrough and
+// non-literal cases are diagnostics.
+func (e *extractor) switchStmt(x *ast.SwitchStmt, next int) (int, error) {
+	var def *ast.CaseClause
+	var cases []*ast.CaseClause
+	for _, s := range x.Body.List {
+		c, ok := s.(*ast.CaseClause)
+		if !ok {
+			return 0, e.diagnose(s, "switch", "unsupported switch clause")
+		}
+		if len(c.Body) > 0 {
+			if b, ok := c.Body[len(c.Body)-1].(*ast.BranchStmt); ok && b.Tok == token.FALLTHROUGH {
+				return 0, e.diagnose(b, "fallthrough", "unsupported fallthrough: each case must end its own flow")
+			}
+		}
+		if c.List == nil {
+			if def != nil {
+				return 0, e.diagnose(c, "switch", "duplicate default clause")
+			}
+			def = c
+			continue
+		}
+		cases = append(cases, c)
+	}
+	chain := next
+	var err error
+	if def != nil {
+		if chain, err = e.block(def.Body, next); err != nil {
+			return 0, err
+		}
+	}
+	var tag expr.Expression
+	if x.Tag != nil {
+		if tag, err = e.translate(x.Tag); err != nil {
+			return 0, err
+		}
+	}
+	for i := len(cases) - 1; i >= 0; i-- {
+		body, err := e.block(cases[i].Body, next)
+		if err != nil {
+			return 0, err
+		}
+		for j := len(cases[i].List) - 1; j >= 0; j-- {
+			ex := cases[i].List[j]
+			var condition expr.Expression
+			if x.Tag != nil {
+				lit, err := e.caseLiteral(ex)
+				if err != nil {
+					return 0, err
+				}
+				condition = "(" + tag + " == " + lit + ")"
+				if _, err = e.opts.Compiler.Compile(condition, e.opts.Scope, "bool"); err != nil {
+					return 0, err
+				}
+			} else if condition, err = e.expression(ex, "bool"); err != nil {
+				return 0, err
+			}
+			chain = e.add(Node{Kind: "branch", Expression: condition}, ex, body, chain)
+		}
+	}
+	if x.Init != nil {
+		return e.statement(x.Init, chain)
+	}
+	return chain, nil
+}
+
+// caseLiteral lowers a case expression of a tagged switch: a string or int
+// literal, or in typed mode a constant of basic kind.
+func (e *extractor) caseLiteral(ex ast.Expr) (expr.Expression, error) {
+	switch v := ast.Unparen(ex).(type) {
+	case *ast.BasicLit:
+		if v.Kind == token.STRING || v.Kind == token.INT {
+			return e.translate(v)
+		}
+	case *ast.Ident:
+		if e.info != nil {
+			if _, ok := e.info.Uses[v].(*types.Const); ok {
+				return e.translate(v)
+			}
+		}
+	case *ast.SelectorExpr:
+		if e.info != nil {
+			if _, ok := e.info.Uses[v.Sel].(*types.Const); ok {
+				return e.translate(v)
+			}
+		}
+	}
+	return "", e.diagnose(ex, "case", "unsupported case expression; expected a string or int literal")
 }
 
 // summarized adds a node a summary callback produced for s. In typed mode an
