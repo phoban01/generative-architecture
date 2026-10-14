@@ -31,6 +31,8 @@ spec:
 | `examples/database/process.yaml` | ProcessSemantics | spec | `pkg/process` (effect summaries for extracted Go calls) |
 | `examples/database/resources.yaml` | KubernetesResourceCatalog | spec | `pkg/dynamicgen` (GVR/GVK/plural/scope bindings) |
 | `examples/database/constraints.yaml` | ModelConstraints | spec | independent properties compiled apart from the behaviour model |
+| An abstraction document (`pkg/abstraction/testdata/database.yaml`) | Abstraction | spec | `pkg/abstraction`: bounded objects, fields, value domains, references and locals that derive model state (ADR-0005) |
+| A generated IR document | ArchitectureIR | status | `pkg/ir.Document`: controllers, watches, effects, processes, contracts and constraints with evidence and provenance |
 | `examples/runtimegroup/profile.yaml` | RuntimeGroup | spec | `pkg/controllerruntime.BuildGroupModel` |
 | A system composition document | SystemComposition | spec | `pkg/composition.Load` |
 | An interaction contract document | InteractionContract | spec | `pkg/contracts` (`+arch:implements` checks) |

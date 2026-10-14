@@ -1,0 +1,33 @@
+apiVersion: architecture.local/v1alpha1
+kind: Abstraction
+metadata:
+  name: database
+spec:
+  resources:
+    - gvk: {group: demo.architecture.local, version: v1alpha1, kind: Database}
+      objects:
+        - {id: db1, namespace: demo, name: db-1}
+      fields:
+        - {path: [status, endpoint], type: string}
+      valueDomains:
+        status.endpoint: ['""', '"db-1.internal"']
+      identity:
+        - [metadata, name]
+    - gvk: {group: demo.architecture.local, version: v1alpha1, kind: DatabaseInstance}
+      objects:
+        - {id: inst1, namespace: demo, name: instance-for-db-1}
+      fields:
+        - {path: [spec, databaseName], type: string}
+        - {path: [status, endpoint], type: string}
+      references:
+        - path: [spec, databaseName]
+          targetGVK: {group: demo.architecture.local, version: v1alpha1, kind: Database}
+  locals:
+    - {name: invocations, type: int}
+    - {name: compatible, type: bool}
+  bounds:
+    maxObjectsPerResource: 1
+    maxInvocations: 4
+  excludes:
+    - API errors and retries
+    - informer cache staleness
