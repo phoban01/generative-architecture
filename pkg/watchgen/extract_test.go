@@ -294,6 +294,69 @@ func TestWithOptionsLiteralExtraction(t *testing.T) {
 	}
 }
 
+func TestWatchesRawSourceKind(t *testing.T) {
+	source, resources := fixture(t)
+	withImport := strings.Replace(string(source), "import (", "import (\n source \"sigs.k8s.io/controller-runtime/pkg/source\"\n predicate \"sigs.k8s.io/controller-runtime/pkg/predicate\"", 1)
+	extract := func(raw string) (watchgen.Result, error) {
+		return watchgen.Extract([]byte(strings.Replace(withImport, "Complete(r)", "WatchesRawSource("+raw+").Complete(r)", 1)), "DatabaseReconciler", "SetupWithManager", resources)
+	}
+	result, err := extract("source.Kind(mgr.GetCache(), &apiv1.DatabaseInstance{}, handler.TypedEnqueueRequestForObject[*apiv1.DatabaseInstance]{}, predicate.TypedGenerationChangedPredicate[*apiv1.DatabaseInstance]{})")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Rules) != 3 {
+		t.Fatalf("expected three rules, got %+v", result.Rules)
+	}
+	rule := result.Rules[2]
+	if rule.Mapping != "self" || rule.Resource.Kind != "DatabaseInstance" || strings.Join(rule.NamePath, ".") != "Name" || strings.Join(rule.Predicates, ";") != "generationChanged" || rule.Line == 0 {
+		t.Fatalf("unexpected raw source rule %+v", rule)
+	}
+	if w := result.IR("database", "wiring.go")[2]; w.Primary || w.Mapping.Kind != ir.MappingSelf || w.Resource.Kind != "DatabaseInstance" {
+		t.Fatalf("raw source watch lost in IR: %+v", w)
+	}
+	// The untyped handler forms of Watches apply to raw sources as well.
+	result, err = extract("source.Kind(mgr.GetCache(), &apiv1.DatabaseInstance{}, handler.EnqueueRequestsFromMapFunc(InstanceToDatabase))")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rule := result.Rules[2]; rule.Mapping != "InstanceToDatabase" || strings.Join(rule.NamePath, ".") != "Spec.DatabaseName" {
+		t.Fatalf("unexpected mapped raw source rule %+v", rule)
+	}
+	result, err = extract("source.Kind(mgr.GetCache(), &apiv1.DatabaseInstance{}, handler.EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), &apiv1.Database{}, handler.OnlyControllerOwner()))")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rule := result.Rules[2]; rule.Mapping != "owner" || rule.OwnerKind != "Database" || !rule.OnlyController {
+		t.Fatalf("unexpected owner raw source rule %+v", rule)
+	}
+	for construct, raw := range map[string]string{
+		"WatchesRawSource": "source.Channel(events, handler.EnqueueRequestForObject{})",
+		"handler":          "source.Kind(mgr.GetCache(), &apiv1.DatabaseInstance{}, handler.TypedEnqueueRequestForObject[*apiv1.Database]{})",
+	} {
+		_, err := extract(raw)
+		d, ok := goflow.AsDiagnostic(err)
+		if !ok || d.Construct != construct {
+			t.Fatalf("expected a %s diagnostic for %s, got %v", construct, raw, err)
+		}
+	}
+	for _, raw := range []string{
+		"source.Kind(cache, &apiv1.DatabaseInstance{}, handler.TypedEnqueueRequestForObject[*apiv1.DatabaseInstance]{})",
+		"source.Kind(mgr.GetCache(), &apiv1.DatabaseInstance{})",
+		"source.Kind(mgr.GetCache(), &apiv1.DatabaseInstance{}, handler.TypedEnqueueRequestForObject[apiv1.DatabaseInstance]{})",
+		"source.Kind(mgr.GetCache(), &apiv1.DatabaseInstance{}, handler.TypedEnqueueRequestForObject[*apiv1.DatabaseInstance]{Custom: true})",
+		"source.Kind(mgr.GetCache(), &apiv1.DatabaseInstance{}, handler.TypedEnqueueRequestsFromMapFunc[*apiv1.DatabaseInstance, reconcile.Request](mapper))",
+		"source.Kind(mgr.GetCache(), &apiv1.DatabaseInstance{}, customHandler)",
+		"source.Kind(mgr.GetCache(), &apiv1.DatabaseInstance{}, handler.TypedEnqueueRequestForObject[*apiv1.DatabaseInstance]{}, predicate.Funcs{})",
+		"source.Kind(mgr.GetCache(), &apiv1.DatabaseInstance{}, handler.TypedEnqueueRequestForObject[*apiv1.DatabaseInstance]{}, filters...)",
+		"source.Kind(mgr.GetCache(), &apiv1.Unknown{}, handler.TypedEnqueueRequestForObject[*apiv1.Unknown]{})",
+		"rawSource",
+	} {
+		if _, err := extract(raw); err == nil {
+			t.Fatalf("unsupported raw source accepted: %s", raw)
+		}
+	}
+}
+
 func TestNamedRecordsControllerName(t *testing.T) {
 	source, resources := fixture(t)
 	extract := func(s string) (watchgen.Result, error) {

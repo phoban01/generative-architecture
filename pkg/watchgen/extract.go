@@ -62,7 +62,7 @@ func ExtractWithGVKs(source []byte, receiver, method string, resources, bindings
 			return out, err
 		}
 		if i.Name == nil {
-			defaults := map[string]string{"context": "context", "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured": "unstructured", "k8s.io/apimachinery/pkg/runtime/schema": "schema", "sigs.k8s.io/controller-runtime": "controllerruntime", "sigs.k8s.io/controller-runtime/pkg/client": "client", "sigs.k8s.io/controller-runtime/pkg/handler": "handler", "sigs.k8s.io/controller-runtime/pkg/reconcile": "reconcile", "sigs.k8s.io/controller-runtime/pkg/builder": "builder", "sigs.k8s.io/controller-runtime/pkg/predicate": "predicate", "sigs.k8s.io/controller-runtime/pkg/controller": "controller"}
+			defaults := map[string]string{"context": "context", "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured": "unstructured", "k8s.io/apimachinery/pkg/runtime/schema": "schema", "sigs.k8s.io/controller-runtime": "controllerruntime", "sigs.k8s.io/controller-runtime/pkg/client": "client", "sigs.k8s.io/controller-runtime/pkg/handler": "handler", "sigs.k8s.io/controller-runtime/pkg/reconcile": "reconcile", "sigs.k8s.io/controller-runtime/pkg/builder": "builder", "sigs.k8s.io/controller-runtime/pkg/predicate": "predicate", "sigs.k8s.io/controller-runtime/pkg/controller": "controller", "sigs.k8s.io/controller-runtime/pkg/source": "source"}
 			name, ok := defaults[path]
 			if !ok {
 				return out, diag(fs, i, "import", "supply an explicit import alias for package "+path)
@@ -364,6 +364,44 @@ func ExtractWithGVKs(source []byte, receiver, method string, resources, bindings
 				return err
 			}
 			if err := parseHandler(call.Args[1], &rule); err != nil {
+				return err
+			}
+			out.Rules = append(out.Rules, rule)
+		case "WatchesRawSource":
+			if len(call.Args) != 1 {
+				return diag(fs, sel.Sel, "WatchesRawSource", "WatchesRawSource takes exactly one source")
+			}
+			src, ok := call.Args[0].(*ast.CallExpr)
+			if !ok || src.Ellipsis.IsValid() || qualified(src.Fun) != "sigs.k8s.io/controller-runtime/pkg/source.Kind" || len(src.Args) < 3 {
+				return diag(fs, call.Args[0], "WatchesRawSource", "expected source.Kind(mgr.GetCache(), object, handler, predicates...)")
+			}
+			if !managerCall(src.Args[0], "GetCache") {
+				return diag(fs, src.Args[0], "WatchesRawSource", "raw source must read the manager cache")
+			}
+			predicates := []string{}
+			for _, arg := range src.Args[3:] {
+				p, err := parsePredicate(arg)
+				if err != nil {
+					return err
+				}
+				predicates = append(predicates, p)
+			}
+			rule, err := newRule(sel.Sel, src.Args[1], predicates)
+			if err != nil {
+				return err
+			}
+			// A typed object handler must be instantiated with the watched type.
+			if lit, ok := src.Args[2].(*ast.CompositeLit); ok {
+				if index, ok := lit.Type.(*ast.IndexExpr); ok {
+					ptr, isPtr := index.Index.(*ast.StarExpr)
+					if qualified(index.X) != "sigs.k8s.io/controller-runtime/pkg/handler.TypedEnqueueRequestForObject" || len(lit.Elts) != 0 || !isPtr || qualified(ptr.X) != rule.GoType {
+						return diag(fs, src.Args[2], "handler", "unsupported typed watch handler")
+					}
+					out.Rules = append(out.Rules, rule)
+					return nil
+				}
+			}
+			if err := parseHandler(src.Args[2], &rule); err != nil {
 				return err
 			}
 			out.Rules = append(out.Rules, rule)
