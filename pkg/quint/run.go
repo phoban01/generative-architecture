@@ -12,13 +12,62 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"golang.org/x/mod/semver"
+)
+
+// DefaultMinVersion and DefaultMaxVersion bound the supported Quint CLI
+// versions: MinVersion is inclusive and MaxVersion exclusive.
+const (
+	DefaultMinVersion = "0.33.0"
+	DefaultMaxVersion = "0.34.0"
 )
 
 type Options struct {
 	Executable     string
 	Samples, Steps int
 	Seed           int64
+	// MinVersion (inclusive) and MaxVersion (exclusive) override the default
+	// supported range. Leave empty to use DefaultMinVersion/DefaultMaxVersion.
+	MinVersion, MaxVersion string
 }
+
+// Supported reports whether a `quint --version` string lies within the
+// supported range. The range is [MinVersion, MaxVersion) using semver
+// ordering; both bounds and the version may omit the leading "v".
+func Supported(version string, opts Options) error {
+	minV, maxV := opts.MinVersion, opts.MaxVersion
+	if minV == "" {
+		minV = DefaultMinVersion
+	}
+	if maxV == "" {
+		maxV = DefaultMaxVersion
+	}
+	v := canonical(version)
+	if !semver.IsValid(v) {
+		return fmt.Errorf("unsupported Quint version %q: not a semantic version", version)
+	}
+	if semver.Prerelease(v) != "" {
+		return fmt.Errorf("unsupported Quint version %s: pre-release builds are not supported", version)
+	}
+	lo, hi := canonical(minV), canonical(maxV)
+	if !semver.IsValid(lo) || !semver.IsValid(hi) {
+		return fmt.Errorf("invalid Quint version range [%s, %s)", minV, maxV)
+	}
+	if semver.Compare(v, lo) < 0 || semver.Compare(v, hi) >= 0 {
+		return fmt.Errorf("unsupported Quint version %s; expected >= %s and < %s", version, minV, maxV)
+	}
+	return nil
+}
+
+func canonical(v string) string {
+	v = strings.TrimSpace(v)
+	if !strings.HasPrefix(v, "v") {
+		v = "v" + v
+	}
+	return v
+}
+
 type Result struct {
 	Version string
 	Traces  []conformance.Trace
@@ -60,8 +109,8 @@ func Sample(ctx context.Context, m *model.Compiled, opts Options) (Result, error
 		return result, err
 	}
 	result.Version = strings.TrimSpace(string(b))
-	if result.Version != "0.33.0" {
-		return result, fmt.Errorf("unsupported Quint version %s; expected 0.33.0", result.Version)
+	if err = Supported(result.Version, opts); err != nil {
+		return result, err
 	}
 	if _, err = run("typecheck", path); err != nil {
 		return result, err
