@@ -30,6 +30,8 @@ textual, so a binding is any CEL expression.
 | `$options` | The call's options as a map: `resourceVersion` (a version precondition), `fieldManager`, `force`, `namespace`, `labelSelector`; absent keys are tested with `has()` |
 | `$owners` | For server-side apply: a map from field manager to the fields it last applied; `$owners[$options.fieldManager]` is an update target |
 | `$contested` | For server-side apply: whether a field the apply sets is owned by another manager |
+| `$catalog` | For lists: the model's finite object domain for the listed kind, each object with `namespace` and `labels`; at `cached` consistency, the informer cache's view of it |
+| `$items` | For lists: the objects the call returns, a subset of `$catalog` |
 
 Every outcome has a guard of its own, so one call can have several enabled
 outcomes; the `error` outcome (guard `true`, class `transient`) is always
@@ -42,6 +44,18 @@ transient failures excludes that outcome when it expands the call.
 `cached` consistency it reads `$cache` and `$cacheVersion` instead, and
 `$exists` is bound to the cache's view of the object. Both record the copy
 and its version in `$snapshot` and `$snapshotVersion`.
+
+`list` binds `$items` to the objects of `$catalog` that match
+`$options.namespace` and `$options.labelSelector`. The result is finite by
+construction: the model's object domain is bounded by the abstraction
+document, and a list can only ever return objects from that domain, so
+there is no unbounded iteration to model. Only the equality subset of
+label selectors (`key=value`, written as a map) is supported by the
+template; a call whose selector is outside that subset (set-based
+requirements, `!=`, `in`, `notin`, existence tests, or field selectors)
+cannot be bound to a template and the expansion records an `unresolved`
+fact for the effect instead of guessing a result. Namespace scoping is
+exact; an unset namespace lists the whole domain.
 
 ## Writes
 

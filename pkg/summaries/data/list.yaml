@@ -1,0 +1,38 @@
+apiVersion: architecture.local/v1alpha1
+kind: EffectSummaries
+metadata:
+  name: list
+spec:
+  summaries:
+    # A list binds $items to the catalog objects matching the call's
+    # namespace and equality label selector. The catalog is the model's
+    # finite object domain, so the result is always bounded; at cached
+    # consistency it is the informer cache's view of that domain.
+    - operation: list
+      consistency: direct
+      bindings: [$items, $catalog, $options]
+      outcomes:
+        - name: ok
+          guard: 'true'
+          updates:
+            $items: >-
+              $catalog.filter(o,
+                (!has($options.namespace) || o.namespace == $options.namespace) &&
+                (!has($options.labelSelector) || $options.labelSelector.all(k, k in o.labels && o.labels[k] == $options.labelSelector[k])))
+        - name: error
+          guard: 'true'
+          error: transient
+    - operation: list
+      consistency: cached
+      bindings: [$items, $catalog, $options]
+      outcomes:
+        - name: ok
+          guard: 'true'
+          updates:
+            $items: >-
+              $catalog.filter(o,
+                (!has($options.namespace) || o.namespace == $options.namespace) &&
+                (!has($options.labelSelector) || $options.labelSelector.all(k, k in o.labels && o.labels[k] == $options.labelSelector[k])))
+        - name: error
+          guard: 'true'
+          error: transient
