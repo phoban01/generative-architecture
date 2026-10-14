@@ -12,10 +12,14 @@ import (
 // Recognize the common type-assert, reject-empty-reference, return-one-key mapper.
 // The selected Name field is extracted, never pinned to an expected business field.
 // Other control flow and namespace transformations need another frontend pattern.
-func extractMapping(f *ast.File, imports map[string]string, rule *Rule) error {
+func extractMapping(fs *token.FileSet, f *ast.File, imports map[string]string, rule *Rule) error {
 	fn := goflow.FindMethod(f, "", rule.Mapping)
 	if fn == nil || fn.Body == nil || len(fn.Body.List) != 3 || len(fn.Type.Params.List) != 2 {
-		return fmt.Errorf("unsupported mapping function %s", rule.Mapping)
+		var at ast.Node = f.Name
+		if fn != nil {
+			at = fn.Name
+		}
+		return diag(fs, at, "mapper", "unsupported mapping function "+rule.Mapping)
 	}
 	alias := func(path string) string {
 		for name, p := range imports {
@@ -27,45 +31,45 @@ func extractMapping(f *ast.File, imports map[string]string, rule *Rule) error {
 	}
 	contextAlias, clientAlias, reconcileAlias := alias("context"), alias("sigs.k8s.io/controller-runtime/pkg/client"), alias("sigs.k8s.io/controller-runtime/pkg/reconcile")
 	if contextAlias == "" || clientAlias == "" || reconcileAlias == "" {
-		return fmt.Errorf("unresolved mapper imports")
+		return diag(fs, fn.Name, "mapper", "unresolved mapper imports: context, client and reconcile must be imported")
 	}
 	for _, p := range fn.Type.Params.List {
 		if len(p.Names) != 1 {
-			return fmt.Errorf("unsupported mapper parameters")
+			return diag(fs, p, "mapper", "unsupported mapper parameters")
 		}
 	}
 	ctxName, objName := fn.Type.Params.List[0].Names[0].Name, fn.Type.Params.List[1].Names[0].Name
 	assign, ok := fn.Body.List[0].(*ast.AssignStmt)
 	if !ok || len(assign.Lhs) != 2 || len(assign.Rhs) != 1 {
-		return fmt.Errorf("mapper requires a type assertion")
+		return diag(fs, fn.Body.List[0], "mapper", "mapper requires a type assertion")
 	}
 	local, ok := assign.Lhs[0].(*ast.Ident)
 	if !ok {
-		return fmt.Errorf("unsupported mapper local")
+		return diag(fs, assign.Lhs[0], "mapper", "unsupported mapper local")
 	}
 	valid, ok := assign.Lhs[1].(*ast.Ident)
 	if !ok {
-		return fmt.Errorf("unsupported mapper assertion")
+		return diag(fs, assign.Lhs[1], "mapper", "unsupported mapper assertion")
 	}
 	assertion, ok := assign.Rhs[0].(*ast.TypeAssertExpr)
 	if !ok {
-		return fmt.Errorf("unsupported mapper assertion")
+		return diag(fs, assign.Rhs[0], "mapper", "unsupported mapper assertion")
 	}
 	pointer, ok := assertion.Type.(*ast.StarExpr)
 	if !ok {
-		return fmt.Errorf("mapper assertion needs object pointer")
+		return diag(fs, assertion.Type, "mapper", "mapper assertion needs object pointer")
 	}
 	typ, ok := pointer.X.(*ast.SelectorExpr)
 	if !ok {
-		return fmt.Errorf("mapper type must be selected")
+		return diag(fs, pointer.X, "mapper", "mapper type must be selected")
 	}
 	pkg, ok := typ.X.(*ast.Ident)
 	if !ok || imports[pkg.Name]+"."+typ.Sel.Name != rule.GoType {
-		return fmt.Errorf("mapper type differs from watched type")
+		return diag(fs, typ, "mapper", "mapper type differs from watched type")
 	}
 	ret, ok := fn.Body.List[2].(*ast.ReturnStmt)
 	if !ok || len(ret.Results) != 1 {
-		return fmt.Errorf("unsupported mapper return")
+		return diag(fs, fn.Body.List[2], "mapper", "unsupported mapper return")
 	}
 	var path string
 	ast.Inspect(ret, func(n ast.Node) bool {
@@ -81,11 +85,11 @@ func extractMapping(f *ast.File, imports map[string]string, rule *Rule) error {
 	})
 	parts := strings.Split(path, ".")
 	if len(parts) < 2 || parts[0] != local.Name {
-		return fmt.Errorf("mapper request name must be an object field path")
+		return diag(fs, ret, "mapper", "mapper request name must be an object field path")
 	}
 	for _, part := range parts {
 		if !token.IsIdentifier(part) {
-			return fmt.Errorf("unsupported mapper name expression")
+			return diag(fs, ret, "mapper", "unsupported mapper name expression")
 		}
 	}
 	expected := fmt.Sprintf(`package p
@@ -101,7 +105,7 @@ func %s(%s %s.Context,%s %s.Object)[]%s.Request{
 	normalized := *fn
 	normalized.Doc = nil
 	if goflow.Code(parsed.Decls[0]) != goflow.Code(&normalized) {
-		return fmt.Errorf("unsupported mapping control flow in %s", fn.Name.Name)
+		return diag(fs, fn.Name, "mapper", "unsupported mapping control flow in "+fn.Name.Name)
 	}
 	rule.NamePath = parts[1:]
 	rule.MappingSHA256 = goflow.Hash([]byte(goflow.Code(fn)))

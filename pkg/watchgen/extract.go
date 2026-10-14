@@ -55,7 +55,7 @@ func ExtractWithGVKs(source []byte, receiver, method string, resources, bindings
 			defaults := map[string]string{"context": "context", "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured": "unstructured", "k8s.io/apimachinery/pkg/runtime/schema": "schema", "sigs.k8s.io/controller-runtime": "controllerruntime", "sigs.k8s.io/controller-runtime/pkg/client": "client", "sigs.k8s.io/controller-runtime/pkg/handler": "handler", "sigs.k8s.io/controller-runtime/pkg/reconcile": "reconcile", "sigs.k8s.io/controller-runtime/pkg/builder": "builder", "sigs.k8s.io/controller-runtime/pkg/predicate": "predicate"}
 			name, ok := defaults[path]
 			if !ok {
-				return out, fmt.Errorf("supply an explicit import alias for package %s", path)
+				return out, diag(fs, i, "import", "supply an explicit import alias for package "+path)
 			}
 			imports[name] = path
 		} else {
@@ -64,11 +64,11 @@ func ExtractWithGVKs(source []byte, receiver, method string, resources, bindings
 	}
 	fn := goflow.FindMethod(f, receiver, method)
 	if fn == nil || fn.Body == nil || len(fn.Body.List) == 0 {
-		return out, fmt.Errorf("expected a builder return in %s.%s", receiver, method)
+		return out, diag(fs, f.Name, "method", fmt.Sprintf("expected a builder return in %s.%s", receiver, method))
 	}
 	ret, ok := fn.Body.List[len(fn.Body.List)-1].(*ast.ReturnStmt)
 	if !ok || len(ret.Results) != 1 {
-		return out, fmt.Errorf("expected builder return")
+		return out, diag(fs, fn.Body.List[len(fn.Body.List)-1], "return", "expected a single builder return")
 	}
 	out.MethodSHA256 = goflow.Hash([]byte(goflow.Code(fn)))
 	qualified := func(e ast.Expr) string {
@@ -85,7 +85,7 @@ func ExtractWithGVKs(source []byte, receiver, method string, resources, bindings
 	if fn.Recv == nil || len(fn.Recv.List) != 1 || len(fn.Recv.List[0].Names) != 1 ||
 		len(fn.Type.Params.List) != 1 || len(fn.Type.Params.List[0].Names) != 1 ||
 		qualified(fn.Type.Params.List[0].Type) != "sigs.k8s.io/controller-runtime.Manager" {
-		return out, fmt.Errorf("expected a named receiver and one controller-runtime Manager parameter")
+		return out, diag(fs, fn.Type, "signature", "expected a named receiver and one controller-runtime Manager parameter")
 	}
 	receiverName := fn.Recv.List[0].Names[0].Name
 	managerName := fn.Type.Params.List[0].Names[0].Name
@@ -93,7 +93,7 @@ func ExtractWithGVKs(source []byte, receiver, method string, resources, bindings
 		id, ok := e.(*ast.Ident)
 		return ok && id.Name == name && name != "_"
 	}
-	objects, err := unstructuredObjects(fn.Body.List[:len(fn.Body.List)-1], qualified, bindings)
+	objects, err := unstructuredObjects(fs, fn.Body.List[:len(fn.Body.List)-1], qualified, bindings)
 	if err != nil {
 		return out, err
 	}
@@ -104,20 +104,20 @@ func ExtractWithGVKs(source []byte, receiver, method string, resources, bindings
 				usedObjects[id.Name] = true
 				return "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured.Unstructured", r, nil
 			}
-			return "", effect.Resource{}, fmt.Errorf("unresolved watch object %s", id.Name)
+			return "", effect.Resource{}, diag(fs, id, "watch-object", "unresolved watch object "+id.Name)
 		}
 		ptr, ok := e.(*ast.UnaryExpr)
 		if !ok || ptr.Op != token.AND {
-			return "", effect.Resource{}, fmt.Errorf("expected resource pointer")
+			return "", effect.Resource{}, diag(fs, e, "watch-object", "expected a pointer to an empty resource literal")
 		}
 		lit, ok := ptr.X.(*ast.CompositeLit)
 		if !ok || len(lit.Elts) != 0 {
-			return "", effect.Resource{}, fmt.Errorf("expected empty resource literal")
+			return "", effect.Resource{}, diag(fs, e, "watch-object", "expected an empty resource literal")
 		}
 		name := qualified(lit.Type)
 		r, ok := resources[name]
 		if !ok {
-			return "", r, fmt.Errorf("unknown watched resource %s", name)
+			return "", r, diag(fs, e, "resource", "unknown watched resource "+name)
 		}
 		return name, r, nil
 	}
@@ -127,7 +127,7 @@ func ExtractWithGVKs(source []byte, receiver, method string, resources, bindings
 	parsePredicate := func(e ast.Expr) (string, error) {
 		lit, ok := e.(*ast.CompositeLit)
 		if !ok || len(lit.Elts) != 0 {
-			return "", fmt.Errorf("unsupported predicate expression")
+			return "", diag(fs, e, "predicate", "unsupported predicate expression")
 		}
 		name := qualified(lit.Type)
 		switch name {
@@ -136,22 +136,22 @@ func ExtractWithGVKs(source []byte, receiver, method string, resources, bindings
 		case "sigs.k8s.io/controller-runtime/pkg/predicate.ResourceVersionChangedPredicate":
 			return "resourceVersionChanged", nil
 		}
-		return "", fmt.Errorf("unsupported predicate %s", name)
+		return "", diag(fs, e, "predicate", "unsupported predicate "+name)
 	}
 	visit = func(e ast.Expr) error {
 		call, ok := e.(*ast.CallExpr)
 		if !ok || call.Ellipsis.IsValid() {
-			return fmt.Errorf("unsupported watch builder expression")
+			return diag(fs, e, "builder", "unsupported watch builder expression")
 		}
 		if qualified(call.Fun) == "sigs.k8s.io/controller-runtime.NewControllerManagedBy" {
 			if len(call.Args) != 1 || !isName(call.Args[0], managerName) {
-				return fmt.Errorf("unsupported manager arguments")
+				return diag(fs, call, "NewControllerManagedBy", "unsupported manager arguments")
 			}
 			return nil
 		}
 		sel, ok := call.Fun.(*ast.SelectorExpr)
 		if !ok {
-			return fmt.Errorf("unsupported builder call")
+			return diag(fs, call, "builder", "unsupported builder call")
 		}
 		if err := visit(sel.X); err != nil {
 			return err
@@ -159,7 +159,7 @@ func ExtractWithGVKs(source []byte, receiver, method string, resources, bindings
 		switch sel.Sel.Name {
 		case "Complete":
 			if len(call.Args) != 1 || e != ret.Results[0] || !isName(call.Args[0], receiverName) {
-				return fmt.Errorf("Complete must terminate setup with its receiver")
+				return diag(fs, sel.Sel, "Complete", "Complete must terminate setup with its receiver")
 			}
 		case "For", "Watches":
 			count := 1
@@ -167,13 +167,13 @@ func ExtractWithGVKs(source []byte, receiver, method string, resources, bindings
 				count = 2
 			}
 			if len(call.Args) < count {
-				return fmt.Errorf("incomplete watch")
+				return diag(fs, sel.Sel, sel.Sel.Name, "incomplete watch")
 			}
 			predicates := []string{}
 			for _, arg := range call.Args[count:] {
 				opt, ok := arg.(*ast.CallExpr)
 				if !ok || qualified(opt.Fun) != "sigs.k8s.io/controller-runtime/pkg/builder.WithPredicates" || len(opt.Args) == 0 {
-					return fmt.Errorf("unsupported watch option")
+					return diag(fs, arg, "option", "unsupported watch option")
 				}
 				for _, arg := range opt.Args {
 					p, err := parsePredicate(arg)
@@ -190,27 +190,27 @@ func ExtractWithGVKs(source []byte, receiver, method string, resources, bindings
 			rule := Rule{Resource: r, GoType: name, Unstructured: name == "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured.Unstructured", Mapping: "self", Line: fs.Position(sel.Sel.Pos()).Line, NamePath: []string{"Name"}, Predicates: predicates}
 			if sel.Sel.Name == "For" {
 				if primary {
-					return fmt.Errorf("duplicate primary watch")
+					return diag(fs, sel.Sel, "For", "duplicate primary watch")
 				}
 				primary = true
 			} else {
 				h, ok := call.Args[1].(*ast.CallExpr)
 				if !ok || qualified(h.Fun) != "sigs.k8s.io/controller-runtime/pkg/handler.EnqueueRequestsFromMapFunc" || len(h.Args) != 1 {
-					return fmt.Errorf("unsupported watch handler")
+					return diag(fs, call.Args[1], "handler", "unsupported watch handler")
 				}
 				id, ok := h.Args[0].(*ast.Ident)
 				if !ok {
-					return fmt.Errorf("mapping must name a local function")
+					return diag(fs, h.Args[0], "handler", "mapping must name a local function")
 				}
 				rule.Mapping = id.Name
-				if err := extractMapping(f, imports, &rule); err != nil {
+				if err := extractMapping(fs, f, imports, &rule); err != nil {
 					return err
 				}
 			}
 			out.Rules = append(out.Rules, rule)
 		case "WithEventFilter":
 			if len(call.Args) != 1 {
-				return fmt.Errorf("invalid global predicate")
+				return diag(fs, sel.Sel, "WithEventFilter", "invalid global predicate")
 			}
 			p, err := parsePredicate(call.Args[0])
 			if err != nil {
@@ -218,29 +218,34 @@ func ExtractWithGVKs(source []byte, receiver, method string, resources, bindings
 			}
 			globalPredicates = append(globalPredicates, p)
 		default:
-			return fmt.Errorf("unsupported builder operation %s", sel.Sel.Name)
+			return diag(fs, sel.Sel, sel.Sel.Name, "unsupported builder operation")
 		}
 		return nil
 	}
 	outer, ok := ret.Results[0].(*ast.CallExpr)
 	if !ok {
-		return out, fmt.Errorf("missing Complete")
+		return out, diag(fs, ret, "Complete", "missing Complete")
 	}
 	sel, ok := outer.Fun.(*ast.SelectorExpr)
 	if !ok || sel.Sel.Name != "Complete" {
-		return out, fmt.Errorf("missing Complete")
+		return out, diag(fs, outer, "Complete", "missing Complete")
 	}
 	if err = visit(ret.Results[0]); err != nil {
 		return out, err
 	}
 	if len(usedObjects) != len(objects) {
-		return out, fmt.Errorf("unused unstructured watch object")
+		return out, diag(fs, fn.Body, "watch-object", "unused unstructured watch object")
 	}
 	if !primary {
-		return out, fmt.Errorf("primary For watch required")
+		return out, diag(fs, ret, "For", "primary For watch required")
 	}
 	for i := range out.Rules {
 		out.Rules[i].Predicates = append(out.Rules[i].Predicates, globalPredicates...)
 	}
 	return out, nil
+}
+
+// diag reports an unsupported construct at the position of n.
+func diag(fs *token.FileSet, n ast.Node, construct, reason string) error {
+	return goflow.NewDiagnostic(fs, n, construct, reason)
 }

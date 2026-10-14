@@ -2,6 +2,7 @@ package watchgen_test
 
 import (
 	"generative-architecture/pkg/effect"
+	"generative-architecture/pkg/goflow"
 	"generative-architecture/pkg/watchgen"
 	"os"
 	"strings"
@@ -103,5 +104,28 @@ func TestUnstructuredWatchGVKAndRuntimeBinding(t *testing.T) {
 	}
 	if _, err = extract(strings.Replace(string(source), `Kind: "Database"`, `Kind: ""`, 1)); err == nil {
 		t.Fatal("missing GVK accepted")
+	}
+}
+
+func TestUnsupportedBuilderOperationIsLocated(t *testing.T) {
+	source, resources := fixture(t)
+	lines := strings.Split(string(source), "\n")
+	line := 0
+	for i, l := range lines {
+		if strings.Contains(l, "Complete(r)") {
+			lines[i] = strings.Replace(l, "Complete(r)", "Owns(&apiv1.DatabaseInstance{}).Complete(r)", 1)
+			line = i + 1
+		}
+	}
+	if line == 0 {
+		t.Fatal("fixture has no Complete(r)")
+	}
+	_, err := watchgen.Extract([]byte(strings.Join(lines, "\n")), "DatabaseReconciler", "SetupWithManager", resources)
+	d, ok := goflow.AsDiagnostic(err)
+	if !ok {
+		t.Fatalf("expected a diagnostic, got %T: %v", err, err)
+	}
+	if d.Construct != "Owns" || d.Line != line || d.File != "wiring.go" {
+		t.Fatalf("unexpected diagnostic %+v (want Owns at line %d)", d, line)
 	}
 }
