@@ -1,0 +1,33 @@
+specification { element provisioningStep }
+model {
+ db_step0 = provisioningStep "return \"ready\"" { description "return" }
+ db_step1 = provisioningStep "store.UpdateDatabaseStatus(endpoint)" { description "publish" }
+ db_step2 = provisioningStep "return \"waiting\"" { description "return" }
+ db_step3 = provisioningStep "endpoint == \"\"" { description "branch" }
+ db_step4 = provisioningStep "return \"waiting\"" { description "return" }
+ db_step5 = provisioningStep "store.CreateDatabaseInstance()" { description "createInstance" }
+ db_step6 = provisioningStep "!instanceFound" { description "branch" }
+ db_step7 = provisioningStep "instanceFound, endpoint := store.DatabaseInstance()" { description "readInstance" }
+ db_step8 = provisioningStep "return \"unsupported\"" { description "return" }
+ db_step9 = provisioningStep "!compatible" { description "branch" }
+ db_step10 = provisioningStep "compatible := store.SatisfiesProvisioningContract()" { description "checkContract" }
+ db_step11 = provisioningStep "return \"absent\"" { description "return" }
+ db_step12 = provisioningStep "!found" { description "branch" }
+ db_step13 = provisioningStep "found := store.DatabaseExists()" { description "readDatabase" }
+ db_step1 -> db_step0 "next"
+ db_step3 -> db_step2 "true"
+ db_step3 -> db_step1 "false"
+ db_step5 -> db_step4 "next"
+ db_step6 -> db_step5 "true"
+ db_step6 -> db_step3 "false"
+ db_step7 -> db_step6 "next"
+ db_step9 -> db_step8 "true"
+ db_step9 -> db_step7 "false"
+ db_step10 -> db_step9 "next"
+ db_step12 -> db_step11 "true"
+ db_step12 -> db_step10 "false"
+ db_step13 -> db_step12 "next"
+}
+views { view database_provisioning_flow { title "Database controller: extracted reconcile flow"
+ include db_step0, db_step1, db_step2, db_step3, db_step4, db_step5, db_step6, db_step7, db_step8, db_step9, db_step10, db_step11, db_step12, db_step13
+ } }

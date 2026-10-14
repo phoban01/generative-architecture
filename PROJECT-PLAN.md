@@ -70,7 +70,7 @@ Each requirement has an ID, an acceptance test and a status measured against the
 | ID | Requirement | Acceptance test | Status |
 | --- | --- | --- | --- |
 | VIS-1 | Generate LikeC4 from the IR: system context, component, resource/watch, process, runtime and execution (counterexample) views. | `arch generate` writes one LikeC4 workspace covering all six views for the reference system. | Partial. Five separate emitters with separate specifications. |
-| VIS-2 | One command renders and serves every view of a project. | `arch render && arch serve` shows all views. | Partial. `arch render` covers one example. |
+| VIS-2 | One command renders and serves every view of a project. | `arch render && arch serve` shows all views. | Partial. `make render` covers the sample controller only. |
 | VIS-3 | Presentation hints (titles, grouping, layout) are authored in KRM and never add or remove relationships. | A hint referencing an unknown element fails validation; hints change layout only. | Missing. |
 | VIS-4 | Every diagram element and relationship carries its evidence kind and a source link. | Hovering any edge shows `extracted`/`declared`/`assumed` and `file:line`. | Partial. |
 
@@ -167,7 +167,7 @@ Package map (target):
 | `pkg/model`, `pkg/expr`, `pkg/process` | TransitionModel, CEL subset, process lowering |
 | `pkg/controllerruntime`, `pkg/adaptergen`, `pkg/conformance` | Runtime profiles, generated adapters, replay |
 | `pkg/likec4`, `pkg/quint`, `pkg/report` | Generators and reports |
-| `cmd/arch` | The CLI; `cmd/machinevendor` keeps the legacy demos |
+| `cmd/arch` | The CLI (created in M0; the prototype's example-bound CLI was removed) |
 | `examples/refsystem` | Neutral reference system: three owned controllers and one Flux boundary |
 
 ## 6. Milestones and exit criteria
@@ -191,9 +191,9 @@ Checkpoint A is the recommended first delivery. It validates the abstraction and
 | **M0 Foundations** | Public repo, CI, generic CLI namespace, structured diagnostics, toolchain ranges, ADRs, reference-system skeleton | CI green on GitHub; `cmd/arch` imports nothing from `examples/`; `arch support` runs on `examples/refsystem` | ADOPT-5, ADOPT-7, EVID-2 |
 | **M1 Shared IR and catalog** | `pkg/ir`, `pkg/catalog`, `pkg/abstraction`, provenance, evidence kinds; existing frontends emit IR | All frontends return IR records; the reference-system catalog loads from CRD YAML; an abstraction document validates | ARCH-2, ARCH-3, ARCH-8, ARCH-12 |
 | **M2 Typed frontends and summaries** | Type-resolved control flow, effects, external effects and watches; summary library; marker reduction | Checkpoint A passes; reference-system reconcilers extract with no statement-text callbacks | ARCH-1, ARCH-4, ARCH-5, ARCH-6, ARCH-7, ARCH-13, ADOPT-2, EXT-2 |
-| **M3 Watch and runtime composition** | Event-to-key graph from IR; priority-queue profile; startup and deletion | `examples/assignment/watches.go` is deleted; a priority-queue controller replays | ARCH-9, CON-2 |
-| **M4 System composition and boundaries** | Derived ports and joins; `ProtocolContract`; `BoundaryModel`; CAPI contracts; Flux boundary | Reference system plus Flux boundary composes from one `Project` document; a protocol violation is reported separately from binding | ARCH-10, CON-10, EXT-1, EXT-3, EXT-4 |
-| **M5 Generated adapters and evidence** | `adaptergen` beyond the Checkpoint A slice; external-effect gating; envtest harness; report categories; input-closure receipts; mutation registry; minimization | `examples/assignment` handwritten adapter deleted; envtest CI job runs and fails without assets; detection matrix printed; receipts list the input closure | ADOPT-3, ADOPT-8, CON-7, CON-8, CON-9, EVID-2, EVID-3, EVID-5 |
+| **M3 Watch and runtime composition** | Event-to-key graph from IR; priority-queue profile; startup and deletion | `examples/database/watches.go` is deleted; a priority-queue controller replays | ARCH-9, CON-2 |
+| **M4 System composition and boundaries** | Derived ports and joins; `ProtocolContract`; `BoundaryModel`; Cluster API contracts; Flux boundary | Reference system plus Flux boundary composes from one `Project` document; a protocol violation is reported separately from binding | ARCH-10, CON-10, EXT-1, EXT-3, EXT-4 |
+| **M5 Generated adapters and evidence** | `adaptergen` beyond the Checkpoint A slice; external-effect gating; envtest harness; report categories; input-closure receipts; mutation registry; minimization | `examples/database` handwritten adapter deleted; envtest CI job runs and fails without assets; detection matrix printed; receipts list the input closure | ADOPT-3, ADOPT-8, CON-7, CON-8, CON-9, EVID-2, EVID-3, EVID-5 |
 | **M6 Visualization** | LikeC4 workspace from IR; six views; hints; evidence labels | `arch render` builds every view of the reference system | VIS-1 to VIS-4 |
 | **M7 CLI, CI and release** | Full CLI, diff, strict mode, CI template, module path, v0.1.0, adoption guides | Tag v0.1.0; adoption guide validated on an external controller | ARCH-11, ADOPT-1, ADOPT-4, ADOPT-5, ADOPT-6, ADOPT-9, CON-5, CON-6, EVID-4 |
 
@@ -235,7 +235,7 @@ Counts at plan time:
 
 Architectural decisions are recorded in `docs/adr/`. Decisions taken by this plan:
 
-- ADR-0001: `TransitionModel` is the canonical model schema; the `Contract`/`System` schema under `contracts/` and `system.yaml` is legacy and confined to `cmd/machinevendor`.
+- ADR-0001: `TransitionModel` is the canonical model schema; the prototype's legacy `Contract`/`System` schema was removed.
 - ADR-0002: One shared IR (`pkg/ir`) is the only input to generators; frontends never talk to generators directly.
 - ADR-0003: External tools (Quint, LikeC4) stay external and are invoked by version range; the Go module imports no npm code (`hack/tools/` only pins the CLIs for devbox).
 - ADR-0004: A neutral reference system under `examples/refsystem` is the walkthrough and the source of exit criteria.

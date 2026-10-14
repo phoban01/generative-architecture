@@ -1,0 +1,35 @@
+apiVersion: architecture.local/v1alpha1
+kind: ProcessSemantics
+metadata:
+  name: database-provisioning
+spec:
+  pc: pc
+  finished: finished
+  results: [outcome]
+  # These describe Store effects only. Go supplies their order and conditions.
+  operations:
+    readDatabase:
+      - name: readDatabase
+        guard: 'true'
+        updates: {found: databaseExists}
+        effect: readDatabase
+    checkContract:
+      - name: checkContract
+        guard: 'true'
+        updates: {compatible: contractSatisfied}
+        effect: checkContract
+    readInstance:
+      - name: readInstance
+        guard: 'true'
+        updates: {instanceFound: instanceExists, endpoint: instanceEndpoint}
+        effect: readInstance
+    createInstance:
+      - name: createInstance
+        guard: 'true'
+        updates: {instanceExists: 'true', instanceCreates: 'instanceCreates + 1'}
+        effect: createInstance
+    publish:
+      - name: publish
+        guard: 'true'
+        updates: {statusEndpoint: _value}
+        effect: publish

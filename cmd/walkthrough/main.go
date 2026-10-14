@@ -4,7 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"generative-architecture/examples/assignment"
+	"generative-architecture/examples/database"
 	"generative-architecture/pkg/conformance"
 	"generative-architecture/pkg/goflow"
 	"generative-architecture/pkg/krm"
@@ -23,8 +23,8 @@ func main() {
 	}
 }
 func run(refresh bool) error {
-	root := "examples/assignment"
-	e, err := assignment.Load(root)
+	root := "examples/database"
+	e, err := database.Load(root)
 	if err != nil {
 		return err
 	}
@@ -37,19 +37,19 @@ func run(refresh bool) error {
 			return err
 		}
 	}
-	if err = krm.WriteResult(filepath.Join(dir, "process.yaml"), "ExtractedProcess", "machine-assignment", e.Program); err != nil {
+	if err = krm.WriteResult(filepath.Join(dir, "process.yaml"), "ExtractedProcess", "database-provisioning", e.Program); err != nil {
 		return err
 	}
-	if err = krm.WriteResult(filepath.Join(dir, "watches.yaml"), "ExtractedWatches", "mac", e.Watches); err != nil {
+	if err = krm.WriteResult(filepath.Join(dir, "watches.yaml"), "ExtractedWatches", "database", e.Watches); err != nil {
 		return err
 	}
-	if err = krm.WriteResult(filepath.Join(dir, "dynamic-client.yaml"), "ExtractedDynamicAccess", "mac", e.Dynamic); err != nil {
+	if err = krm.WriteResult(filepath.Join(dir, "dynamic-client.yaml"), "ExtractedDynamicAccess", "database", e.Dynamic); err != nil {
 		return err
 	}
 	fmt.Println("Generated from Reconcile and SetupWithManager in Go; requirements come from constraints.yaml.")
-	fmt.Println("API access: dynamic.Interface with explicit resource catalog; InfraMachine watch: unstructured with GVK.")
-	fmt.Println("MAC: see InfraMachine -> check assignment contract -> create/find claim -> wait for fulfillment -> update InfraMachine status.")
-	for _, name := range []string{"absent", "unsupported", "pending", "fulfilled", "repeated"} {
+	fmt.Println("API access: dynamic.Interface with explicit resource catalog; Database watch: unstructured with GVK.")
+	fmt.Println("Database controller: see Database -> check provisioning contract -> create/find instance -> wait for provisioning -> update Database status.")
+	for _, name := range []string{"absent", "unsupported", "pending", "provisioned", "repeated"} {
 		trace, err := e.Schedule(name)
 		if err != nil {
 			return err
@@ -61,7 +61,7 @@ func run(refresh bool) error {
 		if err != nil {
 			return err
 		}
-		fmt.Printf("\n%s: %s; claims created=%v; InfraMachine.status.machineId=%q\n", name, state["outcome"], state["claimCreates"], state["statusMachineId"])
+		fmt.Printf("\n%s: %s; instances created=%v; Database.status.endpoint=%q\n", name, state["outcome"], state["instanceCreates"], state["statusEndpoint"])
 	}
 	fmt.Println("\nAll five schedules match Go and satisfy the independent constraints.")
 	if !refresh {
@@ -115,19 +115,19 @@ func run(refresh bool) error {
 		}
 		inputs[name] = goflow.Hash(b)
 	}
-	report := map[string]any{"result": "passed", "traces": len(sampled.Traces), "transitions": steps, "coverage": coverage, "traceHashes": hashes, "inputHashes": inputs, "modelSha256": goflow.Hash([]byte(e.Constrained.Quint())), "scope": "source-derived MAC reconcile; one InfraMachine/claim; up to four invocations; source-extracted watches/mapping and dynamic GVR operations; unstructured InfraMachine; observed dynamic client with fake API; native event handlers and FIFO; controlled/coalesced event delivery; summarized contract/store effects; no Kubernetes API errors, cache or revocation"}
-	if err = krm.WriteResult(filepath.Join(root, "report.yaml"), "VerificationReport", "machine-assignment", report); err != nil {
+	report := map[string]any{"result": "passed", "traces": len(sampled.Traces), "transitions": steps, "coverage": coverage, "traceHashes": hashes, "inputHashes": inputs, "modelSha256": goflow.Hash([]byte(e.Constrained.Quint())), "scope": "source-derived Database controller reconcile; one Database/instance; up to four invocations; source-extracted watches/mapping and dynamic GVR operations; unstructured Database; observed dynamic client with fake API; native event handlers and FIFO; controlled/coalesced event delivery; summarized contract/store effects; no Kubernetes API errors, cache or revocation"}
+	if err = krm.WriteResult(filepath.Join(root, "report.yaml"), "VerificationReport", "database-provisioning", report); err != nil {
 		return err
 	}
 	fmt.Printf("PASS Quint + Go replay: %d traces, %d transitions\n", len(sampled.Traces), steps)
 	return nil
 }
-func replay(e assignment.Example, trace conformance.Trace) (conformance.Report, map[string]any, error) {
+func replay(e database.Example, trace conformance.Trace) (conformance.Report, map[string]any, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	a := assignment.New(ctx, e, false)
+	a := database.New(ctx, e, false)
 	defer a.Close()
-	report, err := conformance.ReplayObserved(ctx, e.Model, trace, a, assignment.Observed)
+	report, err := conformance.ReplayObserved(ctx, e.Model, trace, a, database.Observed)
 	if err != nil {
 		return report, nil, err
 	}

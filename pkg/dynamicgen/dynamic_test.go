@@ -12,19 +12,19 @@ import (
 )
 
 func TestExtractDynamicResourceDependenciesAndRejectDrift(t *testing.T) {
-	source, err := os.ReadFile("../../examples/assignment/dynamic_store.go")
+	source, err := os.ReadFile("../../examples/database/dynamic_store.go")
 	if err != nil {
 		t.Fatal(err)
 	}
 	var catalog dynamicgen.Catalog
-	if _, err = krm.Read("../../examples/assignment/resources.yaml", "KubernetesResourceCatalog", &catalog); err != nil {
+	if _, err = krm.Read("../../examples/database/resources.yaml", "KubernetesResourceCatalog", &catalog); err != nil {
 		t.Fatal(err)
 	}
 	var spec model.Spec
-	if _, err = krm.Read("../../examples/assignment/model.yaml", "TransitionModel", &spec); err != nil {
+	if _, err = krm.Read("../../examples/database/model.yaml", "TransitionModel", &spec); err != nil {
 		t.Fatal(err)
 	}
-	methods := map[string]string{"InfraMachineExists": "readInfra", "MachineClaim": "readClaim", "CreateMachineClaim": "createClaim", "UpdateInfraMachineStatus": "publish"}
+	methods := map[string]string{"DatabaseExists": "readDatabase", "DatabaseInstance": "readInstance", "CreateDatabaseInstance": "createInstance", "UpdateDatabaseStatus": "publish"}
 	extract := func(code string) (dynamicgen.Result, error) {
 		return dynamicgen.Extract([]byte(code), "DynamicStore", "s.Client", methods, catalog)
 	}
@@ -48,7 +48,7 @@ func TestExtractDynamicResourceDependenciesAndRejectDrift(t *testing.T) {
 	if err = changed.CheckEffects(spec.Effects); err == nil {
 		t.Fatal("changed API verb retained old effect summary")
 	}
-	changed, err = extract(strings.Replace(string(source), "Resource(s.InfraResource)", "Resource(s.ClaimResource)", 1))
+	changed, err = extract(strings.Replace(string(source), "Resource(s.DatabaseResource)", "Resource(s.InstanceResource)", 1))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,9 +56,9 @@ func TestExtractDynamicResourceDependenciesAndRejectDrift(t *testing.T) {
 		t.Fatal("wrong resource retained old summary")
 	}
 	for _, code := range []string{
-		strings.Replace(string(source), "Resource(s.InfraResource)", "Resource(discover())", 1),
+		strings.Replace(string(source), "Resource(s.DatabaseResource)", "Resource(discover())", 1),
 		strings.Replace(string(source), ".UpdateStatus(", ".Unsupported(", 1),
-		strings.Replace(string(source), "obj, err := s.Client.Resource(s.InfraResource)", "alias := s.Client; obj, err := alias.Resource(s.InfraResource)", 1),
+		strings.Replace(string(source), "obj, err := s.Client.Resource(s.DatabaseResource)", "alias := s.Client; obj, err := alias.Resource(s.DatabaseResource)", 1),
 	} {
 		if _, err = extract(code); err == nil {
 			t.Fatal("unresolved or unsupported client operation accepted")

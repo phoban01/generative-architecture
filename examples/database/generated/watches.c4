@@ -1,0 +1,13 @@
+specification { element databaseWatchPart }
+model {
+ db_watch_queue = databaseWatchPart "Database controller workqueue"
+ db_watch_reconcile = databaseWatchPart "Database controller reconcile"
+ db_watch_queue -> db_watch_reconcile "dequeue Database key"
+ db_watch_source0 = databaseWatchPart "Database events"
+ db_watch_source0 -> db_watch_queue "self "
+ db_watch_source1 = databaseWatchPart "DatabaseInstance events"
+ db_watch_source1 -> db_watch_queue "InstanceToDatabase "
+}
+views { view database_watches { title "Database controller: watches extracted from Go setup"
+ include db_watch_queue, db_watch_reconcile, db_watch_source0, db_watch_source1
+ } }

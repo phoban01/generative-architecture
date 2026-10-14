@@ -18,15 +18,15 @@ import (
  "sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 // +arch:resource
-type InfraMachine struct { Spec Spec ` + "`json:\"spec\"`" + ` }
+type Database struct { Spec Spec ` + "`json:\"spec\"`" + ` }
 type Spec struct { Wanted bool ` + "`json:\"wanted\"`" + ` }
 // +arch:resource
-type MachineClaim struct { Status string ` + "`json:\"status\"`" + ` }
-// +arch:controller=mac
-type MAC struct{}
-func (*MAC) Reconcile(context.Context,reconcile.Request)(reconcile.Result,error){return reconcile.Result{},nil}
+type DatabaseInstance struct { Status string ` + "`json:\"status\"`" + ` }
+// +arch:controller=database
+type DatabaseReconciler struct{}
+func (*DatabaseReconciler) Reconcile(context.Context,reconcile.Request)(reconcile.Result,error){return reconcile.Result{},nil}
 // +arch:action=publish
-func (*MAC) Publish() bool { return true }
+func (*DatabaseReconciler) Publish() bool { return true }
 `
 
 func fixtureRoot(t *testing.T, src string) string {
@@ -45,7 +45,7 @@ func fixtureRoot(t *testing.T, src string) string {
 			t.Fatal(err)
 		}
 	}
-	if err := os.WriteFile(filepath.Join(root, "source-mappings.yaml"), []byte("apiVersion: architecture.local/v1alpha1\nkind: SourceBindings\nmetadata:\n  name: mac\nspec:\n  controllers:\n    mac:\n      primary: InfraMachine\n      owns: MachineClaim\n      ports:\n        eligible: InfraMachine.Spec.Wanted\n"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "source-mappings.yaml"), []byte("apiVersion: architecture.local/v1alpha1\nkind: SourceBindings\nmetadata:\n  name: database\nspec:\n  controllers:\n    database:\n      primary: Database\n      owns: DatabaseInstance\n      ports:\n        eligible: Database.Spec.Wanted\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
 	return root
@@ -86,8 +86,8 @@ func TestExtractTypesMarkersAndDeterminism(t *testing.T) {
 }
 func TestExtractionRejectsBrokenDeclarations(t *testing.T) {
 	for _, tc := range []struct{ name, old, new, want string }{
-		{"unknown marker", "+arch:controller=mac", "+arch:controllr=mac", "unknown architecture marker"},
-		{"orphan action", "// +arch:controller=mac", "// ordinary comment", "action marker on a type"},
+		{"unknown marker", "+arch:controller=database", "+arch:controllr=database", "unknown architecture marker"},
+		{"orphan action", "// +arch:controller=database", "// ordinary comment", "action marker on a type"},
 		{"unsupported field", "Wanted bool", "Wanted []string", "unsupported model value"},
 		{"bad reconcile", "Reconcile(context.Context,reconcile.Request)", "Reconcile(context.Context)", "must implement Reconcile"},
 		{"missing group", "+groupName=demo.local", "ordinary comment", "needs a package-level"},
@@ -103,7 +103,7 @@ func TestExtractionRejectsBrokenDeclarations(t *testing.T) {
 }
 func TestFieldMappingAndTypeDrift(t *testing.T) {
 	for _, tc := range []struct{ selector, want string }{
-		{"InfraMachine.Spec.Missing", "does not exist"},
+		{"Database.Spec.Missing", "does not exist"},
 		{"Unknown.Spec.Wanted", "unknown port resource"},
 	} {
 		t.Run(tc.selector, func(t *testing.T) {
@@ -113,7 +113,7 @@ func TestFieldMappingAndTypeDrift(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := os.WriteFile(path, []byte(strings.Replace(string(b), "InfraMachine.Spec.Wanted", tc.selector, 1)), 0644); err != nil {
+			if err := os.WriteFile(path, []byte(strings.Replace(string(b), "Database.Spec.Wanted", tc.selector, 1)), 0644); err != nil {
 				t.Fatal(err)
 			}
 			_, err = Extract(root, Config{Packages: []string{"./"}, Mappings: "source-mappings.yaml"})

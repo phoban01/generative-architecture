@@ -1,6 +1,6 @@
 # ConfigMirror library example
 
-This ordinary controller copies the source ConfigMap's `data.value` into a pre-existing target ConfigMap. It imports no machine-vendor code. Its behaviour model is handwritten: this is an observer/runtime integration test, not the example of source-generated behaviour. Start with `../../START-HERE.md` for the intended automatic-generation workflow.
+This ordinary controller copies the source ConfigMap's `data.value` into a pre-existing target ConfigMap. It imports only the public library. Its behaviour model is handwritten: this is an observer/runtime integration test, not the example of source-generated behaviour. Start with `../../START-HERE.md` for the intended automatic-generation workflow, shown on `../database/`.
 
 - `controller.go`: actual reconciler.
 - `system.yaml`: independent KRM/CEL behaviour, properties and effect bindings.

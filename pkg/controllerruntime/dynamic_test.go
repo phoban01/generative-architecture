@@ -58,14 +58,14 @@ func TestDynamicClientIdentitySnapshotsAndStatus(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = unstructured.SetNestedField(fetched.Object, "machine-1", "status", "machineId"); err != nil {
+	if err = unstructured.SetNestedField(fetched.Object, "db-1.internal", "status", "endpoint"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = resource.UpdateStatus(ctx, fetched, metav1.UpdateOptions{}); err != nil {
 		t.Fatal(err)
 	}
-	fetched.Object["status"].(map[string]any)["machineId"] = "changed-after-call"
-	if results[2].Snapshot["status"].(map[string]any)["machineId"] != "machine-1" {
+	fetched.Object["status"].(map[string]any)["endpoint"] = "changed-after-call"
+	if results[2].Snapshot["status"].(map[string]any)["endpoint"] != "db-1.internal" {
 		t.Fatal("response snapshot aliases object")
 	}
 	actions := base.Actions()
@@ -118,11 +118,11 @@ func TestUnstructuredControllerRuntimeClientNeedsGVKNotScheme(t *testing.T) {
 	ctx := context.Background()
 	obj := &unstructured.Unstructured{}
 	obj.SetAPIVersion("provider.example/v1")
-	obj.SetKind("InfraMachine")
+	obj.SetKind("Database")
 	obj.SetName("one")
 	obj.SetNamespace("demo")
 	base := fake.NewClientBuilder().WithObjects(obj).WithStatusSubresource(obj).Build()
-	identity := effect.Resource{Group: "provider.example", Version: "v1", Kind: "InfraMachine"}
+	identity := effect.Resource{Group: "provider.example", Version: "v1", Kind: "Database"}
 	registry, err := effect.NewRegistry([]effect.Descriptor{{ID: "read", Resource: identity, Operation: "get", Consistency: "direct"}, {ID: "publish", Resource: identity, Operation: "status.update", Consistency: "direct"}})
 	if err != nil {
 		t.Fatal(err)
@@ -133,7 +133,7 @@ func TestUnstructuredControllerRuntimeClientNeedsGVKNotScheme(t *testing.T) {
 	if err = wrapped.Get(ctx, client.ObjectKeyFromObject(obj), read); err != nil {
 		t.Fatal(err)
 	}
-	if err = unstructured.SetNestedField(read.Object, "machine-1", "status", "machineId"); err != nil {
+	if err = unstructured.SetNestedField(read.Object, "db-1.internal", "status", "endpoint"); err != nil {
 		t.Fatal(err)
 	}
 	if err = wrapped.Status().Update(ctx, read); err != nil {

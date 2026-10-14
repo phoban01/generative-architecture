@@ -1,0 +1,56 @@
+apiVersion: architecture.local/v1alpha1
+kind: TransitionModel
+metadata:
+  name: database
+spec:
+  name: DatabaseWalkthrough
+  # One Database, one instance, one possible endpoint; four invocations.
+  # Branches and publication updates are extracted from controller.go.
+  state:
+    databaseExists: {type: bool, initial: 'false'}
+    contractSatisfied: {type: bool, initial: 'false'}
+    instanceExists: {type: bool, initial: 'false'}
+    instanceEndpoint: {type: string, initial: '""'}
+    statusEndpoint: {type: string, initial: '""'}
+    instanceCreates: {type: int, initial: '0'}
+    found: {type: bool, initial: 'false'}
+    compatible: {type: bool, initial: 'false'}
+    instanceFound: {type: bool, initial: 'false'}
+    endpoint: {type: string, initial: '""'}
+    outcome: {type: string, initial: '""'}
+    invocations: {type: int, initial: '0'}
+  effects:
+    - id: readDatabase
+      resource: {group: demo.architecture.local, version: v1alpha1, kind: Database}
+      operation: get
+      consistency: direct
+    - id: checkContract
+      resource: {group: demo.architecture.local, version: v1alpha1, kind: Database}
+      operation: check-contract
+      consistency: schema
+    - id: readInstance
+      resource: {group: demo.architecture.local, version: v1alpha1, kind: DatabaseInstance}
+      operation: get
+      consistency: direct
+    - id: createInstance
+      resource: {group: demo.architecture.local, version: v1alpha1, kind: DatabaseInstance}
+      operation: create
+      consistency: direct
+    - id: publish
+      resource: {group: demo.architecture.local, version: v1alpha1, kind: Database}
+      operation: status.update
+      consistency: direct
+  actions:
+    - name: discoverCompatible
+      guard: '!databaseExists && invocations == 0'
+      updates: {databaseExists: 'true', contractSatisfied: 'true'}
+    - name: discoverUnsupported
+      guard: '!databaseExists && invocations == 0'
+      updates: {databaseExists: 'true', contractSatisfied: 'false'}
+    # A separate provisioning subsystem fills in the instance endpoint; the controller never provisions it.
+    - name: provisionInstance
+      guard: 'instanceExists && instanceEndpoint == ""'
+      updates: {instanceEndpoint: '"db-1.internal"'}
+    - name: idle
+      guard: finished
+      updates: {}

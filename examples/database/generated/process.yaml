@@ -1,0 +1,103 @@
+apiVersion: architecture.local/v1alpha1
+kind: ExtractedProcess
+metadata:
+  name: database-provisioning
+status:
+  entry: 13
+  nodes:
+    - id: 0
+      kind: return
+      go: return "ready"
+      line: 37
+      expression: '"ready"'
+      next: -1
+      results:
+        - '"ready"'
+    - id: 1
+      kind: publish
+      go: store.UpdateDatabaseStatus(endpoint)
+      line: 36
+      expression: endpoint
+      next: 0
+    - id: 2
+      kind: return
+      go: return "waiting"
+      line: 34
+      expression: '"waiting"'
+      next: -1
+      results:
+        - '"waiting"'
+    - id: 3
+      kind: branch
+      go: endpoint == ""
+      line: 33
+      expression: (endpoint == "")
+      next: 2
+      else: 1
+    - id: 4
+      kind: return
+      go: return "waiting"
+      line: 31
+      expression: '"waiting"'
+      next: -1
+      results:
+        - '"waiting"'
+    - id: 5
+      kind: createInstance
+      go: store.CreateDatabaseInstance()
+      line: 30
+      next: 4
+    - id: 6
+      kind: branch
+      go: '!instanceFound'
+      line: 29
+      expression: '!(instanceFound)'
+      next: 5
+      else: 3
+    - id: 7
+      kind: readInstance
+      go: instanceFound, endpoint := store.DatabaseInstance()
+      line: 28
+      next: 6
+    - id: 8
+      kind: return
+      go: return "unsupported"
+      line: 26
+      expression: '"unsupported"'
+      next: -1
+      results:
+        - '"unsupported"'
+    - id: 9
+      kind: branch
+      go: '!compatible'
+      line: 25
+      expression: '!(compatible)'
+      next: 8
+      else: 7
+    - id: 10
+      kind: checkContract
+      go: compatible := store.SatisfiesProvisioningContract()
+      line: 24
+      next: 9
+    - id: 11
+      kind: return
+      go: return "absent"
+      line: 22
+      expression: '"absent"'
+      next: -1
+      results:
+        - '"absent"'
+    - id: 12
+      kind: branch
+      go: '!found'
+      line: 21
+      expression: '!(found)'
+      next: 11
+      else: 10
+    - id: 13
+      kind: readDatabase
+      go: found := store.DatabaseExists()
+      line: 20
+      next: 12
+  sourceSha256: 501992ebf2133324aa347def107af60d33b7a4d813b8872d125be53fb32c251f
+  methodSha256: 5b892cee055a3c5bc7d38d3c624a1329dfb32065927e85b62e43e647e3017874

@@ -24,7 +24,7 @@ Extracting watches, API calls and control flow does not by itself establish how 
 - How real API state is projected into the same abstract state during replay.
 - Which behaviours an abstraction preserves, excludes or deliberately over-approximates.
 
-The assignment example currently supplies much of this manually, including model state and the mapping from API objects to that state. Moving that mapping into generated code is central to automatic generation.
+The sample controller example currently supplies much of this manually, including model state and the mapping from API objects to that state. Moving that mapping into generated code is central to automatic generation.
 
 Suggested change: give abstraction and projection a named responsibility in the architecture and an early implementation task. Keep user-selected bounds and assumptions explicit in the IR and reports. A bounded passing result must retain those qualifications.
 
@@ -57,7 +57,7 @@ Relevant requirement: CON-4; related work: ARCH-10 and M4.
 
 CON-4 currently describes behavioural contracts as versioned ports and marks them complete. Matching a consumer to a compatible provider establishes connectivity. It does not establish the protocol between them.
 
-For MAC, the behaviour includes recognizing a compatible InfraMachine, creating or reusing a MachineClaim, waiting for fulfillment and publishing the corresponding machine ID. Those ordering and state relationships are distinct from selecting which component provides a port.
+For the sample controller, the behaviour includes recognizing a compatible Database, creating or reusing a DatabaseInstance, waiting for provisioning and publishing the resulting endpoint. Those ordering and state relationships are distinct from selecting which component provides a port.
 
 Suggested change: describe the existing capability as versioned port compatibility and binding. Track behavioural protocol semantics and their conformance separately, including preconditions, permitted transitions and independently authored properties. Do not treat successful auto-linking as evidence of behavioural correctness.
 
@@ -65,7 +65,7 @@ Suggested change: describe the existing capability as versioned port compatibili
 
 Relevant sections: product definition, effect vocabulary and EXT-1 boundary models.
 
-The definition says projects interact only through the Kubernetes API. Taken literally, this excludes the external machine-provisioning call from the original system. That call matters when checking whether provisioning can proceed using a stale assignment.
+The definition says projects interact only through the Kubernetes API. Taken literally, this excludes external provisioning calls made outside the Kubernetes API. That call matters when checking whether provisioning can proceed using a stale assignment.
 
 Kubernetes can remain the primary integration mechanism while external calls are represented as explicit effects with declared boundary semantics. Supporting those boundaries does not require extracting arbitrary SDK implementations.
 

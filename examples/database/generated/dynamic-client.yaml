@@ -1,0 +1,63 @@
+apiVersion: architecture.local/v1alpha1
+kind: ExtractedDynamicAccess
+metadata:
+  name: database
+status:
+  accesses:
+    - method: CreateDatabaseInstance
+      effect: createInstance
+      operation: create
+      binding:
+        expression: s.InstanceResource
+        resource:
+          group: demo.architecture.local
+          version: v1alpha1
+          kind: DatabaseInstance
+        plural: databaseinstances
+        scope: Namespaced
+      namespace: s.Key.Namespace
+      line: 65
+      methodSha256: 3864c892a60473c5df864ced862a425050b35508758de96389aa9c168193ba18
+    - method: DatabaseExists
+      effect: readDatabase
+      operation: get
+      binding:
+        expression: s.DatabaseResource
+        resource:
+          group: demo.architecture.local
+          version: v1alpha1
+          kind: Database
+        plural: databases
+        scope: Namespaced
+      namespace: s.Key.Namespace
+      line: 29
+      methodSha256: bf054e8ed3df67dfd3c9669b0205ace16e0e56fb8ebf9cd9a0d6de2de645ff63
+    - method: DatabaseInstance
+      effect: readInstance
+      operation: get
+      binding:
+        expression: s.InstanceResource
+        resource:
+          group: demo.architecture.local
+          version: v1alpha1
+          kind: DatabaseInstance
+        plural: databaseinstances
+        scope: Namespaced
+      namespace: s.Key.Namespace
+      line: 45
+      methodSha256: 1b772643503f65aec2ebd307ceda78115deb96f78a327a665a898405dcc42236
+    - method: UpdateDatabaseStatus
+      effect: publish
+      operation: status.update
+      binding:
+        expression: s.DatabaseResource
+        resource:
+          group: demo.architecture.local
+          version: v1alpha1
+          kind: Database
+        plural: databases
+        scope: Namespaced
+      namespace: s.Key.Namespace
+      line: 77
+      methodSha256: 27bd3227e2b931122a6b47c7715626dd2ffbaa5ae8c4029fc6d2fc54805e7eaf
+  sourceSha256: 7db856a9052735afc12869671313b1f17e2ed4b837bdac555320e79338379dc8

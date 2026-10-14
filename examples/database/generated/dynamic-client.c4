@@ -1,0 +1,13 @@
+specification { element dynamicClientPart }
+model {
+ dynamic_client = dynamicClientPart "Dynamic Kubernetes client"
+ dynamic_resource0 = dynamicClientPart "DatabaseInstance" { description "demo.architecture.local/v1alpha1, Resource=databaseinstances; Namespaced" }
+ dynamic_client -> dynamic_resource0 "CreateDatabaseInstance: create via s.InstanceResource"
+ dynamic_resource1 = dynamicClientPart "Database" { description "demo.architecture.local/v1alpha1, Resource=databases; Namespaced" }
+ dynamic_client -> dynamic_resource1 "DatabaseExists: get via s.DatabaseResource"
+ dynamic_client -> dynamic_resource0 "DatabaseInstance: get via s.InstanceResource"
+ dynamic_client -> dynamic_resource1 "UpdateDatabaseStatus: status.update via s.DatabaseResource"
+}
+views { view dynamic_client_access { title "Dynamic resource access extracted from Go"
+ include dynamic_client, dynamic_resource0, dynamic_resource1
+ } }

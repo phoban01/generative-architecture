@@ -1,81 +1,53 @@
-.PHONY: library-demo consumer-test composition-demo clean runtime-demo behavior-demo api-generate extract generate test check controller-demo verify render serve build
+.PHONY: api-generate walkthrough library-demo general-demo consumer-test test check verify render serve build clean
 
-# Standard controller-gen handles Kubernetes deepcopy methods.
+# Standard controller-gen handles Kubernetes deepcopy methods for the sample API.
 api-generate:
-	go run sigs.k8s.io/controller-tools/cmd/controller-gen@v0.20.1 object paths=./examples/machinevendor/api/v1alpha1
+	go run sigs.k8s.io/controller-tools/cmd/controller-gen@v0.20.1 object paths=./examples/database/api/v1alpha1
 
-extract:
-	go run ./cmd/arch extract
+# Sample controller: extract the process, watches and dynamic-client accesses from
+# Go, generate the model and diagrams, then replay five schedules without Quint.
+walkthrough:
+	go run ./cmd/walkthrough
 
-generate:
-	go run ./cmd/arch generate
-	go run ./cmd/composition-demo --generate-only
-	go run ./cmd/library-demo --generate-only
-
-test:
-	go test ./...
-
-# Native Go only: replay checked-in, hash-verified evidence.
-check: test
-	go run ./cmd/arch check --replay
-
-# Native Go: generated dispatch -> handwritten adapter -> MAC reconcile phases.
-controller-demo:
-	go run ./cmd/controller-demo
-
-# Extract actual publication behavior and check independent requirements.
-behavior-demo:
-	go run ./cmd/behavior-demo
-
-# Refresh all evidence before testing source-hash receipts. Requires Quint or QUINT_BIN.
-verify: generate
-	go run ./cmd/walkthrough --refresh
-	go run ./cmd/general-demo
-	go run ./cmd/arch check
-	go run ./cmd/controller-demo
-	go run ./cmd/behavior-demo
-	go run ./cmd/runtime-demo
-	go run ./cmd/composition-demo
-	go run ./cmd/library-demo --refresh
-	go test ./...
-	$(MAKE) consumer-test
-
-# Requires an installed LikeC4 CLI or LIKEC4_BIN wrapper.
-render:
-	go run ./cmd/arch render
-
-serve:
-	go run ./cmd/arch serve
-
-build:
-	go build -o bin/arch ./cmd/arch
-	go build -o bin/controller-demo ./cmd/controller-demo
-	go build -o bin/behavior-demo ./cmd/behavior-demo
-	go build -o bin/runtime-demo ./cmd/runtime-demo
-	go build -o bin/composition-demo ./cmd/composition-demo
-	go build -o bin/library-demo ./cmd/library-demo
-
-# Real worker/queue conformance with a declared runtime profile.
-runtime-demo:
-	go run ./cmd/runtime-demo
-
-# Preserve source, generated models, trace fixtures and YAML evidence receipts.
-clean:
-	rm -rf -- bin site
-	find reports -type f -name '*.txt' -delete
-
-# Extracted process steps composed with runtime scheduling; paused Go replay.
-composition-demo:
-	go run ./cmd/composition-demo
-
-# Unrelated controller using only the public library; refresh bounded Quint traces.
+# Unrelated controller using only the public library; handwritten behaviour model.
 library-demo:
 	go run ./cmd/library-demo --refresh
+
+# Reusable multi-controller runtime model checked against real controller-runtime queues.
+general-demo:
+	go run ./cmd/general-demo
 
 # Prove packages can be consumed without Go's internal-package privileges.
 consumer-test:
 	cd testdata/consumer && GOWORK=off go test -mod=readonly ./...
 
-# First explanation: source-derived behaviour and independent constraints.
-walkthrough:
-	go run ./cmd/walkthrough
+test:
+	go test ./...
+
+# Native Go only: replay checked-in, hash-verified evidence.
+check: test walkthrough
+
+# Refresh all evidence before testing source-hash receipts. Requires Quint 0.33.0 (QUINT_BIN).
+verify:
+	go run ./cmd/walkthrough --refresh
+	go run ./cmd/general-demo
+	go run ./cmd/library-demo --refresh
+	go test ./...
+	$(MAKE) consumer-test
+
+# Build the sample controller's diagrams into site/. Requires LikeC4 1.59.4 (LIKEC4_BIN).
+LIKEC4 ?= $(or $(LIKEC4_BIN),likec4)
+render:
+	$(LIKEC4) build examples/database/generated -o site --base ./ --output-single-file
+
+serve:
+	$(LIKEC4) start examples/database/generated
+
+build:
+	go build -o bin/walkthrough ./cmd/walkthrough
+	go build -o bin/library-demo ./cmd/library-demo
+	go build -o bin/general-demo ./cmd/general-demo
+
+# Preserve source, generated models, trace fixtures and YAML evidence receipts.
+clean:
+	rm -rf -- bin site

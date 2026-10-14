@@ -16,10 +16,10 @@ func TestOwnedMarkersAndUnmodifiedUpstreamTypes(t *testing.T) {
 		}
 	}
 	write("go.mod", "module example.org/types\n\ngo 1.25\n")
-	source := "package types\n// +arch:implements=allocation/v1\ntype Status struct { MachineID string `json:\"machineId\"` }\ntype Upstream struct { Status Status `json:\"status\"` }\n"
+	source := "package types\n// +arch:implements=endpoint/v1\ntype Status struct { Endpoint string `json:\"endpoint\"` }\ntype Upstream struct { Status Status `json:\"status\"` }\n"
 	write("types.go", source)
-	defs := []Definition{{Name: "allocation", Version: "v1", Fields: map[string]string{"machineId": "string"}}}
-	evidence, err := Inspect(root, defs, []string{"."}, []Implementation{{Contract: "allocation/v1", Package: ".", Type: "Upstream", Fields: map[string]string{"machineId": "status.machineId"}}})
+	defs := []Definition{{Name: "endpoint", Version: "v1", Fields: map[string]string{"endpoint": "string"}}}
+	evidence, err := Inspect(root, defs, []string{"."}, []Implementation{{Contract: "endpoint/v1", Package: ".", Type: "Upstream", Fields: map[string]string{"endpoint": "status.endpoint"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,19 +28,19 @@ func TestOwnedMarkersAndUnmodifiedUpstreamTypes(t *testing.T) {
 	}
 	paths := map[string]bool{}
 	for _, e := range evidence {
-		paths[e.JSONPaths["machineId"]] = true
+		paths[e.JSONPaths["endpoint"]] = true
 		if len(e.SourceHashes) < 2 {
 			t.Fatal("source provenance missing")
 		}
 	}
-	if !paths["machineId"] || !paths["status.machineId"] {
+	if !paths["endpoint"] || !paths["status.endpoint"] {
 		t.Fatal(paths)
 	}
-	write("types.go", strings.Replace(source, "MachineID string", "MachineID bool", 1))
+	write("types.go", strings.Replace(source, "Endpoint string", "Endpoint bool", 1))
 	if _, err = Inspect(root, defs, []string{"."}, nil); err == nil {
 		t.Fatal("incompatible field drift accepted")
 	}
-	write("types.go", strings.Replace(source, "allocation/v1", "allocation/v2", 1))
+	write("types.go", strings.Replace(source, "endpoint/v1", "endpoint/v2", 1))
 	if _, err = Inspect(root, defs, []string{"."}, nil); err == nil {
 		t.Fatal("unknown contract version accepted")
 	}

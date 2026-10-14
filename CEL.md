@@ -1,97 +1,56 @@
 # Authoring in YAML and CEL
 
-YAML describes state, ports, bindings and transitions. CEL supplies read-only expressions for initial values, guards, local values, update keys/values/conditions, acceptance results and system properties. The compiler translates this representation into Quint; the authored files contain no Quint syntax or `{{...}}` substitutions.
+YAML describes typed state, effects and transitions. CEL supplies read-only expressions for initial values, guards, update values and properties. `pkg/expr` type-checks a deliberately bounded CEL subset and lowers it to Quint; the authored files contain no Quint syntax or `{{...}}` substitutions.
 
-For example, the MAC publication action in `contracts/mac.yaml` is:
-
-```yaml
-- name: publish
-  params: [infra]
-  guard: claims[infra]
-  locals:
-    allowed: >-
-      observed[infra].machineId != "" &&
-      observed[infra] == lease[infra]
-  updates:
-    assigned:
-      key: infra
-      value: observed[infra].machineId
-      when: allowed
-  accepted: allowed
-```
-
-`lease` is the bound input port. `observed`, `claims` and `assigned` are MAC-owned state. `infra` is the action parameter. `allowed` is a local CEL value. The infrastructure controller sees only the resulting machine ID through `mac.assignment → infra.assignment`.
-
-An invariant uses qualified component state names:
+For example, the sample controller's environment action that provisions an instance, from `examples/database/model.yaml`, is:
 
 ```yaml
-- name: publicationRequiresCurrentLease
-  expression: >-
-    event.name != "mac.publish" || !event.accepted ||
-    (mac.assigned[event.infra] == claim.leases[event.infra].machineId &&
-     claim.leases[event.infra].machineId != "")
+- name: provisionInstance
+  guard: 'instanceExists && instanceEndpoint == ""'
+  updates: {instanceEndpoint: '"db-1.internal"'}
 ```
 
-Component expressions can reference their own state and declared ports. They cannot directly reference other components' state. System properties may use qualified names to express cross-component requirements.
+The controller's own steps are not authored this way. `pkg/goflow` extracts branches, calls and returns from `Reconcile`, `pkg/process` lowers them into actions using the effect summaries in `process.yaml`, and the result is the same kind of action.
 
-## Updates are YAML operations, not CEL functions
-
-CEL does not mutate state. Each `updates` entry is an explicit map update:
+An independent requirement, from `examples/database/constraints.yaml`, uses the same state names:
 
 ```yaml
-updates:
-  epochs:
-    key: host
-    value: epochs[host] + 1
-    when: epochs[host] < MAX_EPOCH
+- name: publicationRequiresProvisionedInstance
+  expression: 'statusEndpoint == "" || (instanceExists && instanceEndpoint != "" && statusEndpoint == instanceEndpoint)'
 ```
 
-The compiler emits a Quint map update and holds all untouched state unchanged. All keys, values and conditions are evaluated against the **pre-transition state**, so multiple writes are simultaneous. `when: false` must be written as `when: "false"` when it is intended as a CEL expression.
+Properties are compiled separately from the behaviour model. A trace can therefore conform to the implementation while violating a requirement, which is what the source-mutation tests demonstrate.
 
-The action guard controls whether the action is enabled. `when` controls whether that particular update happens. `accepted` records the operation's observable result; it is not implicitly a guard. Local definitions are evaluated in declaration order and cannot shadow inputs, state, parameters or constants.
+## Updates are simultaneous
 
-State initialization also uses YAML structure:
-
-```yaml
-state:
-  leases:
-    type: map(string, Assignment)
-    init:
-      domain: INFRAS
-      value: EMPTY_ASSIGNMENT
-```
-
-This creates one map entry per finite domain member. Values are CEL expressions over constants. Domains are currently `HOSTS` and `INFRAS`. Their CEL runtime representations are lists of distinct identities; the Quint model uses sets. The supported `all()` operation does not depend on order.
+CEL does not mutate state. Each `updates` entry maps a state variable to a CEL expression evaluated against the **pre-transition state**, so multiple writes in one action are simultaneous, and untouched state is held unchanged. The action `guard` controls whether the action is enabled. Composed models additionally bind input ports to a provider's state by rewriting symbols on the CEL syntax tree (`expr.Rewrite`), so renaming a variable never rewrites a string literal.
 
 ## Supported subset
 
-The parser is `cel.dev/cel-go`, pinned to v0.32.0. The Go compiler uses its parsed AST, not text replacement, and statically checks the subset below before emitting Quint:
+The parser is `cel.dev/cel-go`, pinned in `go.mod`. The compiler uses its parsed AST, not text replacement, and statically checks the subset below before emitting Quint:
 
 - String, boolean and signed integer literals.
-- Declared identifiers and fixed record field access.
-- String-keyed map indexing, such as `lease[infra]`.
+- Declared identifiers: state variables, bound ports, action locals and the `event` name inside properties.
+- Field access on declared record types (`records:` in a `TransitionModel`).
+- String-keyed map indexing on `map(string, T)` state.
 - Boolean operators `&&`, `||`, `!`.
-- Equality/inequality on strings, integers, booleans and Assignment values.
-- Integer addition/subtraction and comparisons.
+- Equality and inequality on strings, integers, booleans and declared records.
+- Integer addition, subtraction, unary minus and comparisons.
 - Conditional expressions: `condition ? valueA : valueB`.
-- `HOSTS.all(h, predicate)` and `INFRAS.all(i, predicate)`, including nested quantifiers.
-- Assignment map literals with exactly `machineId: string` and `epoch: int`, for example `{"machineId": host, "epoch": epochs[host] + 1}`. These become fixed Quint records, not general dynamic maps.
+- `DOMAIN.all(x, predicate)` over a declared string domain, including nested quantifiers.
 
-State types are `map(string, bool)`, `map(string, int)`, `map(string, string)` and `map(string, Assignment)`. `Assignment` and the trace `Event` record are predefined prototype types.
+State types are `bool`, `int`, `string`, declared record names and `map(string, T)` over those. Unsupported expressions fail compilation with a message naming the construct. This includes `has()`, `exists()`, `filter()`, `map()`, receiver functions, regexes, message literals, list literals, optional access, doubles and unsigned integers. Supporting more CEL requires adding and testing a sound translation, rather than passing expressions through to Quint.
 
-Unsupported expressions fail compilation. This includes `exists()`, `filter()`, `map()`, `has()`, arbitrary receiver functions, regexes, protobuf literals, list literals, optional access, doubles, uints and general dynamic map literals. Supporting more CEL requires adding and testing a sound translation, rather than passing expressions through to Quint.
-
-CEL has int64 semantics while Quint has mathematical integers. This finite example keeps epochs between zero and three and is checked using exact int64 values in CEL. The compiler does **not** prove absence of overflow or missing-key errors for arbitrary new contracts. Similarly, CEL's error-aware boolean semantics are not modelled as separate Quint values. New expressions must stay within the declared, total finite domains; simulation and differential checks provide evidence for exercised states, not a universal proof of equivalence.
+CEL has int64 semantics while Quint has mathematical integers. Models keep integer state within small declared bounds and are checked using exact int64 values in CEL. The compiler does **not** prove absence of overflow or missing-key errors for arbitrary new models. CEL's error-aware boolean semantics are not modelled as separate Quint values. New expressions must stay within the declared, total finite domains; simulation and differential checks provide evidence for exercised states, not a universal proof of equivalence.
 
 ## Checking the translation
 
-`go run ./cmd/arch check` performs two independent comparisons:
+`go run ./cmd/walkthrough --refresh` performs three independent comparisons on the sample controller:
 
-1. **CEL ↔ Quint:** Evaluate the original YAML CEL expressions with cel-go and compare initialization, every transition, acceptance results, invariants and the safety counterexample against actual Quint ITF traces. This catches translation errors without evaluating the generated Quint text in the CEL runtime.
-2. **Quint ↔ simulator:** Replay those traces against the separately written implementation. The simulator does not read the CEL expressions or expected state. Deliberately faulty MAC behavior must fail conformance.
+1. **Quint simulation:** Quint samples bounded traces of the generated model and checks the generated properties.
+2. **CEL ↔ Quint:** Go evaluates the original YAML CEL expressions with cel-go on every state of every trace. This catches translation errors without evaluating the generated Quint text in the CEL runtime.
+3. **Model ↔ implementation:** Go replays each trace against the real `Reconcile` running on a fake dynamic API, pausing at every observable effect boundary. The adapter never reads expected state.
 
-For the current run, 204 valid traces cover 8,039 transitions. Including the counterexample, direct CEL evaluation performs 61,449 expression evaluations. This is sampled differential testing, not full verification of a general CEL-to-Quint compiler.
-
-The known revocation race remains present: YAML/CEL changes the authoring layer, not the system's authorization semantics.
+The saved `report.yaml` records the model hash, input hashes and trace hashes, so native tests detect stale evidence without Quint. This is sampled differential testing, not full verification of a general CEL-to-Quint compiler.
 
 References: [CEL language specification](https://github.com/cel-expr/cel-spec/blob/master/doc/langdef.md), [cel-go parser and evaluator](https://github.com/cel-expr/cel-go).

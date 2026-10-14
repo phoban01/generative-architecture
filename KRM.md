@@ -1,49 +1,48 @@
 # Architecture documents as KRM resources
 
-All authored YAML documents now have `apiVersion`, `kind`, `metadata.name` and `spec`. Generated observations have `status`. These are local Kubernetes Resource Model documents consumed by the Go tools; they do not require a running cluster. No architecture CRDs are installed or generated yet.
+All authored YAML documents have `apiVersion`, `kind`, `metadata.name` and `spec`. Generated observations have `status`. These are local Kubernetes Resource Model documents consumed by the Go tools; they do not require a running cluster. No architecture CRDs are installed or generated yet.
 
 ```yaml
 apiVersion: architecture.local/v1alpha1
-kind: Contract
+kind: TransitionModel
 metadata:
-  name: mac
+  name: database
 spec:
-  version: 0.3.0
-  title: Machine allocation controller (MAC)
-  # ports, state and actions follow here, as in contracts/mac.yaml.
+  name: DatabaseWalkthrough
+  state:
+    databaseExists: {type: bool, initial: 'false'}
+    instanceEndpoint: {type: string, initial: '""'}
+  effects:
+    - id: readDatabase
+      resource: {group: demo.architecture.local, version: v1alpha1, kind: Database}
+      operation: get
+      consistency: direct
+  actions:
+    - name: provisionInstance
+      guard: 'instanceExists && instanceEndpoint == ""'
+      updates: {instanceEndpoint: '"db-1.internal"'}
 ```
 
-`metadata.name` is the contract identity; there is no duplicate `spec.id`. `apiVersion` versions the document format. `spec.version` independently versions the behavioral contract. Contract bodies retain CEL strings and the existing state/action definitions. This migration does not add the proposed public `implements` conformance marker: the current Contract still describes the component's behavioral model.
+`metadata.name` is the document identity. `apiVersion` versions the document format. Bodies retain CEL strings and the typed state/action definitions described in [CEL.md](CEL.md).
 
-| Document | Kind | Payload |
-| --- | --- | --- |
-| `contracts/*.yaml` | Contract | spec |
-| `system.yaml` | System | spec |
-| `source-mappings.yaml` | SourceBindings | spec |
-| `scenarios.yaml` | ScenarioSuite | spec |
-| `behavior/publication.yaml` | BehaviorAnalysis | spec |
-| `behavior/composition.yaml` | ProcessComposition | spec |
-| `runtime/controller-runtime.yaml` | RuntimeProfile | spec |
-| `contracts.lock.yaml` | ContractLock | spec |
-| `generated/source-descriptors.yaml` | SourceDescriptor | status |
-| `generated/architecture.yaml` | Architecture | status |
-| `generated/mbt-bindings.yaml` | TestBindings | status |
-| `generated/behavior/*.yaml` | BehaviorProgram | status |
-| `generated/composition/composition.yaml` | ComposedProgram | status |
-| `traces/manifest.yaml` | TraceManifest | status |
-| `reports/**/summary.yaml` and other result reports | VerificationReport | status |
-| Readable behavior counterexamples | Counterexample | status |
+| Document | Kind | Payload | Used by |
+| --- | --- | --- | --- |
+| `examples/database/model.yaml`, `examples/configmirror/system.yaml` | TransitionModel | spec | `pkg/model`, `pkg/process`, `pkg/composition` |
+| `examples/database/process.yaml` | ProcessSemantics | spec | `pkg/process` (effect summaries for extracted Go calls) |
+| `examples/database/resources.yaml` | KubernetesResourceCatalog | spec | `pkg/dynamicgen` (GVR/GVK/plural/scope bindings) |
+| `examples/database/constraints.yaml` | ModelConstraints | spec | independent properties compiled apart from the behaviour model |
+| `examples/runtimegroup/profile.yaml` | RuntimeGroup | spec | `pkg/controllerruntime.BuildGroupModel` |
+| A system composition document | SystemComposition | spec | `pkg/composition.Load` |
+| An interaction contract document | InteractionContract | spec | `pkg/contracts` (`+arch:implements` checks) |
+| `examples/database/generated/process.yaml` | ExtractedProcess | status | control-flow graph and source evidence |
+| `examples/database/generated/watches.yaml` | ExtractedWatches | status | registrations, mapper field paths, predicates, hashes |
+| `examples/database/generated/dynamic-client.yaml` | ExtractedDynamicAccess | status | dynamic-client methods, resources, verbs, hashes |
+| `examples/*/report.yaml` | VerificationReport | status | trace counts, coverage, input and trace hashes |
 
-The Go loader validates the expected kind, supported API version, required payload, names, labels and annotation keys. It rejects unknown typed fields, duplicate keys, aliases, multiple YAML documents and malformed CEL scalars. This prototype uses cluster-scoped local identities, so nonempty namespaces are rejected explicitly. Payload maps such as scenario names remain intentionally extensible. The loader is not a general Kubernetes admission/schema implementation.
+The Go loader (`pkg/krm`) validates the expected kind, supported API version, required payload, names, labels and annotation keys. It rejects unknown typed fields, duplicate keys, aliases, multiple YAML documents and malformed CEL scalars. Documents use cluster-scoped local identities, so nonempty namespaces are rejected explicitly. Payload maps such as state names remain intentionally extensible. The loader is not a general Kubernetes admission or schema implementation.
 
-Files remain the composition unit: `System.spec.components` selects contract paths and versions; `System.spec.sources` selects source extraction; `System.spec.runtime` selects the runtime profile; `System.spec.composition` selects the process/runtime composition. Bindings remain explicit, checked semantic joins. KRM supplies stable identities and document structure, not automatic discovery of semantic relationships. Kustomize/kpt-style editing is possible at the YAML level, but there is no ResourceList, function pipeline or Kustomize integration test in this prototype.
+Files remain the composition unit. A `TransitionModel` is self-contained; `ProcessSemantics`, `KubernetesResourceCatalog` and `ModelConstraints` are joined to it by the example's loader, and `SystemComposition` references models in local project checkouts. Bindings are explicit, checked semantic joins. KRM supplies stable identities and document structure, not automatic discovery of semantic relationships. Kustomize/kpt-style editing is possible at the YAML level, but there is no ResourceList, function pipeline or Kustomize integration test.
 
-`pkg/krm` is shared by source extraction, model generation and runtime conformance. ITF traces stay in the upstream JSON interchange format; Quint and LikeC4 outputs retain their own languages.
-
-Run `go run ./cmd/arch generate` after source edits. Contract changes require a reviewed lock refresh with `--update-lock`. Old bare YAML inputs are rejected instead of silently being treated as the new format.
+`pkg/krm` is shared by source extraction, model generation and runtime conformance. ITF traces stay in the upstream JSON interchange format; Quint and LikeC4 outputs retain their own languages. Old bare YAML inputs are rejected instead of silently being treated as the new format.
 
 Conventions: https://kubernetes.io/docs/concepts/overview/working-with-objects/ and https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/.
-
-## Public library model
-
-The library adds `TransitionModel` (`spec`: `model.Spec`) for domain-neutral typed state, effect identities, guarded CEL updates and properties. See `examples/configmirror/system.yaml` and `LIBRARY.md`. Existing machine-vendor `System` and `Contract` payloads retain their example-specific schema; they are not interchangeable with `TransitionModel`.

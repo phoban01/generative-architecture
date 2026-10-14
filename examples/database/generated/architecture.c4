@@ -1,0 +1,20 @@
+specification {
+ element library_DatabaseWalkthroughProcess
+ element library_DatabaseWalkthroughResource
+}
+model {
+ library_DatabaseWalkthrough_process = library_DatabaseWalkthroughProcess "DatabaseWalkthrough"
+ library_DatabaseWalkthrough_resource0 = library_DatabaseWalkthroughResource "Database" { description "demo.architecture.local/v1alpha1" }
+ library_DatabaseWalkthrough_process -> library_DatabaseWalkthrough_resource0 "readDatabase: get (direct)"
+ library_DatabaseWalkthrough_process -> library_DatabaseWalkthrough_resource0 "checkContract: check-contract (schema)"
+ library_DatabaseWalkthrough_resource1 = library_DatabaseWalkthroughResource "DatabaseInstance" { description "demo.architecture.local/v1alpha1" }
+ library_DatabaseWalkthrough_process -> library_DatabaseWalkthrough_resource1 "readInstance: get (direct)"
+ library_DatabaseWalkthrough_process -> library_DatabaseWalkthrough_resource1 "createInstance: create (direct)"
+ library_DatabaseWalkthrough_process -> library_DatabaseWalkthrough_resource0 "publish: status.update (direct)"
+}
+views {
+ view library_DatabaseWalkthrough {
+ title "DatabaseWalkthrough"
+ include library_DatabaseWalkthrough_process, library_DatabaseWalkthrough_resource0, library_DatabaseWalkthrough_resource1
+ }
+}

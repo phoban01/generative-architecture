@@ -1,0 +1,22 @@
+apiVersion: architecture.local/v1alpha1
+kind: ModelConstraints
+metadata:
+  name: database-requirements
+spec:
+  properties:
+    - name: instancesRequireCompatibleDatabase
+      expression: '!instanceExists || (databaseExists && contractSatisfied)'
+    - name: atMostOneInstance
+      expression: 'instanceCreates <= 1'
+    - name: publicationRequiresProvisionedInstance
+      expression: 'statusEndpoint == "" || (instanceExists && instanceEndpoint != "" && statusEndpoint == instanceEndpoint)'
+    - name: waitingHasAInstance
+      expression: 'outcome != "waiting" || instanceExists'
+    - name: readyHasEndpoint
+      expression: 'outcome != "ready" || statusEndpoint != ""'
+    - name: databaseWatchEnqueuesReconciler
+      expression: 'event != "deliverDatabase" || queued'
+    - name: instanceProvisioningEnqueuesReconciler
+      expression: 'event != "deliverInstance" || instanceEndpoint == "" || queued'
+    - name: watchTargetsDatabase
+      expression: '!wrongKey'
