@@ -10,7 +10,6 @@ import (
 	"generative-architecture/pkg/conformance"
 	cr "generative-architecture/pkg/controllerruntime"
 	"generative-architecture/pkg/effect"
-	"generative-architecture/pkg/krm"
 	"generative-architecture/pkg/model"
 
 	corev1 "k8s.io/api/core/v1"
@@ -21,11 +20,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-// Load reads a TransitionModel document, such as generated/model.yaml, and
-// compiles it.
-func Load(path string) (*model.Compiled, error) {
-	var spec model.Spec
-	if _, err := krm.Read(path, "TransitionModel", &spec); err != nil {
+// Load generates the model from the authored inputs in the example
+// directory root (see Generate) and compiles it.
+func Load(root string) (*model.Compiled, error) {
+	spec, err := Generate(root)
+	if err != nil {
 		return nil, err
 	}
 	return model.Compile(spec)

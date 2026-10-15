@@ -19,7 +19,7 @@ status:
     - path: examples/configmirror/abstraction.yaml
       sha256: 9fd09656ab1bb62067055e744881d76281cdb91ced376d7d4ac6ffd504973700
     - path: examples/configmirror/adapter.go
-      sha256: e8be58bda6af70ed9df60da56ab413b10398392f5beae830c81dd9041b9093a1
+      sha256: 5ca3c8e0cb984a52d148fe01144d4a7f33ab620c01b7f3abf5968bf9636a4527
     - path: examples/configmirror/constraints.yaml
       sha256: 4d1c339882b208857ba95a5bc74236afb30e9a493540cd44dc68ed2270749b73
     - path: examples/configmirror/controller.go
