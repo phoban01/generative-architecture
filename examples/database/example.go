@@ -14,6 +14,7 @@ import (
 	"generative-architecture/pkg/process"
 	"generative-architecture/pkg/watchgen"
 	"go/ast"
+	"k8s.io/apimachinery/pkg/api/meta"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	"os"
 	"path/filepath"
@@ -242,6 +243,7 @@ func (e Example) Schedule(name string) (conformance.Trace, error) {
 // never expected states or branch outcomes. Its Store represents one Database.
 type Adapter struct {
 	dynamicStore                                      *DynamicStore
+	mapper                                            meta.RESTMapper
 	api                                               *dynamicfake.FakeDynamicClient
 	watches                                           watchgen.Result
 	queue                                             *eventQueue
@@ -456,7 +458,7 @@ func (a *Adapter) Project(context.Context) (map[string]any, error) {
 	if a.queue.Len() != expectedReady {
 		return nil, fmt.Errorf("native FIFO queue disagrees with observation bookkeeping")
 	}
-	apiState, err := a.projectDynamic()
+	apiState, err := a.projectAPI()
 	if err != nil {
 		return nil, err
 	}

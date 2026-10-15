@@ -47,7 +47,12 @@ func FromSpec(spec abstraction.Spec, cached ...string) ([]Projection, error) {
 				key := ir.ObjectRef{GVK: r.GVK, Namespace: o.Namespace, Name: o.Name}
 				out = append(out, Projection{State: name(abstraction.ExistsVariable(r.GVK.Kind, o.ID)), Resource: r.GVK, Key: key, Type: abstraction.TypeBool, Reader: reader})
 				for _, f := range r.Fields {
-					out = append(out, Projection{State: name(abstraction.VariableName(r.GVK.Kind, o.ID, f.Path)), Resource: r.GVK, Key: key, JSONPath: append([]string(nil), f.Path...), Type: f.Type, Reader: reader})
+					if _, ok := f.Compared(); f.Equals != "" && !ok {
+						return nil, fmt.Errorf("field %s: equals %s is not a string literal", f.Key(), f.Equals)
+					}
+					p := fieldProjection(r, o, key, f)
+					p.State, p.Reader = name(p.State), reader
+					out = append(out, p)
 				}
 			}
 		}
@@ -135,7 +140,7 @@ func Project(ctx context.Context, api client.Reader{{if .Cached}}, cache client.
 			if v, ok, err := unstructured.{{.Read}}(obj.Object, {{path .Path}}); err != nil {
 				return nil, fmt.Errorf("%s: %w", {{q .State}}, err)
 			} else if ok {
-				state[{{q .State}}] = v
+				state[{{q .State}}] = v{{if .Compare}} == {{.Compare}}{{end}}
 			}
 {{- end}}
 		}
@@ -282,6 +287,16 @@ func domainLiterals(typ string, domain []string) ([]string, error) {
 	return out, nil
 }
 
+// settable rejects a predicate field as the target of an environment
+// change: its domain holds the model's bool, not the string the object
+// stores, so no value can be written back for it.
+func settable(f abstraction.Field) error {
+	if f.Equals != "" {
+		return fmt.Errorf("field %s is a predicate (equals); the environment cannot set it", f.Key())
+	}
+	return nil
+}
+
 // lookupObject finds the one object of the spec with the given ID.
 func lookupObject(spec abstraction.Spec, id string) (abstraction.Resource, ir.ObjectRef, error) {
 	var found []abstraction.Resource
@@ -359,7 +374,7 @@ func readerEnvironment(pkg string, spec abstraction.Spec, changed, cached []stri
 		if perValue {
 			var domained []abstraction.Field
 			for _, f := range r.Fields {
-				if _, ok := r.ValueDomains[abstraction.PathKey(f.Path)]; ok {
+				if _, ok := r.ValueDomains[f.Key()]; ok {
 					domained = append(domained, f)
 				}
 			}
@@ -367,10 +382,13 @@ func readerEnvironment(pkg string, spec abstraction.Spec, changed, cached []stri
 				return nil, fmt.Errorf("changed object %s: per-value events need exactly one declared field with a value domain, got %d", id, len(domained))
 			}
 			f := domained[0]
-			for i, v := range r.ValueDomains[abstraction.PathKey(f.Path)] {
+			if err := settable(f); err != nil {
+				return nil, fmt.Errorf("changed object %s: %w", id, err)
+			}
+			for i, v := range r.ValueDomains[f.Key()] {
 				lit, err := valueLiteral(f.Type, v)
 				if err != nil {
-					return nil, fmt.Errorf("changed object %s, field %s: %w", id, abstraction.PathKey(f.Path), err)
+					return nil, fmt.Errorf("changed object %s, field %s: %w", id, f.Key(), err)
 				}
 				name := ChangeValueEvent(id, v, i)
 				if seen["event/"+name] {
@@ -383,16 +401,19 @@ func readerEnvironment(pkg string, spec abstraction.Spec, changed, cached []stri
 		}
 		c := changedObject{Name: ChangeEvent(id), Key: key}
 		for _, f := range r.Fields {
-			domain, ok := r.ValueDomains[abstraction.PathKey(f.Path)]
+			domain, ok := r.ValueDomains[f.Key()]
 			if !ok {
 				continue
 			}
+			if err := settable(f); err != nil {
+				return nil, fmt.Errorf("changed object %s: %w", id, err)
+			}
 			values, err := domainLiterals(f.Type, domain)
 			if err != nil {
-				return nil, fmt.Errorf("changed object %s, field %s: %w", id, abstraction.PathKey(f.Path), err)
+				return nil, fmt.Errorf("changed object %s, field %s: %w", id, f.Key(), err)
 			}
 			if len(values) == 0 {
-				return nil, fmt.Errorf("changed object %s, field %s: the domain has no value to change to", id, abstraction.PathKey(f.Path))
+				return nil, fmt.Errorf("changed object %s, field %s: the domain has no value to change to", id, f.Key())
 			}
 			c.Fields = append(c.Fields, cycledField{Path: append([]string(nil), f.Path...), Values: values})
 		}

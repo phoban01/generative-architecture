@@ -2,9 +2,9 @@ package database
 
 import (
 	"fmt"
+	"generative-architecture/examples/database/generated"
 	cr "generative-architecture/pkg/controllerruntime"
 	"generative-architecture/pkg/effect"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -30,6 +30,7 @@ func (a *Adapter) initDynamic(e Example) error {
 	}
 	// No provider types are registered: objects are stored and read unstructured.
 	a.api = dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
+	a.mapper = mapper
 	a.dynamicStore = &DynamicStore{Client: cr.Observer{Registry: registry}.Dynamic(a.api, mapper), Context: a.ctx, Key: databaseKey, DatabaseResource: database.GVR(), InstanceResource: instance.GVR(), DatabaseKind: database.GVK(), InstanceKind: instance.GVK()}
 	return nil
 }
@@ -61,41 +62,40 @@ func (a *Adapter) removeDynamic() error {
 	return a.api.Resource(a.dynamicStore.DatabaseResource).Namespace(databaseKey.Namespace).Delete(a.ctx, databaseKey.Name, metav1.DeleteOptions{})
 }
 
-// Project the real fixture contents independently of the model and cached Store
-// snapshots. Environment calls use the underlying fake API; DatabaseReconciler uses the observer.
-func (a *Adapter) projectDynamic() (map[string]any, error) {
-	state := map[string]any{"databaseExists": false, "contractSatisfied": false, "instanceExists": false, "statusEndpoint": "", "instanceEndpoint": ""}
-	database, err := a.api.Resource(a.dynamicStore.DatabaseResource).Namespace(databaseKey.Namespace).Get(a.ctx, databaseKey.Name, metav1.GetOptions{})
-	if err != nil && !apierrors.IsNotFound(err) {
+// projectedState names, for each API-state variable of the hand-written
+// model, the variable abstraction.yaml derives for it and the generated
+// projection reads.
+var projectedState = map[string]string{
+	"databaseExists":    "Database_db1_exists",
+	"contractSatisfied": "Database_db1_contractSatisfied",
+	"statusEndpoint":    "Database_db1_status_endpoint",
+	"instanceExists":    "DatabaseInstance_inst1_exists",
+	"instanceEndpoint":  "DatabaseInstance_inst1_status_endpoint",
+}
+
+// instanceReference is the instance's declared reference to its Database.
+// The model has one Database, so the reference is checked, not modelled.
+const instanceReference = "DatabaseInstance_inst1_spec_databaseName"
+
+// projectAPI projects the real fixture contents with the projection
+// generated from abstraction.yaml, independently of the model and cached
+// Store snapshots. It reads the underlying fake API, not the observed client
+// DatabaseReconciler uses, so projecting crosses no boundary gate.
+func (a *Adapter) projectAPI() (map[string]any, error) {
+	projected, err := generated.Project(a.ctx, a.api, a.mapper)
+	if err != nil {
 		return nil, err
 	}
-	if err == nil {
-		state["databaseExists"] = true
-		state["contractSatisfied"] = database.GetAnnotations()["architecture.local/provisioning-contract"] == "v1"
-		id, _, err := unstructured.NestedString(database.Object, "status", "endpoint")
-		if err != nil {
-			return nil, err
-		}
-		state["statusEndpoint"] = id
+	if projected[projectedState["instanceExists"]] == true && projected[instanceReference] != databaseKey.Name {
+		return nil, fmt.Errorf("instance points at the wrong Database: %v", projected[instanceReference])
 	}
-	instance, err := a.api.Resource(a.dynamicStore.InstanceResource).Namespace(databaseKey.Namespace).Get(a.ctx, "instance-for-"+databaseKey.Name, metav1.GetOptions{})
-	if err != nil && !apierrors.IsNotFound(err) {
-		return nil, err
-	}
-	if err == nil {
-		state["instanceExists"] = true
-		id, _, err := unstructured.NestedString(instance.Object, "status", "endpoint")
-		if err != nil {
-			return nil, err
+	state := make(map[string]any, len(projectedState))
+	for model, name := range projectedState {
+		v, ok := projected[name]
+		if !ok {
+			return nil, fmt.Errorf("generated projection lacks %s", name)
 		}
-		state["instanceEndpoint"] = id
-		reference, _, err := unstructured.NestedString(instance.Object, "spec", "databaseName")
-		if err != nil {
-			return nil, err
-		}
-		if reference != databaseKey.Name {
-			return nil, fmt.Errorf("instance points at the wrong Database")
-		}
+		state[model] = v
 	}
 	return state, nil
 }
