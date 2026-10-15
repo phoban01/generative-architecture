@@ -1,0 +1,23 @@
+apiVersion: architecture.local/v1alpha1
+kind: MutationSuite
+metadata:
+  name: config-mirror
+spec:
+  # Each mutation is compiled into the detect command through a build
+  # overlay and replayed against the committed generated model, its sampled
+  # traces and the targeted scenarios. Expectations name the observed model
+  # variable whose projection must diverge.
+  mutations:
+    # The manager's client reads the source from the API instead of the
+    # informer cache: the copy receives values the cache has not delivered.
+    - name: direct-source
+      file: adapter.go
+      find: cr.SplitClient(a.api, a.cache)
+      replace: cr.SplitClient(a.api, a.api)
+      expect: [ConfigMap_copy_data_value]
+    # The reconciler writes a value it never read.
+    - name: wrong-write
+      file: controller.go
+      find: '"value": source.Data["value"]'
+      replace: '"value": "corrupt"'
+      expect: [ConfigMap_copy_data_value]

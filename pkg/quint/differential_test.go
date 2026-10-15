@@ -18,7 +18,7 @@ import (
 func fixtureModel(t *testing.T) *model.Compiled {
 	t.Helper()
 	var spec model.Spec
-	if _, err := krm.Read(filepath.Join("..", "..", "examples", "configmirror", "system.yaml"), "TransitionModel", &spec); err != nil {
+	if _, err := krm.Read(filepath.Join("..", "..", "examples", "configmirror", "generated", "model.yaml"), "TransitionModel", &spec); err != nil {
 		t.Fatal(err)
 	}
 	m, err := model.Compile(spec)
@@ -73,7 +73,7 @@ func TestDifferentialCountsFixtureTransitions(t *testing.T) {
 	if stats.Traces != len(traces) || stats.Transitions != transitions || stats.Checks != transitions+len(traces) {
 		t.Fatalf("%+v over %d traces with %d transitions", stats, len(traces), transitions)
 	}
-	if stats.Transitions == 0 || stats.Coverage["commit"] == 0 || stats.Coverage["changeSource"] == 0 {
+	if stats.Transitions == 0 || stats.Coverage["writeTarget_ok"] == 0 || stats.Coverage["changeSource_b"] == 0 {
 		t.Fatalf("coverage %v", stats.Coverage)
 	}
 	total := 0
@@ -119,9 +119,9 @@ func TestDifferentialReportsFirstMismatchAsToolFailure(t *testing.T) {
 	})
 	t.Run("disabled transition", func(t *testing.T) {
 		altered := []conformance.Trace{clone(traces[0])}
-		altered[0].States[1].Event = "commit"
+		altered[0].States[1].Event = "writeTarget_ok"
 		_, err := quint.Differential(m, altered)
-		requireToolFailure(t, err, 1, "commit", "CEL rejects the Quint transition")
+		requireToolFailure(t, err, 1, "writeTarget_ok", "CEL rejects the Quint transition")
 	})
 	t.Run("unknown action", func(t *testing.T) {
 		altered := []conformance.Trace{clone(traces[0])}
@@ -144,7 +144,7 @@ func TestDifferentialReportsFirstMismatchAsToolFailure(t *testing.T) {
 		// A model whose CEL properties are stricter than the lowering Quint
 		// sampled: the first state that breaks them is a translation defect.
 		var spec model.Spec
-		if _, err := krm.Read(filepath.Join("..", "..", "examples", "configmirror", "system.yaml"), "TransitionModel", &spec); err != nil {
+		if _, err := krm.Read(filepath.Join("..", "..", "examples", "configmirror", "generated", "model.yaml"), "TransitionModel", &spec); err != nil {
 			t.Fatal(err)
 		}
 		spec.Properties = append(spec.Properties, model.Property{Name: "neverAdvances", Expression: "now == 0"})

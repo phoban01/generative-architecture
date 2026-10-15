@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -17,12 +18,13 @@ import (
 
 	"generative-architecture/pkg/abstraction"
 	"generative-architecture/pkg/adaptergen"
+	"generative-architecture/pkg/conformance"
 	"generative-architecture/pkg/effect"
 	"generative-architecture/pkg/expr"
 	"generative-architecture/pkg/goflow"
 	"generative-architecture/pkg/ir"
-	"generative-architecture/pkg/krm"
 	"generative-architecture/pkg/model"
+	"generative-architecture/pkg/summaries"
 )
 
 // The replay adapter's projection, environment and gating are generated
@@ -55,17 +57,38 @@ var reconcilerWrites = map[string]string{"target.Data": "ConfigMap_copy_data_val
 // reconcilerValues bind the Go expressions written by reconcilerWrites.
 var reconcilerValues = map[string]expr.Expression{`map[string]string{"value": source.Data["value"]}`: "snapshot"}
 
-// boundaryEvents name the outcomes of the reconciler's effects as the
-// handwritten system.yaml names its actions. The model is not generated
-// yet, so these names are bound here; TestAdapterBoundaryEventsMatchModel
-// keeps them in step with the model's effect-labelled actions.
-var boundaryEvents = []adaptergen.BoundaryEvent{
-	{Name: "readSource", Effect: "readSource"},
-	{Name: "readSourceError", Effect: "readSource", Error: true},
-	{Name: "readTarget", Effect: "readTarget"},
-	{Name: "readTargetError", Effect: "readTarget", Error: true},
-	{Name: "commit", Effect: "writeTarget"},
-	{Name: "writeError", Effect: "writeTarget", Error: true},
+// boundaryEvents derives the boundary events from the summary of each
+// client call: the generated model names the outcome actions of an effect
+// <effect>_<outcome>. Success outcomes complete the call; transient error
+// outcomes inject an error. Outcomes of the other error classes (notFound,
+// conflict) are left out: gating can only inject a transient error, and
+// the abstraction makes them unreachable, since every object exists
+// throughout (deletes are excluded) and the reconciler is the copy's only
+// writer. TestAdapterBoundaryEventsMatchModel checks the result against
+// the model's effect-labelled actions and the saved traces.
+func boundaryEvents(facts reconcileFacts) ([]adaptergen.BoundaryEvent, []string, error) {
+	library := summaries.Builtin()
+	var events []adaptergen.BoundaryEvent
+	var skipped []string
+	for _, id := range sortedStrings(facts.Calls) {
+		c := facts.Calls[id]
+		s, err := library.Lookup(c.Operation, c.Consistency)
+		if err != nil {
+			return nil, nil, fmt.Errorf("effect %s: %w", id, err)
+		}
+		for _, o := range s.Outcomes {
+			name := id + "_" + o.Name
+			switch o.Error {
+			case "":
+				events = append(events, adaptergen.BoundaryEvent{Name: name, Effect: id})
+			case summaries.ErrorTransient:
+				events = append(events, adaptergen.BoundaryEvent{Name: name, Effect: id, Error: true})
+			default:
+				skipped = append(skipped, name)
+			}
+		}
+	}
+	return events, skipped, nil
 }
 
 // clientCall is one controller-runtime client call of the reconciler.
@@ -113,7 +136,11 @@ func extractFacts() (reconcileFacts, error) {
 	if err != nil {
 		return facts, err
 	}
-	m, err := Load("system.yaml")
+	spec, err := Generate(".")
+	if err != nil {
+		return facts, err
+	}
+	m, err := model.Compile(spec)
 	if err != nil {
 		return facts, err
 	}
@@ -400,9 +427,9 @@ func adapterProjection() ([]byte, error) {
 	return adaptergen.GenerateReaderProjection(generatedPackage, ps)
 }
 
-// adapterEnvironment generates the environment: the environment changes
-// the objects the reconciler only reads, and delivers the objects it reads
-// through its cache.
+// adapterEnvironment generates the environment: the environment sets the
+// objects the reconciler only reads to each value of their domain, and
+// delivers the objects it reads through its cache.
 func adapterEnvironment() ([]byte, error) {
 	a, err := abstraction.Load("abstraction.yaml")
 	if err != nil {
@@ -412,7 +439,7 @@ func adapterEnvironment() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return adaptergen.GenerateReaderEnvironment(generatedPackage, a.Spec, facts.readObjects("", true), facts.readObjects("cached", false))
+	return adaptergen.GenerateReaderValueEnvironment(generatedPackage, a.Spec, facts.readObjects("", true), facts.readObjects("cached", false))
 }
 
 // adapterGating generates boundary gating from the extracted process, each
@@ -426,7 +453,11 @@ func adapterGating() ([]byte, error) {
 	for id, c := range facts.Calls {
 		targets[id] = c.Key
 	}
-	return adaptergen.GenerateBoundaryGating(generatedPackage, facts.Process, boundaryEvents, targets)
+	events, _, err := boundaryEvents(facts)
+	if err != nil {
+		return nil, err
+	}
+	return adaptergen.GenerateBoundaryGating(generatedPackage, facts.Process, events, targets)
 }
 
 func TestAdapterGeneratedFilesUpToDate(t *testing.T) {
@@ -502,11 +533,20 @@ func TestAdapterExtractedProgram(t *testing.T) {
 	}
 }
 
-// Every boundary event is an action of the handwritten model labelled with
-// the same effect, and every effect-labelled action is a boundary event.
+// Every boundary event is an action of the generated model labelled with
+// the same effect, and every effect-labelled action is a boundary event or
+// a left-out outcome that no saved trace takes.
 func TestAdapterBoundaryEventsMatchModel(t *testing.T) {
-	var spec model.Spec
-	if _, err := krm.Read("system.yaml", "TransitionModel", &spec); err != nil {
+	facts, err := extractAdapterFacts()
+	if err != nil {
+		t.Fatal(err)
+	}
+	events, skipped, err := boundaryEvents(facts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec, err := Generate(".")
+	if err != nil {
 		t.Fatal(err)
 	}
 	labelled := map[string]string{}
@@ -515,11 +555,32 @@ func TestAdapterBoundaryEventsMatchModel(t *testing.T) {
 			labelled[a.Name] = a.Effect
 		}
 	}
-	events := map[string]string{}
-	for _, e := range boundaryEvents {
-		events[e.Name] = e.Effect
+	covered := map[string]string{}
+	for _, e := range events {
+		covered[e.Name] = e.Effect
 	}
-	if !reflect.DeepEqual(events, labelled) {
-		t.Fatalf("boundary events %v, model actions with effects %v", events, labelled)
+	for _, name := range skipped {
+		covered[name] = labelled[name]
+	}
+	if !reflect.DeepEqual(covered, labelled) {
+		t.Fatalf("boundary events %v and left-out outcomes %v, model actions with effects %v", events, skipped, labelled)
+	}
+	if want := []string{"readSource_notFound", "readTarget_notFound", "writeTarget_conflict", "writeTarget_notFound"}; !reflect.DeepEqual(skipped, want) {
+		t.Fatalf("left-out outcomes %v, want %v", skipped, want)
+	}
+	paths, err := filepath.Glob(TraceGlob)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range paths {
+		trace, err := conformance.ReadITF(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i, s := range trace.States {
+			if slices.Contains(skipped, s.Event) {
+				t.Fatalf("%s step %d takes left-out outcome %s", path, i, s.Event)
+			}
+		}
 	}
 }

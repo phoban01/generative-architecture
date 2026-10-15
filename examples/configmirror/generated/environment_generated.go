@@ -16,13 +16,33 @@ import (
 // returns false when event names no environment action.
 func ApplyEnvironment(ctx context.Context, api client.Client, cache client.Client, event string) (bool, error) {
 	switch event {
-	case "changeSource":
-		// change v1/ConfigMap demo/source to the next value of each field's domain
+	case "changeSource_a":
+		// set v1/ConfigMap demo/source at "data", "value" to "a"
 		obj, err := environmentRead(ctx, api, schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"}, "demo", "source")
 		if err != nil {
 			return true, err
 		}
-		if err := environmentCycle(obj, []any{"a", "b"}, "data", "value"); err != nil {
+		if err := unstructured.SetNestedField(obj.Object, "a", "data", "value"); err != nil {
+			return true, err
+		}
+		return true, api.Update(ctx, obj)
+	case "changeSource_b":
+		// set v1/ConfigMap demo/source at "data", "value" to "b"
+		obj, err := environmentRead(ctx, api, schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"}, "demo", "source")
+		if err != nil {
+			return true, err
+		}
+		if err := unstructured.SetNestedField(obj.Object, "b", "data", "value"); err != nil {
+			return true, err
+		}
+		return true, api.Update(ctx, obj)
+	case "changeSource_empty":
+		// set v1/ConfigMap demo/source at "data", "value" to ""
+		obj, err := environmentRead(ctx, api, schema.GroupVersionKind{Group: "", Version: "v1", Kind: "ConfigMap"}, "demo", "source")
+		if err != nil {
+			return true, err
+		}
+		if err := unstructured.SetNestedField(obj.Object, "", "data", "value"); err != nil {
 			return true, err
 		}
 		return true, api.Update(ctx, obj)
@@ -57,23 +77,6 @@ func environmentRead(ctx context.Context, reader client.Reader, gvk schema.Group
 		return nil, fmt.Errorf("%s %s/%s: %w", gvk.Kind, namespace, name, err)
 	}
 	return obj, nil
-}
-
-// environmentCycle sets the field at path to the value after its current one
-// in values, or to the first value when the current one is not among them.
-func environmentCycle(obj *unstructured.Unstructured, values []any, path ...string) error {
-	current, _, err := unstructured.NestedFieldNoCopy(obj.Object, path...)
-	if err != nil {
-		return err
-	}
-	next := values[0]
-	for i, v := range values {
-		if v == current {
-			next = values[(i+1)%len(values)]
-			break
-		}
-	}
-	return unstructured.SetNestedField(obj.Object, next, path...)
 }
 
 // environmentCopy copies the field at path from one object to another,

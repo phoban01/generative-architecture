@@ -85,12 +85,12 @@ make verify                      # refresh all model evidence and run all tests
 
 Fresh simulation requires an external Quint CLI in the supported range (`QUINT_BIN`); LikeC4 rendering requires a LikeC4 CLI in its range (`LIKEC4_BIN`). The ranges are listed in the README's [Supported toolchain](README.md#supported-toolchain) table. The application/library is Go and imports no npm code; `devbox shell` installs both CLIs from `hack/tools/package.json`.
 
-`make verify` includes the sample controller walkthrough with 40 sampled traces, ConfigMirror integration tests, and 40 sampled multi-controller runtime traces. Targeted tests cover concurrent invocations, source mutations, unsupported syntax, subreconciler returns, contract drift, ambiguous providers, shared-state snapshots and read-only ports. Simulation is bounded, not exhaustive verification or a liveness proof.
+`make verify` includes the sample controller walkthrough with 40 sampled traces, ConfigMirror's 40 traces sampled from its generated model with its mutation suite and receipt, and 40 sampled multi-controller runtime traces. Targeted tests cover concurrent invocations, source mutations, unsupported syntax, subreconciler returns, contract drift, ambiguous providers, shared-state snapshots and read-only ports. Simulation is bounded, not exhaustive verification or a liveness proof.
 
 ## Remaining work
 
 Extend the bounded watch frontend to additional builder patterns, ownership references and supported effect summaries, then connect its resource/key identities to general multi-controller composition. Dynamic wiring and arbitrary Go behaviour still require explicit summaries or new frontend support. Integration adapters still establish the observation mapping. Upstream project behavioural abstractions (Cluster API, Flux) need versioned summaries and independent conformance evidence. API-server-backed tests, additional runtime profiles and publishing/API stability remain future work.
 
-The sample controller demonstrates the intended source/requirements separation. ConfigMirror remains a deliberately handwritten behaviour model used to test the runtime integration. Neither example is evidence that arbitrary repositories are already translated automatically.
+The sample controller demonstrates the intended source/requirements separation. ConfigMirror's model, replay projection, environment and boundary gating are generated from its source, its abstraction document and the summary library; its fixtures, client wiring and runtime event routing are still written by hand. Neither example is evidence that arbitrary repositories are already translated automatically.
 
 See [PROJECT-PLAN.md](PROJECT-PLAN.md) for the staged delivery plan.

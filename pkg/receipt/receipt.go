@@ -55,6 +55,13 @@ type Receipt struct {
 	Extra    []string          `yaml:"extra,omitempty"`
 	Files    []File            `yaml:"files"`
 	Tools    map[string]string `yaml:"tools"`
+	// Bounds and Excludes qualify the evidence (ADR-0005): the bounds the
+	// run explored within and the behaviours it deliberately left out,
+	// repeated from the abstraction the caller consumed. Collect leaves them
+	// empty and Compare ignores them; the abstraction document recording
+	// them is itself an input whose hash is compared.
+	Bounds   map[string]int `yaml:"bounds,omitempty"`
+	Excludes []string       `yaml:"excludes,omitempty"`
 }
 
 // Drift is one difference between a receipt and the current inputs.
@@ -101,7 +108,7 @@ func Collect(root string, patterns []string, extra []string, tools map[string]st
 	if err != nil {
 		return Receipt{}, err
 	}
-	pkgs, err := packages.Load(&packages.Config{Dir: abs, Mode: packages.NeedName | packages.NeedFiles | packages.NeedImports | packages.NeedModule}, patterns...)
+	pkgs, err := packages.Load(&packages.Config{Dir: abs, Mode: packages.NeedName | packages.NeedFiles | packages.NeedEmbedFiles | packages.NeedImports | packages.NeedModule}, patterns...)
 	if err != nil {
 		return Receipt{}, fmt.Errorf("receipt: %w", err)
 	}
@@ -308,6 +315,11 @@ func (r Receipt) Validate() error {
 		seen[f.Path] = true
 		if !hexHash.MatchString(f.SHA256) {
 			return fmt.Errorf("receipt: %s: invalid sha256 %q", f.Path, f.SHA256)
+		}
+	}
+	for name, n := range r.Bounds {
+		if name == "" || n <= 0 {
+			return fmt.Errorf("receipt: bound %q must be named and positive, got %d", name, n)
 		}
 	}
 	return checkTools(r.Tools)

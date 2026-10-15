@@ -32,5 +32,9 @@ func (q *eventSink) Add(key reconcile.Request) {
 
 // EnqueueFrom is the one-key facade for native event-handler delivery.
 func (w *Worker) EnqueueFrom(deliver func(workqueue.TypedRateLimitingInterface[reconcile.Request])) ([]reconcile.Request, error) {
-	return w.controller.EnqueueFrom(deliver)
+	keys, err := w.controller.EnqueueFrom(deliver)
+	if len(keys) > 0 {
+		w.dirty = true
+	}
+	return keys, err
 }

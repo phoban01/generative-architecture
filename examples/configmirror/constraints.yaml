@@ -3,10 +3,13 @@ kind: ModelConstraints
 metadata:
   name: config-mirror-requirements
 spec:
+  # Written against the generated model's names: the abstraction's object
+  # variables, the runtime profile's queue variables and the effect outcome
+  # actions <effect>_<outcome>.
   properties:
     - name: queueSafety
       expression: '!(ready && processing) && (!ready || dirty)'
     - name: writesObservedValue
-      expression: 'event != "commit" || target == snapshot'
+      expression: 'event != "writeTarget_ok" || ConfigMap_copy_data_value == snapshot'
     - name: boundedRetries
       expression: 'retries >= 0 && retries <= 3'

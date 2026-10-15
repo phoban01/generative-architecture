@@ -90,8 +90,8 @@ status:
       effect: readSource
       consistency: cached
       bindings:
-        $cache: cache_ConfigMap_source_data_value
-        $cacheVersion: cache_ConfigMap_source_metadata_resourceVersion
+        $cache: cached_ConfigMap_source_data_value
+        $cacheVersion: cached_ConfigMap_source_metadata_resourceVersion
         $exists: ConfigMap_source_exists
         $snapshot: snapshot
         $snapshotVersion: source_metadata_resourceVersion

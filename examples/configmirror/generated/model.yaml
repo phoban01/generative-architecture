@@ -1,0 +1,267 @@
+apiVersion: architecture.local/v1alpha1
+kind: TransitionModel
+metadata:
+  name: config-mirror
+spec:
+  name: ConfigMirror
+  state:
+    ConfigMap_copy_data_value:
+      type: string
+      initial: '""'
+    ConfigMap_copy_exists:
+      type: bool
+      initial: "true"
+    ConfigMap_copy_metadata_resourceVersion:
+      type: int
+      initial: "0"
+    ConfigMap_source_data_value:
+      type: string
+      initial: '"a"'
+    ConfigMap_source_exists:
+      type: bool
+      initial: "true"
+    ConfigMap_source_metadata_resourceVersion:
+      type: int
+      initial: "0"
+    cached_ConfigMap_source_data_value:
+      type: string
+      initial: '"a"'
+    cached_ConfigMap_source_metadata_resourceVersion:
+      type: int
+      initial: "0"
+    dirty:
+      type: bool
+      initial: "false"
+    due:
+      type: int
+      initial: "-1"
+    err:
+      type: bool
+      initial: "false"
+    failed:
+      type: bool
+      initial: "false"
+    finished:
+      type: bool
+      initial: "true"
+    now:
+      type: int
+      initial: "0"
+    pc:
+      type: int
+      initial: "8"
+    processing:
+      type: bool
+      initial: "false"
+    ready:
+      type: bool
+      initial: "false"
+    retries:
+      type: int
+      initial: "0"
+    snapshot:
+      type: string
+      initial: '""'
+    source_metadata_resourceVersion:
+      type: int
+      initial: "0"
+    target_data_value:
+      type: string
+      initial: '""'
+    target_metadata_resourceVersion:
+      type: int
+      initial: "0"
+  effects:
+    - id: readSource
+      resource:
+        group: ""
+        version: v1
+        kind: ConfigMap
+      operation: get
+      consistency: cached
+    - id: readTarget
+      resource:
+        group: ""
+        version: v1
+        kind: ConfigMap
+      operation: get
+      consistency: direct
+    - id: writeTarget
+      resource:
+        group: ""
+        version: v1
+        kind: ConfigMap
+      operation: update
+      consistency: direct
+  actions:
+    - name: changeSource_a
+      guard: ConfigMap_source_data_value != "a"
+      updates:
+        ConfigMap_source_data_value: '"a"'
+        ConfigMap_source_metadata_resourceVersion: ConfigMap_source_metadata_resourceVersion + 1
+    - name: changeSource_b
+      guard: ConfigMap_source_data_value != "b"
+      updates:
+        ConfigMap_source_data_value: '"b"'
+        ConfigMap_source_metadata_resourceVersion: ConfigMap_source_metadata_resourceVersion + 1
+    - name: changeSource_empty
+      guard: ConfigMap_source_data_value != ""
+      updates:
+        ConfigMap_source_data_value: '""'
+        ConfigMap_source_metadata_resourceVersion: ConfigMap_source_metadata_resourceVersion + 1
+    - name: deliverCache
+      guard: "true"
+      updates:
+        cached_ConfigMap_source_data_value: ConfigMap_source_data_value
+        cached_ConfigMap_source_metadata_resourceVersion: ConfigMap_source_metadata_resourceVersion
+    - name: advance
+      guard: now < 20
+      updates:
+        now: now + 1
+    - name: enqueue
+      guard: "true"
+      updates:
+        dirty: "true"
+        ready: ready || !processing
+    - name: begin
+      guard: 'ready && !processing && (processing ? 1 : 0) < 1 && retries < 3'
+      updates:
+        dirty: "false"
+        err: "false"
+        failed: "false"
+        finished: "false"
+        pc: "8"
+        processing: "true"
+        ready: "false"
+        snapshot: '""'
+        source_metadata_resourceVersion: "0"
+        target_data_value: '""'
+        target_metadata_resourceVersion: "0"
+    - name: fire
+      guard: due >= 0 && now >= due
+      updates:
+        dirty: "true"
+        due: "-1"
+        ready: ready || !processing
+    - name: finish
+      guard: processing && finished && !failed
+      updates:
+        processing: "false"
+        ready: dirty
+        retries: "0"
+    - name: finishError
+      guard: processing && finished && failed
+      updates:
+        due: '(due < 0 || now + 2 < due) ? (now + 2) : due'
+        processing: "false"
+        ready: dirty
+        retries: retries + 1
+    - name: node0_return
+      guard: '!finished && pc == 0 && (true)'
+      updates:
+        failed: err
+        finished: "true"
+        pc: "-1"
+    - name: writeTarget_ok
+      guard: '!finished && pc == 1 && (ConfigMap_copy_exists && ConfigMap_copy_metadata_resourceVersion == target_metadata_resourceVersion)'
+      updates:
+        ConfigMap_copy_data_value: target_data_value
+        ConfigMap_copy_metadata_resourceVersion: ConfigMap_copy_metadata_resourceVersion + 1
+        err: "false"
+        pc: "0"
+        target_metadata_resourceVersion: ConfigMap_copy_metadata_resourceVersion + 1
+      effect: writeTarget
+    - name: writeTarget_conflict
+      guard: '!finished && pc == 1 && (ConfigMap_copy_exists && ConfigMap_copy_metadata_resourceVersion != target_metadata_resourceVersion)'
+      updates:
+        err: "true"
+        pc: "0"
+      effect: writeTarget
+    - name: writeTarget_notFound
+      guard: '!finished && pc == 1 && (!ConfigMap_copy_exists)'
+      updates:
+        err: "true"
+        pc: "0"
+      effect: writeTarget
+    - name: writeTarget_error
+      guard: '!finished && pc == 1 && (true)'
+      updates:
+        err: "true"
+        pc: "0"
+      effect: writeTarget
+    - name: node2_assign
+      guard: '!finished && pc == 2 && (true)'
+      updates:
+        pc: "1"
+        target_data_value: snapshot
+    - name: node3_return
+      guard: '!finished && pc == 3 && (true)'
+      updates:
+        failed: err
+        finished: "true"
+        pc: "-1"
+    - name: node4_branch
+      guard: '!finished && pc == 4 && (true)'
+      updates:
+        pc: 'err ? 3 : 2'
+    - name: readTarget_found
+      guard: '!finished && pc == 5 && (ConfigMap_copy_exists)'
+      updates:
+        err: "false"
+        pc: "4"
+        target_data_value: ConfigMap_copy_data_value
+        target_metadata_resourceVersion: ConfigMap_copy_metadata_resourceVersion
+      effect: readTarget
+    - name: readTarget_notFound
+      guard: '!finished && pc == 5 && (!ConfigMap_copy_exists)'
+      updates:
+        err: "true"
+        pc: "4"
+      effect: readTarget
+    - name: readTarget_error
+      guard: '!finished && pc == 5 && (true)'
+      updates:
+        err: "true"
+        pc: "4"
+      effect: readTarget
+    - name: node6_return
+      guard: '!finished && pc == 6 && (true)'
+      updates:
+        failed: err
+        finished: "true"
+        pc: "-1"
+    - name: node7_branch
+      guard: '!finished && pc == 7 && (true)'
+      updates:
+        pc: 'err ? 6 : 5'
+    - name: readSource_found
+      guard: '!finished && pc == 8 && (ConfigMap_source_exists)'
+      updates:
+        err: "false"
+        pc: "7"
+        snapshot: cached_ConfigMap_source_data_value
+        source_metadata_resourceVersion: cached_ConfigMap_source_metadata_resourceVersion
+      effect: readSource
+    - name: readSource_notFound
+      guard: '!finished && pc == 8 && (!ConfigMap_source_exists)'
+      updates:
+        err: "true"
+        pc: "7"
+      effect: readSource
+    - name: readSource_error
+      guard: '!finished && pc == 8 && (true)'
+      updates:
+        err: "true"
+        pc: "7"
+      effect: readSource
+  properties:
+    - name: exclusive
+      expression: '!(ready && processing) && (!ready || dirty)'
+    - name: capacity
+      expression: '(processing ? 1 : 0) <= 1'
+    - name: queueSafety
+      expression: '!(ready && processing) && (!ready || dirty)'
+    - name: writesObservedValue
+      expression: event != "writeTarget_ok" || ConfigMap_copy_data_value == snapshot
+    - name: boundedRetries
+      expression: retries >= 0 && retries <= 3

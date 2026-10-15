@@ -184,6 +184,63 @@ type changedObject struct {
 	Fields []cycledField
 }
 
+// valueChange is one per-value environment event: it sets the field at
+// Path of the object at Key to Value, a Go literal.
+type valueChange struct {
+	Name  string
+	Key   ir.ObjectRef
+	Path  []string
+	Value string
+}
+
+// ChangeValueEvent is the per-value environment event that sets the one
+// declared field of object objectID to literal, the index-th value of its
+// domain: ChangeEvent(objectID), an underscore and a name for the value.
+// The value is named by its content when that is alphanumeric, "empty" for
+// the empty string and by its index otherwise.
+func ChangeValueEvent(objectID, literal string, index int) string {
+	v, err := strconv.Unquote(literal)
+	if err != nil {
+		v = literal
+	}
+	name := v
+	if v == "" {
+		name = "empty"
+	}
+	for _, r := range v {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9') {
+			name = strconv.Itoa(index)
+			break
+		}
+	}
+	return ChangeEvent(objectID) + "_" + name
+}
+
+// valueLiteral renders one domain value as the Go literal unstructured
+// content holds, including the zero value.
+func valueLiteral(typ, v string) (string, error) {
+	switch typ {
+	case abstraction.TypeString:
+		s, err := strconv.Unquote(v)
+		if err != nil {
+			return "", fmt.Errorf("value %s is not a string literal", v)
+		}
+		return strconv.Quote(s), nil
+	case abstraction.TypeInt:
+		n, err := strconv.ParseInt(v, 10, 64)
+		if err != nil {
+			return "", fmt.Errorf("value %s is not an int literal", v)
+		}
+		return fmt.Sprintf("int64(%d)", n), nil
+	case abstraction.TypeBool:
+		if v != "true" && v != "false" {
+			return "", fmt.Errorf("value %s is not a bool literal", v)
+		}
+		return v, nil
+	}
+	return "", fmt.Errorf("unknown type %q", typ)
+}
+
 type deliveredObject struct {
 	Key   ir.ObjectRef
 	Paths [][]string
@@ -266,6 +323,21 @@ func lookupObject(spec abstraction.Spec, id string) (abstraction.Resource, ir.Ob
 // reports whether event named an environment action, so callers can route
 // other events elsewhere. The function takes only API clients.
 func GenerateReaderEnvironment(pkg string, spec abstraction.Spec, changed, cached []string) ([]byte, error) {
+	return readerEnvironment(pkg, spec, changed, cached, false)
+}
+
+// GenerateReaderValueEnvironment is GenerateReaderEnvironment with one
+// event per domain value instead of one cycling event per object: for every
+// object ID in changed, whose resource must declare exactly one field with a
+// value domain, ChangeValueEvent(id, v, i) sets that field to the i-th value
+// v of its domain, the zero value included, and updates the object through
+// api. A model whose environment chooses the value it changes an object to
+// names its actions the same way.
+func GenerateReaderValueEnvironment(pkg string, spec abstraction.Spec, changed, cached []string) ([]byte, error) {
+	return readerEnvironment(pkg, spec, changed, cached, true)
+}
+
+func readerEnvironment(pkg string, spec abstraction.Spec, changed, cached []string, perValue bool) ([]byte, error) {
 	if err := validPackage(pkg); err != nil {
 		return nil, err
 	}
@@ -274,6 +346,7 @@ func GenerateReaderEnvironment(pkg string, spec abstraction.Spec, changed, cache
 	}
 	seen := map[string]bool{}
 	var changes []changedObject
+	var sets []valueChange
 	for _, id := range changed {
 		if seen["change/"+id] {
 			return nil, fmt.Errorf("changed object %q listed twice", id)
@@ -282,6 +355,31 @@ func GenerateReaderEnvironment(pkg string, spec abstraction.Spec, changed, cache
 		r, key, err := lookupObject(spec, id)
 		if err != nil {
 			return nil, fmt.Errorf("changed %w", err)
+		}
+		if perValue {
+			var domained []abstraction.Field
+			for _, f := range r.Fields {
+				if _, ok := r.ValueDomains[abstraction.PathKey(f.Path)]; ok {
+					domained = append(domained, f)
+				}
+			}
+			if len(domained) != 1 {
+				return nil, fmt.Errorf("changed object %s: per-value events need exactly one declared field with a value domain, got %d", id, len(domained))
+			}
+			f := domained[0]
+			for i, v := range r.ValueDomains[abstraction.PathKey(f.Path)] {
+				lit, err := valueLiteral(f.Type, v)
+				if err != nil {
+					return nil, fmt.Errorf("changed object %s, field %s: %w", id, abstraction.PathKey(f.Path), err)
+				}
+				name := ChangeValueEvent(id, v, i)
+				if seen["event/"+name] {
+					return nil, fmt.Errorf("changed object %s: two domain values are named %s", id, name)
+				}
+				seen["event/"+name] = true
+				sets = append(sets, valueChange{Name: name, Key: key, Path: append([]string(nil), f.Path...), Value: lit})
+			}
+			continue
 		}
 		c := changedObject{Name: ChangeEvent(id), Key: key}
 		for _, f := range r.Fields {
@@ -327,8 +425,9 @@ func GenerateReaderEnvironment(pkg string, spec abstraction.Spec, changed, cache
 		Package    string
 		Deliver    string
 		Changes    []changedObject
+		Sets       []valueChange
 		Deliveries []deliveredObject
-	}{Header, pkg, DeliverCacheEvent, changes, deliveries})
+	}{Header, pkg, DeliverCacheEvent, changes, sets, deliveries})
 }
 
 const readerEnvironmentTemplate = `{{.Header}}
@@ -361,6 +460,18 @@ func ApplyEnvironment(ctx context.Context, api client.Client{{if .Deliveries}}, 
 			return true, err
 		}
 {{- end}}
+		return true, api.Update(ctx, obj)
+{{- end}}
+{{- range .Sets}}
+	case {{q .Name}}:
+		// set {{.Key}} at {{path .Path}} to {{.Value}}
+		obj, err := environmentRead(ctx, api, {{gvk .Key.GVK}}, {{q .Key.Namespace}}, {{q .Key.Name}})
+		if err != nil {
+			return true, err
+		}
+		if err := unstructured.SetNestedField(obj.Object, {{.Value}}, {{path .Path}}); err != nil {
+			return true, err
+		}
 		return true, api.Update(ctx, obj)
 {{- end}}
 {{- if .Deliveries}}
@@ -400,7 +511,7 @@ func environmentRead(ctx context.Context, reader client.Reader, gvk schema.Group
 		return nil, fmt.Errorf("%s %s/%s: %w", gvk.Kind, namespace, name, err)
 	}
 	return obj, nil
-}
+}{{if .Changes}}
 
 // environmentCycle sets the field at path to the value after its current one
 // in values, or to the first value when the current one is not among them.
@@ -417,7 +528,7 @@ func environmentCycle(obj *unstructured.Unstructured, values []any, path ...stri
 		}
 	}
 	return unstructured.SetNestedField(obj.Object, next, path...)
-}
+}{{end}}{{if .Deliveries}}
 
 // environmentCopy copies the field at path from one object to another,
 // removing it from the target when the source does not set it.
@@ -431,5 +542,5 @@ func environmentCopy(from, to *unstructured.Unstructured, path ...string) error 
 		return nil
 	}
 	return unstructured.SetNestedField(to.Object, v, path...)
-}
+}{{end}}
 `

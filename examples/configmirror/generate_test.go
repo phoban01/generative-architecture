@@ -2,6 +2,7 @@ package configmirror
 
 import (
 	"fmt"
+	"math/rand/v2"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,11 +20,6 @@ import (
 	"generative-architecture/pkg/krm"
 	"generative-architecture/pkg/model"
 )
-
-// generatedModel is written next to the evidence-backed generated/Model.qnt,
-// which stays the handwritten model's output until the evidence is
-// regenerated from the generated model.
-var generatedModel = filepath.Join("generated", "Model.generated.qnt")
 
 func generate(t *testing.T) (model.Spec, *model.Compiled) {
 	t.Helper()
@@ -59,24 +55,28 @@ func TestGenerateModel(t *testing.T) {
 	if !reflect.DeepEqual(spec.Effects, hand.Effects) {
 		t.Errorf("effects %+v, want %+v", spec.Effects, hand.Effects)
 	}
-	if os.Getenv(regenerate) != "" {
-		if err := os.WriteFile(generatedModel, []byte(m.Quint()), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	committed, err := os.ReadFile(generatedModel)
+	// The committed model is the evidence source: make library-demo
+	// writes it in both forms and samples the traces from it.
+	committed, err := os.ReadFile(ModelFile)
 	if err != nil {
-		t.Fatalf("%v; run with %s=1 to write it", err, regenerate)
+		t.Fatalf("%v; run make library-demo", err)
 	}
 	if string(committed) != m.Quint() {
-		t.Fatalf("%s is stale; run with %s=1 to regenerate", generatedModel, regenerate)
+		t.Fatalf("%s is stale; run make library-demo", ModelFile)
+	}
+	var saved model.Spec
+	if _, err := krm.Read(SpecFile, "TransitionModel", &saved); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(saved, spec) {
+		t.Fatalf("%s is stale; run make library-demo", SpecFile)
 	}
 	quint := os.Getenv("QUINT_BIN")
 	if quint == "" {
 		t.Skip("QUINT_BIN not set; skipping Quint typecheck of the generated model")
 	}
-	if out, err := exec.Command(quint, "typecheck", generatedModel).CombinedOutput(); err != nil {
-		t.Fatalf("quint typecheck %s: %v\n%s", generatedModel, err, out)
+	if out, err := exec.Command(quint, "typecheck", ModelFile).CombinedOutput(); err != nil {
+		t.Fatalf("quint typecheck %s: %v\n%s", ModelFile, err, out)
 	}
 }
 
@@ -90,7 +90,7 @@ var correspondence = struct {
 	actions map[string][]string
 }{
 	vars: map[string]string{
-		"source": "ConfigMap_source_data_value", "cached": "cache_ConfigMap_source_data_value",
+		"source": "ConfigMap_source_data_value", "cached": "cached_ConfigMap_source_data_value",
 		"target": "ConfigMap_copy_data_value", "snapshot": "snapshot", "failed": "failed",
 		"ready": "ready", "dirty": "dirty", "processing": "processing", "retries": "retries", "now": "now", "due": "due",
 	},
@@ -111,8 +111,8 @@ var correspondence = struct {
 	},
 }
 
-// parity replays saved traces of the handwritten model against the
-// generated one and collects every difference.
+// parity replays traces of the handwritten model against the generated one
+// and collects every difference.
 type parity struct {
 	hand, gen         *model.Compiled
 	handSpec, genSpec model.Spec
@@ -261,7 +261,7 @@ func (p *parity) step(where string, h, g map[string]any, event string, next map[
 	}
 	if successor != nil {
 		if diff := p.compare(next, successor); len(diff) > 0 {
-			p.differences = append(p.differences, fmt.Sprintf("%s: saved state after %s differs: %s", where, event, strings.Join(diff, ", ")))
+			p.differences = append(p.differences, fmt.Sprintf("%s: walk state after %s differs: %s", where, event, strings.Join(diff, ", ")))
 		}
 	}
 	return successor, by
@@ -276,7 +276,51 @@ func sortedStrings[V any](m map[string]V) []string {
 	return out
 }
 
-// checkParity replays every saved trace of the handwritten model against
+// Parity walks: seeded random walks of the handwritten model, as many and
+// as long as the Quint traces the handwritten model's evidence had.
+const (
+	parityWalks = 40
+	paritySteps = 60
+	paritySeed  = 20261013
+)
+
+// handwrittenWalks samples traces of the handwritten model with original
+// CEL: from the initial state, each step takes an action drawn uniformly
+// from the enabled ones with a fixed seed. The handwritten model's own
+// Quint traces are no longer evidence; the walks keep the parity check
+// independent of them.
+func handwrittenWalks(t *testing.T, p *parity, walks, steps int) []conformance.Trace {
+	t.Helper()
+	r := rand.New(rand.NewPCG(paritySeed, 0))
+	var out []conformance.Trace
+	for range walks {
+		state, err := p.hand.Initial()
+		if err != nil {
+			t.Fatal(err)
+		}
+		trace := conformance.Trace{Status: "ok", States: []conformance.State{{Event: "init", Values: state}}}
+		for range steps {
+			var enabled []string
+			for _, a := range p.handSpec.Actions {
+				if p.guard(p.handSpec, a.Name, state) {
+					enabled = append(enabled, a.Name)
+				}
+			}
+			if len(enabled) == 0 {
+				break
+			}
+			event := enabled[r.IntN(len(enabled))]
+			if state, err = p.hand.Next(state, event); err != nil {
+				t.Fatal(err)
+			}
+			trace.States = append(trace.States, conformance.State{Event: event, Values: state})
+		}
+		out = append(out, trace)
+	}
+	return out
+}
+
+// checkParity replays seeded walks of the handwritten model against
 // genSpec. It returns the comparison, the generated variables without a
 // handwritten counterpart and the number of trace states checked.
 func checkParity(t *testing.T, genSpec model.Spec) (*parity, []string, int) {
@@ -364,19 +408,9 @@ func checkParity(t *testing.T, genSpec model.Spec) (*parity, []string, int) {
 		}
 	}
 
-	paths, err := filepath.Glob("traces/*.itf.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(paths) == 0 {
-		t.Fatal("no saved traces")
-	}
 	states := 0
-	for _, path := range paths {
-		trace, err := conformance.ReadITF(path)
-		if err != nil {
-			t.Fatal(err)
-		}
+	for n, trace := range handwrittenWalks(t, p, parityWalks, paritySteps) {
+		path := fmt.Sprintf("walk-%03d", n)
 		g, err := gen.Initial()
 		if err != nil {
 			t.Fatal(err)
@@ -407,7 +441,7 @@ func checkParity(t *testing.T, genSpec model.Spec) (*parity, []string, int) {
 func TestParityWithHandwrittenModel(t *testing.T) {
 	spec, _ := generate(t)
 	p, hidden, states := checkParity(t, spec)
-	t.Logf("checked every handwritten action on %d saved trace states; constraints and runtime properties evaluated on each generated successor", states)
+	t.Logf("checked every handwritten action on %d walk states; constraints and runtime properties evaluated on each generated successor", states)
 	t.Logf("handwritten actions exercised (enabled states): %v", p.coverage)
 	t.Logf("generated-only internal process steps: %v", p.internal)
 	t.Logf("generated-only variables (no handwritten counterpart): %v", hidden)
@@ -416,7 +450,7 @@ func TestParityWithHandwrittenModel(t *testing.T) {
 	}
 	for _, a := range p.handSpec.Actions {
 		if p.coverage[a.Name] == 0 {
-			t.Errorf("not exercised by the saved traces: %s", a.Name)
+			t.Errorf("not exercised by the walks: %s", a.Name)
 		}
 	}
 	if len(p.differences) > 0 {

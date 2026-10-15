@@ -18,7 +18,7 @@ See [the project plan](PROJECT-PLAN.md) for the requirements index, milestones a
 | --- | --- |
 | `examples/database/` | The sample controller. Process, watches and dynamic-client accesses are extracted from Go; constraints are authored separately; replay runs the real reconcile against a fake dynamic API. |
 | `examples/refsystem/` | Neutral multi-controller reference system: API types and CRDs now, controllers and composition in later milestones |
-| `examples/configmirror/` | An ordinary controller with a handwritten behaviour model: the observer/runtime integration reference, not the generation example. |
+| `examples/configmirror/` | An ordinary controller whose model is generated from its source, an abstraction document and the built-in client summaries; its evidence is sampled from that model, replayed through a generated adapter and checked against a mutation suite. |
 | `examples/runtimegroup/` | A multi-controller runtime profile checked against real controller-runtime workers and client-go FIFO queues. |
 | `testdata/consumer/` | A separate Go module that imports the public packages. |
 
@@ -73,7 +73,7 @@ The Go tools call Quint and LikeC4 as executables and never import npm code. `de
 make verify
 ```
 
-`make verify` refreshes the sample controller's 40 sampled Quint traces and replays them against Go, samples 40 multi-controller runtime traces, refreshes ConfigMirror's 40 sampled traces, runs every test and checks the separate consumer module. Simulation is bounded, not exhaustive verification or a liveness proof. Fixtures also contain deliberate source mutations; a passing run means the constraints detected them.
+`make verify` refreshes the sample controller's 40 sampled Quint traces and replays them against Go, samples 40 multi-controller runtime traces, refreshes ConfigMirror's 40 traces sampled from its generated model with its mutation matrix and input-closure receipt, runs every test and checks the separate consumer module. Simulation is bounded, not exhaustive verification or a liveness proof. Fixtures also contain deliberate source mutations; a passing run means the constraints detected them.
 
 ## Diagrams and binaries
 
@@ -91,7 +91,7 @@ The generated LikeC4 sources cover the extracted reconcile flow, the watch route
 | `pkg/`, `LIBRARY.md`, `START-HERE.md` | Public APIs, library reference and first walkthrough |
 | `examples/database/` | Sample controller: source, authored semantics, generated models, traces and report |
 | `examples/refsystem/` | Reference system: API types, scheme and CRD manifests |
-| `examples/configmirror/`, `examples/runtimegroup/`, `testdata/consumer/` | Handwritten-model controller, runtime profile and external-module smoke test |
+| `examples/configmirror/`, `examples/runtimegroup/`, `testdata/consumer/` | Generated-model controller (Checkpoint A), runtime profile and external-module smoke test |
 | `pkg/sourcegen/`, `pkg/goflow/`, `pkg/process/`, `pkg/watchgen/`, `pkg/dynamicgen/` | Structure, behaviour, watch and API-access extraction |
 | `pkg/contracts/`, `pkg/composition/`, `pkg/model/`, `pkg/expr/` | Contract checks, composition, model compilation, CEL subset |
 | `pkg/effect/`, `pkg/controllerruntime/`, `pkg/conformance/`, `pkg/quint/`, `pkg/krm/` | Effect gating, runtime harness, replay, Quint driver, strict KRM loading |
