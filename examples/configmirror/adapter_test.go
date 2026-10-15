@@ -2,53 +2,48 @@ package configmirror
 
 import (
 	"context"
-	"generative-architecture/pkg/conformance"
 	"path/filepath"
-	"strings"
+	"reflect"
 	"testing"
 	"time"
+
+	"generative-architecture/pkg/conformance"
+	"generative-architecture/pkg/krm"
+	"generative-architecture/pkg/model"
 )
 
-var scenarios = map[string][]string{
-	"copy":              {"enqueue", "begin", "readSource", "readTarget", "commit", "finish"},
-	"stale-cache":       {"changeSource", "enqueue", "begin", "readSource", "deliverCache", "readTarget", "commit", "finish"},
-	"retained-snapshot": {"enqueue", "begin", "readSource", "changeSource", "deliverCache", "readTarget", "commit", "finish"},
-	"dirty":             {"enqueue", "begin", "enqueue", "enqueue", "readSource", "readTarget", "commit", "finish", "begin", "readSource", "readTarget", "commit", "finish"},
-	"retry":             {"enqueue", "begin", "readSource", "readTarget", "writeError", "finish", "advance", "advance", "fire", "begin", "readSource", "readTarget", "commit", "finish"},
-	"source-error":      {"enqueue", "begin", "readSourceError", "finish"},
-	"target-error":      {"enqueue", "begin", "readSource", "readTargetError", "finish"},
-}
-
-func TestScenarios(t *testing.T) {
-	m, err := Load("system.yaml")
+// committedModel loads the generated model the evidence was produced from.
+func committedModel(t *testing.T) (model.Spec, *model.Compiled) {
+	t.Helper()
+	var spec model.Spec
+	if _, err := krm.Read(SpecFile, "TransitionModel", &spec); err != nil {
+		t.Fatal(err)
+	}
+	m, err := model.Compile(spec)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for name, steps := range scenarios {
+	return spec, m
+}
+
+func TestScenarios(t *testing.T) {
+	spec, m := committedModel(t)
+	for name, events := range Scenarios {
 		t.Run(name, func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			a, err := New(ctx, m.Effects())
+			trace, err := Scenario(spec, events...)
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer a.Close()
-			trace, err := conformance.Scenario(m, steps...)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if _, err = conformance.Replay(ctx, m, trace, a); err != nil {
+			if _, err = Replay(context.Background(), m, trace); err != nil {
 				t.Fatal(err)
 			}
 		})
 	}
 }
+
 func TestQuintTraces(t *testing.T) {
-	m, err := Load("system.yaml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	paths, err := filepath.Glob("traces/*.itf.json")
+	_, m := committedModel(t)
+	paths, err := filepath.Glob(TraceGlob)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,56 +52,81 @@ func TestQuintTraces(t *testing.T) {
 	}
 	for _, path := range paths {
 		t.Run(filepath.Base(path), func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			a, err := New(ctx, m.Effects())
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer a.Close()
 			trace, err := conformance.ReadITF(path)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err = conformance.Replay(ctx, m, trace, a); err != nil {
+			if _, err = Replay(context.Background(), m, trace); err != nil {
 				t.Fatal(err)
 			}
 		})
 	}
 }
+
+// The adapter observes the abstraction's object state, the cache's view of
+// the cached source and the runtime queue; the process locals (program
+// counter, snapshots, errors, versions) stay model-internal.
+func TestObservedVariables(t *testing.T) {
+	_, m := committedModel(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	a, err := New(ctx, m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+	want := []string{
+		"ConfigMap_copy_data_value", "ConfigMap_copy_exists", "ConfigMap_source_data_value", "ConfigMap_source_exists",
+		"cached_ConfigMap_source_data_value", "dirty", "due", "now", "processing", "ready", "retries",
+	}
+	if got := a.Observed(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("observed %v, want %v", got, want)
+	}
+}
+
+// Without mutations the committed evidence replays cleanly, so whatever a
+// mutated build reports is the mutation's doing.
+func TestUnmutatedDetectsNothing(t *testing.T) {
+	detected, err := Detect(context.Background(), ".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(detected) != 0 {
+		t.Fatalf("unmutated build detected %v", detected)
+	}
+}
+
+// The mutation suite compiles each mutant with the go command and replays
+// the committed evidence through it: both mutations must be detected by the
+// expected divergence.
 func TestMutationsDetected(t *testing.T) {
-	m, err := Load("system.yaml")
+	if testing.Short() {
+		t.Skip("compiles one mutant per mutation")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	suite, matrix, err := RunMutations(ctx, filepath.Join("..", ".."), ".")
 	if err != nil {
 		t.Fatal(err)
 	}
-	for mutation, scenario := range map[string]string{"direct-source": "stale-cache", "wrong-write": "copy"} {
-		t.Run(mutation, func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			a, err := newAdapter(ctx, m.Effects(), mutation)
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer a.Close()
-			trace, err := conformance.Scenario(m, scenarios[scenario]...)
-			if err != nil {
-				t.Fatal(err)
-			}
-			_, err = conformance.Replay(ctx, m, trace, a)
-			if err == nil || !strings.Contains(err.Error(), "conformance mismatch") {
-				t.Fatalf("mutation escaped or failed for unrelated reason: %v", err)
-			}
-		})
+	var names []string
+	for _, m := range suite.Spec.Mutations {
+		names = append(names, m.Name)
 	}
+	if !reflect.DeepEqual(names, []string{"direct-source", "wrong-write"}) {
+		t.Fatalf("mutations %v", names)
+	}
+	if escaped := suite.Escaped(matrix); len(escaped) != 0 {
+		t.Fatalf("escaped mutations %v; matrix:\n%s", escaped, matrix)
+	}
+	t.Logf("detection matrix:\n%s", matrix)
 }
+
 func TestCancelAtEveryBoundary(t *testing.T) {
-	m, err := Load("system.yaml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, steps := range [][]string{{"enqueue", "begin"}, {"enqueue", "begin", "readSource"}, {"enqueue", "begin", "readSource", "readTarget"}} {
+	_, m := committedModel(t)
+	for _, steps := range [][]string{{"enqueue", "begin"}, {"enqueue", "begin", "readSource_found"}, {"enqueue", "begin", "readSource_found", "readTarget_found"}} {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		a, err := New(ctx, m.Effects())
+		a, err := New(ctx, m)
 		if err != nil {
 			cancel()
 			t.Fatal(err)

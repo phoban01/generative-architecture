@@ -14,9 +14,10 @@ import (
 	"generative-architecture/pkg/project"
 )
 
-// The Project and Abstraction documents are the authored inputs Checkpoint A
-// generates everything else from. Until then they must load, validate and
-// agree with the handwritten controller, adapter and model.
+// The Project and Abstraction documents are the authored inputs the model,
+// the replay adapter and the evidence are generated from. They must load,
+// validate and agree with the controller, the adapter fixtures and the
+// generated model.
 
 var configMap = ir.GVK{Version: "v1", Kind: "ConfigMap"}
 
@@ -81,7 +82,7 @@ func TestAbstractionDocument(t *testing.T) {
 	}
 }
 
-func TestDocumentsAgreeWithHandwrittenModel(t *testing.T) {
+func TestDocumentsAgreeWithGeneratedModel(t *testing.T) {
 	p, err := project.Load("project.yaml")
 	if err != nil {
 		t.Fatal(err)
@@ -93,11 +94,15 @@ func TestDocumentsAgreeWithHandwrittenModel(t *testing.T) {
 	if p.Spec.Bounds["maxObjectsPerResource"] != a.Spec.Bounds.MaxObjectsPerResource || p.Spec.Bounds["maxInvocations"] != a.Spec.Bounds.MaxInvocations {
 		t.Fatalf("project bounds %v differ from abstraction bounds %+v", p.Spec.Bounds, a.Spec.Bounds)
 	}
-	m, err := Load("system.yaml")
+	spec, err := Generate(".")
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Every effect of the handwritten model touches the abstracted resource,
+	m, err := model.Compile(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Every effect of the generated model touches the abstracted resource,
 	// with the operations the abstraction keeps.
 	resource := effect.Resource{Group: configMap.Group, Version: configMap.Version, Kind: configMap.Kind}
 	descriptors := m.Effects().Descriptors()
@@ -117,10 +122,6 @@ func TestDocumentsAgreeWithHandwrittenModel(t *testing.T) {
 		}
 	}
 	// The local the abstraction keeps is a state variable of the model.
-	var spec model.Spec
-	if _, err = krm.Read("system.yaml", "TransitionModel", &spec); err != nil {
-		t.Fatal(err)
-	}
 	for _, l := range a.Spec.Locals {
 		if v, ok := spec.State[l.Name]; !ok || v.Type != l.Type {
 			t.Fatalf("local %s (%s) is not model state: %+v", l.Name, l.Type, spec.State)
@@ -141,21 +142,21 @@ func loadConstraints(t *testing.T) []model.Property {
 
 func TestConstraintsEvaluateAgainstSavedTraces(t *testing.T) {
 	properties := loadConstraints(t)
-	var spec model.Spec
-	if _, err := krm.Read("system.yaml", "TransitionModel", &spec); err != nil {
+	spec, err := Generate(".")
+	if err != nil {
 		t.Fatal(err)
 	}
-	// The independent document carries the model's properties verbatim until
-	// Checkpoint A removes them from system.yaml.
-	if !reflect.DeepEqual(properties, spec.Properties) {
-		t.Fatalf("constraints.yaml %+v differs from system.yaml properties %+v", properties, spec.Properties)
+	// The generated model carries the independent constraints verbatim, after
+	// the runtime profile's own properties.
+	if n := len(spec.Properties); n < len(properties) || !reflect.DeepEqual(spec.Properties[n-len(properties):], properties) {
+		t.Fatalf("generated properties %+v do not end with constraints.yaml %+v", spec.Properties, properties)
 	}
 	spec.Properties = properties
 	constrained, err := model.Compile(spec)
 	if err != nil {
 		t.Fatal(err)
 	}
-	paths, err := filepath.Glob("traces/*.itf.json")
+	paths, err := filepath.Glob(TraceGlob)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -172,7 +173,7 @@ func TestConstraintsEvaluateAgainstSavedTraces(t *testing.T) {
 			if err = constrained.Check(s.Values, s.Event); err != nil {
 				t.Fatalf("%s step %d (%s): %v", filepath.Base(path), i, s.Event, err)
 			}
-			if s.Event == "commit" {
+			if s.Event == "writeTarget_ok" {
 				commits++
 			}
 		}
@@ -181,7 +182,7 @@ func TestConstraintsEvaluateAgainstSavedTraces(t *testing.T) {
 		t.Fatal("no trace exercises writesObservedValue")
 	}
 	// The check is not vacuous: a constraint the traces violate is reported.
-	spec.Properties = append(properties, model.Property{Name: "neverCommits", Expression: `event != "commit"`})
+	spec.Properties = append(properties, model.Property{Name: "neverCommits", Expression: `event != "writeTarget_ok"`})
 	violating, err := model.Compile(spec)
 	if err != nil {
 		t.Fatal(err)

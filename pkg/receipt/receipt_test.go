@@ -63,7 +63,7 @@ func TestCollectClosure(t *testing.T) {
 	if r.Module != "generative-architecture" {
 		t.Fatalf("module %q", r.Module)
 	}
-	for _, want := range []string{"examples/configmirror/controller.go", "examples/configmirror/adapter.go", "pkg/conformance/replay.go", "pkg/controllerruntime/worker.go", "pkg/krm/resource.go", "pkg/model/model.go", "pkg/expr/cel.go", "go.mod", "go.sum", "examples/configmirror/system.yaml"} {
+	for _, want := range []string{"examples/configmirror/controller.go", "examples/configmirror/adapter.go", "pkg/conformance/replay.go", "pkg/controllerruntime/worker.go", "pkg/krm/resource.go", "pkg/model/model.go", "pkg/expr/cel.go", "go.mod", "go.sum", "examples/configmirror/system.yaml", "pkg/summaries/data/get.yaml"} {
 		if !has(r, want) {
 			t.Errorf("closure lacks %s", want)
 		}
@@ -145,6 +145,8 @@ func TestCompareTools(t *testing.T) {
 
 func TestWriteRead(t *testing.T) {
 	r := collect(t)
+	r.Bounds = map[string]int{"maxObjectsPerResource": 2, "maxInvocations": 3}
+	r.Excludes = []string{"delete", "list"}
 	path := filepath.Join(t.TempDir(), "receipt.yaml")
 	if err := Write(path, "config-mirror", r); err != nil {
 		t.Fatal(err)
@@ -153,8 +155,13 @@ func TestWriteRead(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if back.Root != r.Root || !reflect.DeepEqual(back.Files, r.Files) || !reflect.DeepEqual(back.Tools, r.Tools) || !reflect.DeepEqual(back.Packages, r.Packages) || !reflect.DeepEqual(back.Extra, r.Extra) || back.Module != r.Module {
+	if back.Root != r.Root || !reflect.DeepEqual(back.Files, r.Files) || !reflect.DeepEqual(back.Tools, r.Tools) || !reflect.DeepEqual(back.Packages, r.Packages) || !reflect.DeepEqual(back.Extra, r.Extra) || back.Module != r.Module || !reflect.DeepEqual(back.Bounds, r.Bounds) || !reflect.DeepEqual(back.Excludes, r.Excludes) {
 		t.Fatalf("round trip changed the receipt:\n%+v\n%+v", r, back)
+	}
+	bad := r
+	bad.Bounds = map[string]int{"maxInvocations": 0}
+	if err := bad.Validate(); err == nil || !strings.Contains(err.Error(), "positive") {
+		t.Fatalf("non-positive bound accepted: %v", err)
 	}
 	if drift, err := Verify(back); err != nil || len(drift) != 0 {
 		t.Fatalf("drift %v, err %v", drift, err)

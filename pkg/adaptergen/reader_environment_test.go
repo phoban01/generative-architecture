@@ -92,3 +92,45 @@ func TestGenerateReaderEnvironmentRejects(t *testing.T) {
 		t.Fatalf("ChangeEvent(source) = %s", got)
 	}
 }
+
+func TestGenerateReaderValueEnvironment(t *testing.T) {
+	a, err := fixture.Abstraction()
+	if err != nil {
+		t.Fatal(err)
+	}
+	src, err := adaptergen.GenerateReaderValueEnvironment(fixture.Package, a.Spec, []string{"db1"}, []string{"db1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := typecheck(t, src)
+	params, _ := signature(t, p, "ApplyEnvironment")
+	if len(params) != 4 {
+		t.Fatalf("ApplyEnvironment takes %v", params)
+	}
+	assertNoModelState(t, p)
+	text := string(src)
+	// One event per domain value, the zero value included; no cycling.
+	for _, want := range []string{
+		`case "changeDb1_empty":`,
+		`unstructured.SetNestedField(obj.Object, "", "status", "endpoint")`,
+		`case "changeDb1_1":`,
+		`unstructured.SetNestedField(obj.Object, "db-1.internal", "status", "endpoint")`,
+		`case "deliverCache":`,
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("generated source lacks %q", want)
+		}
+	}
+	if strings.Contains(text, "environmentCycle") || strings.Contains(text, `case "changeDb1":`) {
+		t.Error("per-value environment cycles values")
+	}
+	// The DatabaseInstance declares two fields but no value domain.
+	if _, err := adaptergen.GenerateReaderValueEnvironment(fixture.Package, a.Spec, []string{"inst1"}, nil); err == nil || !strings.Contains(err.Error(), "exactly one declared field with a value domain") {
+		t.Fatalf("object without a domain: %v", err)
+	}
+	for literal, want := range map[string]string{`"a"`: "changeSource_a", `""`: "changeSource_empty", `"x-1"`: "changeSource_2", "3": "changeSource_3", "true": "changeSource_true"} {
+		if got := adaptergen.ChangeValueEvent("source", literal, 2); got != want {
+			t.Errorf("ChangeValueEvent(source, %s, 2) = %s, want %s", literal, got, want)
+		}
+	}
+}

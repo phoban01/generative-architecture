@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"generative-architecture/pkg/abstraction"
+	"generative-architecture/pkg/adaptergen"
 	cr "generative-architecture/pkg/controllerruntime"
 	"generative-architecture/pkg/effect"
 	"generative-architecture/pkg/expr"
@@ -81,8 +82,9 @@ func localVariable(local string, fieldPath []string) string {
 	return local + "_" + strings.Join(fieldPath, "_")
 }
 
-// cacheVariable is the informer cache's copy of an object variable.
-func cacheVariable(v string) string { return "cache_" + v }
+// cacheVariable is the informer cache's copy of an object variable, named
+// as the generated replay projection names the cache reader's view.
+func cacheVariable(v string) string { return adaptergen.CachedVariable(v) }
 
 // ExtractOptions builds the typed-frontend options for Reconcile: client
 // calls resolve by callee symbol to their effects and summary bindings, and
@@ -303,10 +305,8 @@ func (x *extraction) readInto(local string) (string, error) {
 }
 
 // Declarations for the model that are neither in the Abstraction document
-// nor derivable from the source: the fixtures the replay creates, the
-// runtime profile the adapter's worker runs with, and the vocabulary that
-// translates constraints.yaml, written against the handwritten model, into
-// generated names.
+// nor derivable from the source: the fixtures the replay creates and the
+// runtime profile the adapter's worker runs with.
 var (
 	// initialValues are the fixtures' selected field values; every
 	// abstracted object exists before the controller runs.
@@ -317,12 +317,17 @@ var (
 	runtimeWorkers    = 1
 	runtimeRetryTicks = 2
 	runtimeMaxTicks   = 20
-	// constraintNames and constraintEvents translate the handwritten
-	// vocabulary of constraints.yaml (target, the commit event) into
-	// generated names until the constraints are rewritten against the
-	// generated model.
-	constraintNames  = map[string]expr.Expression{"target": "ConfigMap_copy_data_value"}
-	constraintEvents = map[string]string{"commit": "writeTarget_ok"}
+)
+
+// Runtime events: the actions of the controller-runtime profile the model
+// composes with the process, which replay drives through the worker.
+const (
+	EventEnqueue     = "enqueue"
+	EventBegin       = "begin"
+	EventFinish      = "finish"
+	EventFinishError = "finishError"
+	EventAdvance     = "advance"
+	EventFire        = "fire"
 )
 
 // Model variables the composition adds to the abstraction's state.
@@ -339,7 +344,7 @@ const (
 // timer and clock from controllerruntime.BuildGroupModel for one controller
 // and one key, environment actions from the abstraction's value domains and
 // the cached reads, and properties from the runtime model and
-// constraints.yaml.
+// constraints.yaml, which is written against the generated names.
 //
 // The package is loaded from root itself; inputs_test.go checks that
 // project.yaml selects exactly this package and constraints document.
@@ -483,17 +488,7 @@ func compose(abs abstraction.Abstraction, program goflow.Program, constraints []
 	actions = append(actions, runtime.Actions...)
 	spec.Actions = append(actions, spec.Actions...)
 	spec.Properties = runtime.Properties
-	for _, c := range constraints {
-		translated := string(c.Expression)
-		for from, to := range constraintEvents {
-			translated = strings.ReplaceAll(translated, strconv.Quote(from), strconv.Quote(to))
-		}
-		e, err := expr.Rewrite(expr.Expression(translated), constraintNames)
-		if err != nil {
-			return model.Spec{}, fmt.Errorf("constraint %s: %w", c.Name, err)
-		}
-		spec.Properties = append(spec.Properties, model.Property{Name: c.Name, Expression: e})
-	}
+	spec.Properties = append(spec.Properties, constraints...)
 	if _, err := model.Compile(spec); err != nil {
 		return model.Spec{}, err
 	}
@@ -562,7 +557,7 @@ func runtimeActions(abs abstraction.Abstraction, program goflow.Program, reset m
 		out.State[short] = v
 	}
 	rename := func(e expr.Expression) (expr.Expression, error) { return expr.Rewrite(e, names) }
-	actionNames := map[string]string{"advance": "advance", prefix + "enqueue": "enqueue", prefix + "start": "begin", prefix + "fire": "fire", prefix + "success": "finish", prefix + "error": "finishError"}
+	actionNames := map[string]string{"advance": EventAdvance, prefix + "enqueue": EventEnqueue, prefix + "start": EventBegin, prefix + "fire": EventFire, prefix + "success": EventFinish, prefix + "error": EventFinishError}
 	for _, a := range g.Spec.Actions {
 		name, ok := actionNames[a.Name]
 		if !ok {
@@ -582,7 +577,7 @@ func runtimeActions(abs abstraction.Abstraction, program goflow.Program, reset m
 			}
 		}
 		switch name {
-		case "begin":
+		case EventBegin:
 			if abs.Spec.Bounds.MaxInvocations > 0 {
 				guard = expr.Expression(fmt.Sprintf("%s && retries < %d", guard, abs.Spec.Bounds.MaxInvocations))
 			}
@@ -591,9 +586,9 @@ func runtimeActions(abs abstraction.Abstraction, program goflow.Program, reset m
 			}
 			updates[pcVariable] = expr.Expression(strconv.Itoa(program.Entry))
 			updates[finishedVariable] = "false"
-		case "finish":
+		case EventFinish:
 			guard = expr.Expression(fmt.Sprintf("%s && %s && !%s", guard, finishedVariable, failedVariable))
-		case "finishError":
+		case EventFinishError:
 			guard = expr.Expression(fmt.Sprintf("%s && %s && %s", guard, finishedVariable, failedVariable))
 		}
 		out.Actions = append(out.Actions, model.Action{Name: name, Guard: guard, Updates: updates})
@@ -610,7 +605,8 @@ func runtimeActions(abs abstraction.Abstraction, program goflow.Program, reset m
 
 // environmentActions lets the environment set an object the controller
 // reads but never writes to each value of its domain (one action per
-// value), and deliver the API server's state of each cached object to the
+// value, named as adaptergen's per-value environment names its events),
+// and deliver the API server's state of each cached object to the
 // informer cache.
 func environmentActions(reads, writes, cached map[string]objectInfo) []model.Action {
 	var out []model.Action
@@ -619,10 +615,9 @@ func environmentActions(reads, writes, cached map[string]objectInfo) []model.Act
 		if _, written := writes[exists]; written {
 			continue
 		}
-		name := "change" + strings.ToUpper(o.object.ID[:1]) + o.object.ID[1:]
 		for i, v := range o.resource.ValueDomains[abstraction.PathKey(o.resource.Fields[0].Path)] {
 			out = append(out, model.Action{
-				Name:    name + "_" + valueName(v, i),
+				Name:    adaptergen.ChangeValueEvent(o.object.ID, v, i),
 				Guard:   expr.Expression(fmt.Sprintf("%s != %s", o.value, v)),
 				Updates: map[string]expr.Expression{o.value: expr.Expression(v), o.version: expr.Expression(o.version + " + 1")},
 			})
@@ -630,30 +625,13 @@ func environmentActions(reads, writes, cached map[string]objectInfo) []model.Act
 	}
 	for _, exists := range sortedObjects(cached) {
 		o := cached[exists]
-		name := "deliverCache"
+		name := adaptergen.DeliverCacheEvent
 		if len(cached) > 1 {
 			name += "_" + o.object.ID
 		}
 		out = append(out, model.Action{Name: name, Guard: "true", Updates: map[string]expr.Expression{cacheVariable(o.value): expr.Expression(o.value), cacheVariable(o.version): expr.Expression(o.version)}})
 	}
 	return out
-}
-
-// valueName turns a domain literal into an action-name suffix.
-func valueName(literal string, index int) string {
-	v, err := strconv.Unquote(literal)
-	if err != nil {
-		v = literal
-	}
-	if v == "" {
-		return "empty"
-	}
-	for _, r := range v {
-		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9') {
-			return strconv.Itoa(index)
-		}
-	}
-	return v
 }
 
 func sortedObjects(m map[string]objectInfo) []string {

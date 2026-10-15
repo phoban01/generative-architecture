@@ -28,22 +28,22 @@ type Boundary struct {
 // names. It returns false when event names no boundary.
 func ApplyBoundary(ctx context.Context, gate *effect.Gate, event string) (Boundary, bool, error) {
 	switch event {
-	case "readSource":
+	case "readSource_found":
 		b, err := gatingComplete(ctx, gate, "readSource", 1, &effect.Key{Namespace: "demo", Name: "source"}, false)
 		return b, true, err
-	case "readSourceError":
+	case "readSource_error":
 		b, err := gatingComplete(ctx, gate, "readSource", 1, &effect.Key{Namespace: "demo", Name: "source"}, true)
 		return b, true, err
-	case "readTarget":
+	case "readTarget_found":
 		b, err := gatingComplete(ctx, gate, "readTarget", 2, &effect.Key{Namespace: "demo", Name: "copy"}, false)
 		return b, true, err
-	case "readTargetError":
+	case "readTarget_error":
 		b, err := gatingComplete(ctx, gate, "readTarget", 2, &effect.Key{Namespace: "demo", Name: "copy"}, true)
 		return b, true, err
-	case "commit":
+	case "writeTarget_ok":
 		b, err := gatingComplete(ctx, gate, "writeTarget", 3, &effect.Key{Namespace: "demo", Name: "copy"}, false)
 		return b, true, err
-	case "writeError":
+	case "writeTarget_error":
 		b, err := gatingComplete(ctx, gate, "writeTarget", 3, &effect.Key{Namespace: "demo", Name: "copy"}, true)
 		return b, true, err
 	}

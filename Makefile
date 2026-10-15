@@ -13,7 +13,8 @@ api-generate:
 walkthrough:
 	go run ./cmd/walkthrough
 
-# Unrelated controller using only the public library; handwritten behaviour model.
+# Unrelated controller using only the public library: generate its model, sample
+# 40 traces with Quint, replay them, run its mutation suite and write its receipt.
 library-demo:
 	go run ./cmd/library-demo --refresh
 
