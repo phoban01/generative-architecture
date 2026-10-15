@@ -19,6 +19,23 @@ type Projection struct {
 	// Type is the model type of the value: string, bool or int (read as an
 	// int64 through unstructured).
 	Type string
+	// Reader names the client.Reader parameter a reader projection reads
+	// the object through: ReaderAPI (the default when empty) or ReaderCache.
+	// Dynamic-client projections accept only the default.
+	Reader string
+}
+
+// Readers a generated reader projection takes.
+const (
+	ReaderAPI   = "api"
+	ReaderCache = "cache"
+)
+
+func (p Projection) reader() string {
+	if p.Reader == "" {
+		return ReaderAPI
+	}
+	return p.Reader
 }
 
 // Exists reports whether the projection is an object's existence flag.
@@ -45,6 +62,7 @@ func FromAbstraction(a abstraction.Abstraction) []Projection {
 // projection is declared for the object, every field projection records its
 // own <State>Exists flag.
 type projectedObject struct {
+	Reader string
 	Key    ir.ObjectRef
 	Exists []string
 	Fields []projectedField
@@ -67,8 +85,12 @@ func groupProjections(ps []Projection) ([]projectedObject, error) {
 	if len(ps) == 0 {
 		return nil, fmt.Errorf("at least one projection is required")
 	}
+	type readKey struct {
+		reader string
+		key    ir.ObjectRef
+	}
 	var objects []projectedObject
-	index := map[ir.ObjectRef]int{}
+	index := map[readKey]int{}
 	states := map[string]bool{}
 	for _, p := range ps {
 		if p.State == "" {
@@ -82,6 +104,9 @@ func groupProjections(ps []Projection) ([]projectedObject, error) {
 		if err != nil {
 			return nil, fmt.Errorf("projection %s: %w", p.State, err)
 		}
+		if r := p.reader(); r != ReaderAPI && r != ReaderCache {
+			return nil, fmt.Errorf("projection %s: unknown reader %q; expected api or cache", p.State, p.Reader)
+		}
 		acc, ok := accessors[p.Type]
 		if !ok {
 			return nil, fmt.Errorf("projection %s: unknown type %q; expected string, bool or int", p.State, p.Type)
@@ -91,11 +116,11 @@ func groupProjections(ps []Projection) ([]projectedObject, error) {
 				return nil, fmt.Errorf("projection %s: JSON path has an empty element", p.State)
 			}
 		}
-		i, ok := index[key]
+		i, ok := index[readKey{p.reader(), key}]
 		if !ok {
 			i = len(objects)
-			index[key] = i
-			objects = append(objects, projectedObject{Key: key})
+			index[readKey{p.reader(), key}] = i
+			objects = append(objects, projectedObject{Reader: p.reader(), Key: key})
 		}
 		if p.Exists() {
 			if p.Type != abstraction.TypeBool {
@@ -137,6 +162,11 @@ func GenerateProjection(pkg string, ps []Projection) ([]byte, error) {
 	objects, err := groupProjections(ps)
 	if err != nil {
 		return nil, err
+	}
+	for _, o := range objects {
+		if o.Reader != ReaderAPI {
+			return nil, fmt.Errorf("projection of %s: a dynamic-client projection reads through the API only, not %s", o.Key, o.Reader)
+		}
 	}
 	return render("projection", projectionTemplate, struct {
 		Header  string
