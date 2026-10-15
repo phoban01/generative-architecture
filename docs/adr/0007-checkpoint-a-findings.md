@@ -86,7 +86,8 @@ are left out of its gating; a test asserts no trace reaches them.
 
 - Issues gated on Checkpoint A (client-surface expansion, upstream boundaries, diagram
   views) may proceed.
-- New issues: overlay support in `goflow.Load`; generated reference checks; map keys in
-  identity and reference paths; full-map replacement on map-literal writes; generated
-  worker-event routing; trace sampling steered to completion; generating the database
-  sample's model; and a decision on receipt drift scope.
+- New issues: overlay support in `goflow.Load` (#135); full-map replacement on map-literal
+  writes (#136); generated reference checks (#137); map keys in identity and reference
+  paths (#138); generated worker-event routing (#139); trace sampling steered to completion
+  (#140); generating the database sample's model (#141); and a decision on receipt drift
+  scope (#142).
