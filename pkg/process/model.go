@@ -19,6 +19,9 @@ type Variant struct {
 	Guard   expr.Expression            `yaml:"guard"`
 	Updates map[string]expr.Expression `yaml:"updates"`
 	Effect  string                     `yaml:"effect,omitempty"`
+	// Error is the error class the outcome reports (see summaries); empty
+	// means success. It is recorded in the node's error symbol.
+	Error string `yaml:"error,omitempty"`
 }
 
 // Config is the payload of a KRM ProcessSemantics document plus the
@@ -114,6 +117,9 @@ func Expand(base model.Spec, p goflow.Program, c Config) (model.Spec, error) {
 				}
 				u[k] = rewritten
 			}
+			if err := recordError(base.State, n, v, u); err != nil {
+				return base, err
+			}
 			guard := v.Guard
 			if guard == "" {
 				return base, fmt.Errorf("operation guard required")
@@ -125,4 +131,30 @@ func Expand(base model.Spec, p goflow.Program, c Config) (model.Spec, error) {
 		return base, err
 	}
 	return base, nil
+}
+
+// recordError sets the error symbol a node binds its call's error to (see
+// goflow.Node.Error): true for an outcome with an error class, false for a
+// success. Outcome symbols the frontend declared for error predicates, such
+// as err_notFound for apierrors.IsNotFound(err), are set when they are
+// model state. The error symbol itself must be model state, so that no
+// failure is dropped silently.
+func recordError(state map[string]model.Variable, n goflow.Node, v Variant, u map[string]expr.Expression) error {
+	if n.Error == "" || n.Kind == "branch" || n.Kind == "return" || n.Kind == "assign" {
+		return nil
+	}
+	name := string(n.Error)
+	if s, ok := state[name]; !ok || s.Type != "bool" {
+		return fmt.Errorf("node %d binds its error to %s, which is not a bool state variable", n.ID, name)
+	}
+	if _, set := u[name]; set {
+		return fmt.Errorf("node %d: outcome %s updates its error symbol %s directly", n.ID, v.Name, name)
+	}
+	u[name] = expr.Expression(strconv.FormatBool(v.Error != ""))
+	for _, class := range []string{summaries.ErrorNotFound, summaries.ErrorAlreadyExists, summaries.ErrorConflict, summaries.ErrorTransient} {
+		if s, ok := state[name+"_"+class]; ok && s.Type == "bool" {
+			u[name+"_"+class] = expr.Expression(strconv.FormatBool(v.Error == class))
+		}
+	}
+	return nil
 }
