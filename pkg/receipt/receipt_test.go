@@ -12,7 +12,7 @@ const root = "../.."
 
 var (
 	patterns = []string{"./examples/configmirror"}
-	extra    = []string{"examples/configmirror/system.yaml"}
+	extra    = []string{"examples/configmirror/abstraction.yaml"}
 	tools    = map[string]string{"quint": "0.33.1", "likec4": "1.59.2"}
 )
 
@@ -63,7 +63,7 @@ func TestCollectClosure(t *testing.T) {
 	if r.Module != "generative-architecture" {
 		t.Fatalf("module %q", r.Module)
 	}
-	for _, want := range []string{"examples/configmirror/controller.go", "examples/configmirror/adapter.go", "pkg/conformance/replay.go", "pkg/controllerruntime/worker.go", "pkg/krm/resource.go", "pkg/model/model.go", "pkg/expr/cel.go", "go.mod", "go.sum", "examples/configmirror/system.yaml", "pkg/summaries/data/get.yaml"} {
+	for _, want := range []string{"examples/configmirror/controller.go", "examples/configmirror/adapter.go", "pkg/conformance/replay.go", "pkg/controllerruntime/worker.go", "pkg/krm/resource.go", "pkg/model/model.go", "pkg/expr/cel.go", "go.mod", "go.sum", "examples/configmirror/abstraction.yaml", "pkg/summaries/data/get.yaml"} {
 		if !has(r, want) {
 			t.Errorf("closure lacks %s", want)
 		}
@@ -105,7 +105,7 @@ func TestVerifySeesDrift(t *testing.T) {
 	if err = os.WriteFile(controller, append(b, []byte("\n// drift\n")...), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if err = os.Remove(filepath.Join(copied.Root, "examples", "configmirror", "system.yaml")); err != nil {
+	if err = os.Remove(filepath.Join(copied.Root, "examples", "configmirror", "abstraction.yaml")); err != nil {
 		t.Fatal(err)
 	}
 	if err = os.WriteFile(filepath.Join(copied.Root, "examples", "configmirror", "extra.go"), []byte("package configmirror\n"), 0644); err != nil {
@@ -118,7 +118,7 @@ func TestVerifySeesDrift(t *testing.T) {
 	want := []string{
 		"examples/configmirror/extra.go added",
 		"examples/configmirror/controller.go changed",
-		"examples/configmirror/system.yaml missing",
+		"examples/configmirror/abstraction.yaml missing",
 	}
 	if len(drift) != len(want) {
 		t.Fatalf("drift %v, want %v", drift, want)

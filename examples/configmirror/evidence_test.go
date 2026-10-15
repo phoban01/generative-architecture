@@ -144,10 +144,6 @@ func TestEvidenceReceipt(t *testing.T) {
 			t.Errorf("receipt does not record %s", want)
 		}
 	}
-	// Nothing in the evidence path reads the handwritten model.
-	if recorded["examples/configmirror/system.yaml"] {
-		t.Error("receipt records the handwritten system.yaml")
-	}
 	drift, err := receipt.Verify(rec)
 	if err != nil {
 		t.Fatal(err)
