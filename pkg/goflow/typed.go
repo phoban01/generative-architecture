@@ -143,6 +143,9 @@ func (e *extractor) bindResults(n Node, x *ast.AssignStmt) (Node, error) {
 			return n, e.diagnose(lhs, "assign", "unknown assignment target "+target)
 		}
 		n.Results = append(n.Results, expr.Expression(target))
+		if obj := e.info.ObjectOf(id); obj != nil && isErrorType(obj.Type()) {
+			n.Error = expr.Expression(target)
+		}
 	}
 	return n, nil
 }
