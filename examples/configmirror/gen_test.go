@@ -39,8 +39,6 @@ var regenerateAdapter = flag.Bool("regenerate-adapter", false, "rewrite the gene
 // generatedPackage is the package the adapter files are generated into.
 const generatedPackage = "generated"
 
-const clientPackage = "sigs.k8s.io/controller-runtime/pkg/client"
-
 // reconcilerKeys bind the Go expressions the reconciler addresses objects by
 // to the objects the adapter fixture (newAdapter) supplies: the worker
 // reconciles the source's request and the reconciler's Target is the copy.
@@ -92,8 +90,8 @@ var extracted struct {
 	err   error
 }
 
-// extractReconcile extracts Reconciler.Reconcile once per test run.
-func extractReconcile() (reconcileFacts, error) {
+// extractAdapterFacts extracts Reconciler.Reconcile once per test run.
+func extractAdapterFacts() (reconcileFacts, error) {
 	extracted.once.Do(func() { extracted.facts, extracted.err = extractFacts() })
 	return extracted.facts, extracted.err
 }
@@ -151,7 +149,7 @@ func extractFacts() (reconcileFacts, error) {
 		}
 		p.object = goflow.Code(obj)
 		var err error
-		if p.resource, err = resourceOf(info.TypeOf(obj)); err != nil {
+		if p.resource, err = adapterResourceOf(info.TypeOf(obj)); err != nil {
 			return goflow.Node{}, false, err
 		}
 		d, err := m.Effects().Lookup(p.resource, p.call.Operation, p.call.Consistency)
@@ -300,8 +298,8 @@ func calleeOf(info *types.Info, call *ast.CallExpr) (goflow.Callee, bool) {
 	return c, true
 }
 
-// resourceOf maps a typed core API object to its resource.
-func resourceOf(t types.Type) (effect.Resource, error) {
+// adapterResourceOf maps a typed core API object to its resource.
+func adapterResourceOf(t types.Type) (effect.Resource, error) {
 	if p, ok := t.(*types.Pointer); ok {
 		t = p.Elem()
 	}
@@ -391,7 +389,7 @@ func adapterProjection() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	facts, err := extractReconcile()
+	facts, err := extractAdapterFacts()
 	if err != nil {
 		return nil, err
 	}
@@ -410,7 +408,7 @@ func adapterEnvironment() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	facts, err := extractReconcile()
+	facts, err := extractAdapterFacts()
 	if err != nil {
 		return nil, err
 	}
@@ -420,7 +418,7 @@ func adapterEnvironment() ([]byte, error) {
 // adapterGating generates boundary gating from the extracted process, each
 // effect pinned to the object it addresses.
 func adapterGating() ([]byte, error) {
-	facts, err := extractReconcile()
+	facts, err := extractAdapterFacts()
 	if err != nil {
 		return nil, err
 	}
@@ -463,7 +461,7 @@ func TestAdapterGeneratedFilesUpToDate(t *testing.T) {
 // copy from the API and writes it; the generators derive the cached and
 // environment-changed objects from exactly that.
 func TestAdapterExtractedProgram(t *testing.T) {
-	facts, err := extractReconcile()
+	facts, err := extractAdapterFacts()
 	if err != nil {
 		t.Fatal(err)
 	}

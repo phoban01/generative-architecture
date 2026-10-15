@@ -38,6 +38,9 @@ type Node struct {
 	ReturnError expr.Expression            `yaml:"returnError,omitempty"`
 	Updates     map[string]expr.Expression `yaml:"updates,omitempty"`
 	Results     []expr.Expression          `yaml:"results,omitempty"`
+	// Error names the Results entry bound to the call's error result, so
+	// the process lowering can record which outcomes fail.
+	Error expr.Expression `yaml:"error,omitempty"`
 }
 type Program struct {
 	Entry        int    `yaml:"entry"`
@@ -45,9 +48,16 @@ type Program struct {
 	SourceSHA256 string `yaml:"sourceSha256"`
 	MethodSHA256 string `yaml:"methodSha256"`
 }
+
+// Return describes one result of the extracted method. Error marks the
+// error result. Zero marks a result that is not modelled because every
+// return passes the zero value of its type (an empty composite literal such
+// as reconcile.Result{}); any other value is a diagnostic, and the result is
+// recorded as the empty expression.
 type Return struct {
 	Type  string
 	Error bool
+	Zero  bool
 }
 
 // Convert lowers a Go expression that must have the given model type. It is an
@@ -153,6 +163,12 @@ func (e *extractor) translate(n ast.Expr) (expr.Expression, error) {
 		if err == nil {
 			return v + "." + expr.Expression(x.Sel.Name), nil
 		}
+	case *ast.IndexExpr:
+		if e.info != nil {
+			if v, ok := e.mapEntry(x); ok {
+				return v, nil
+			}
+		}
 	case *ast.CallExpr:
 		if e.info != nil {
 			if v, ok, err := e.idiom(x); ok || err != nil {
@@ -216,17 +232,12 @@ func (e *extractor) statement(s ast.Stmt, next int) (int, error) {
 	if call := statementCall(s); call != nil {
 		if c, ok := e.callee(call); ok {
 			callee = &c
-			if n, ok := e.externalCall(c); ok {
-				return e.summarized(n, s, next)
+			n, ok, err := e.summarizeCall(c, call)
+			if err != nil {
+				return 0, err
 			}
-			if e.opts.Call != nil {
-				n, ok, err := e.opts.Call(c, call, e.expression)
-				if err != nil {
-					return 0, err
-				}
-				if ok {
-					return e.summarized(n, s, next)
-				}
+			if ok {
+				return e.summarized(n, s, next)
 			}
 		}
 	}
@@ -237,6 +248,11 @@ func (e *extractor) statement(s ast.Stmt, next int) (int, error) {
 		}
 		if ok {
 			return e.summarized(n, s, next)
+		}
+	}
+	if e.info != nil {
+		if id, ok, err := e.typedStatement(s, next); ok || err != nil {
+			return id, err
 		}
 	}
 	switch x := s.(type) {
@@ -279,7 +295,11 @@ func (e *extractor) statement(s ast.Stmt, next int) (int, error) {
 			r := e.opts.Returns[i]
 			var v expr.Expression
 			var err error
-			if r.Error && Code(result) == "nil" {
+			if r.Zero {
+				if !zeroComposite(result) {
+					return 0, e.diagnose(result, "return", "result must be the zero value of its type")
+				}
+			} else if r.Error && Code(result) == "nil" {
 				v = "false"
 			} else {
 				if r.Error && !e.opts.Errors[Code(result)] {

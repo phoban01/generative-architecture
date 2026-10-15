@@ -1,0 +1,105 @@
+apiVersion: architecture.local/v1alpha1
+kind: ExtractedProcess
+metadata:
+  name: config-mirror
+status:
+  entry: 8
+  nodes:
+    - id: 0
+      kind: return
+      go: return reconcile.Result{}, r.Client.Update(ctx, target)
+      line: 30
+      next: -1
+      returnError: err
+      results:
+        - ""
+        - err
+    - id: 1
+      kind: update
+      effect: writeTarget
+      consistency: direct
+      bindings:
+        $exists: ConfigMap_copy_exists
+        $object: ConfigMap_copy_data_value
+        $resourceVersion: ConfigMap_copy_metadata_resourceVersion
+        $snapshotVersion: target_metadata_resourceVersion
+        $value: target_data_value
+      go: r.Client.Update(ctx, target)
+      line: 30
+      next: 0
+      results:
+        - err
+      error: err
+    - id: 2
+      kind: assign
+      go: 'target.Data = map[string]string{"value": source.Data["value"]}'
+      line: 29
+      next: 1
+      updates:
+        target_data_value: snapshot
+    - id: 3
+      kind: return
+      go: return reconcile.Result{}, err
+      line: 27
+      next: -1
+      returnError: err
+      results:
+        - ""
+        - err
+    - id: 4
+      kind: branch
+      go: err != nil
+      line: 26
+      expression: err
+      next: 3
+      else: 2
+    - id: 5
+      kind: get
+      effect: readTarget
+      consistency: direct
+      bindings:
+        $exists: ConfigMap_copy_exists
+        $object: ConfigMap_copy_data_value
+        $resourceVersion: ConfigMap_copy_metadata_resourceVersion
+        $snapshot: target_data_value
+        $snapshotVersion: target_metadata_resourceVersion
+      go: err := r.APIReader.Get(ctx, r.Target, target)
+      line: 26
+      next: 4
+      results:
+        - err
+      error: err
+    - id: 6
+      kind: return
+      go: return reconcile.Result{}, err
+      line: 23
+      next: -1
+      returnError: err
+      results:
+        - ""
+        - err
+    - id: 7
+      kind: branch
+      go: err != nil
+      line: 22
+      expression: err
+      next: 6
+      else: 5
+    - id: 8
+      kind: get
+      effect: readSource
+      consistency: cached
+      bindings:
+        $cache: cache_ConfigMap_source_data_value
+        $cacheVersion: cache_ConfigMap_source_metadata_resourceVersion
+        $exists: ConfigMap_source_exists
+        $snapshot: snapshot
+        $snapshotVersion: source_metadata_resourceVersion
+      go: err := r.Client.Get(ctx, req.NamespacedName, source)
+      line: 22
+      next: 7
+      results:
+        - err
+      error: err
+  sourceSha256: 3eecedae4994ce1bd21e2af01b394d212097ddbb4c849ab9267afecad1912252
+  methodSha256: 20796ad7de23365df15aa4f2c2aaa9ab0efb7eb15014acdfaf8e94ccc114c8e8

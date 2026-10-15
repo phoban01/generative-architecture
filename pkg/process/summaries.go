@@ -50,6 +50,11 @@ func ExternalSummary(e ir.Effect) (summaries.Summary, error) {
 			return summaries.Summary{}, fmt.Errorf("external effect %s: outcome without a name", e.ID)
 		}
 		out := summaries.Outcome{Name: o.Name, Guard: o.Guard, Updates: o.Updates}
+		if o.Error {
+			// A declared failure carries no class; it is reported as an
+			// unspecific error.
+			out.Error = summaries.ErrorTransient
+		}
 		if out.Guard == "" {
 			out.Guard = "true"
 		}
@@ -92,6 +97,7 @@ func (c Config) summarize(n goflow.Node) ([]Variant, error) {
 	}
 	for i := range variants {
 		variants[i].Effect = label
+		variants[i].Error = s.Outcomes[i].Error
 	}
 	return variants, nil
 }
