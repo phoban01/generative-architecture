@@ -108,7 +108,9 @@ func run(refresh bool) error {
 		hashes[name] = goflow.Hash(sampled.ITF[i])
 	}
 	inputs := map[string]string{}
-	for _, name := range []string{"controller.go", "wiring.go", "dynamic_store.go", "resources.yaml", "model.yaml", "process.yaml", "constraints.yaml"} {
+	// The abstraction and the projection generated from it decide what replay
+	// observes, so they invalidate evidence like any other input (ADR-0005).
+	for _, name := range []string{"controller.go", "wiring.go", "dynamic_store.go", "resources.yaml", "model.yaml", "process.yaml", "constraints.yaml", "abstraction.yaml", "project.yaml", "generated/projection_generated.go"} {
 		b, err := os.ReadFile(filepath.Join(root, name))
 		if err != nil {
 			return err

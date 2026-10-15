@@ -87,6 +87,63 @@ func TestValidateFailures(t *testing.T) {
 	}
 }
 
+// A named predicate field addresses an annotation key, which is not an
+// identifier, and derives one bool variable named by the field.
+func TestAnnotationPredicateField(t *testing.T) {
+	contract := Field{Path: []string{"metadata", "annotations", "architecture.local/provisioning-contract"}, Name: "contractSatisfied", Type: TypeBool, Equals: `"v1"`}
+	a := valid()
+	a.Spec.Resources[0].Fields = append(a.Spec.Resources[0].Fields, contract)
+	a.Spec.Resources[0].ValueDomains["contractSatisfied"] = []string{"false", "true"}
+	if err := a.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	v, ok := a.StateVariables()["Database_db1_contractSatisfied"]
+	if !ok || v.Type != TypeBool || v.Initial != "false" {
+		t.Fatalf("derived %v", a.SortedVariables())
+	}
+	if got, ok := contract.Compared(); !ok || got != "v1" {
+		t.Fatalf("Compared() = %q, %v", got, ok)
+	}
+	if contract.Key() != "contractSatisfied" || (Field{Path: []string{"status", "endpoint"}}).Key() != "status.endpoint" {
+		t.Fatal("unexpected field keys")
+	}
+	cases := map[string]struct {
+		mutate func(*Field)
+		want   string
+	}{
+		"map key without name":    {func(f *Field) { f.Name = "" }, "needs a name"},
+		"map key outside map":     {func(f *Field) { f.Path = []string{"spec", "a.b/c", "x"} }, "must be an identifier"},
+		"map key nested deeper":   {func(f *Field) { f.Path = []string{"metadata", "annotations", "a/b", "c"} }, "must be an identifier"},
+		"empty map key":           {func(f *Field) { f.Path = []string{"metadata", "labels", ""} }, "must be an identifier"},
+		"name not an identifier":  {func(f *Field) { f.Name = "contract_satisfied" }, "identifier"},
+		"predicate not bool":      {func(f *Field) { f.Type = TypeString }, "has type bool"},
+		"predicate not a literal": {func(f *Field) { f.Equals = "v1" }, "not a string literal"},
+		"plain named label field": {func(f *Field) { f.Path, f.Name = []string{"metadata", "labels", "x/y"}, "endpoint"; f.Equals = "" }, ""},
+	}
+	for name, c := range cases {
+		f := contract
+		c.mutate(&f)
+		a := valid()
+		a.Spec.Resources[0].Fields = append(a.Spec.Resources[0].Fields, f)
+		err := a.Validate()
+		if c.want == "" {
+			if err != nil {
+				t.Fatalf("%s: %v", name, err)
+			}
+			continue
+		}
+		if err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Fatalf("%s: got %v, want error containing %q", name, err, c.want)
+		}
+	}
+	// Two fields with the same key are rejected, whether named or not.
+	a = valid()
+	a.Spec.Resources[0].Fields = append(a.Spec.Resources[0].Fields, Field{Path: []string{"metadata", "labels", "x/y"}, Name: "dup", Type: TypeString}, Field{Path: []string{"spec", "other"}, Name: "dup", Type: TypeString})
+	if err := a.Validate(); err == nil || !strings.Contains(err.Error(), "declared twice") {
+		t.Fatalf("duplicate field name: %v", err)
+	}
+}
+
 func TestLoadRejectsWrongKind(t *testing.T) {
 	if _, err := Load("../../examples/database/model.yaml"); err == nil {
 		t.Fatal("TransitionModel accepted as Abstraction")

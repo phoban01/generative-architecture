@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"generative-architecture/pkg/abstraction"
 	"generative-architecture/pkg/adaptergen"
 	"generative-architecture/pkg/adaptergen/internal/fixture"
 	"generative-architecture/pkg/ir"
@@ -72,6 +73,72 @@ func TestGenerateProjectionDefaultsExistenceFlag(t *testing.T) {
 	typecheck(t, src)
 }
 
+// A named predicate field over an annotation key projects through both the
+// dynamic-client and the reader generators as a string comparison under the
+// abstraction's variable name; the environment generators refuse to set it.
+func TestAnnotationPredicateProjection(t *testing.T) {
+	a, err := fixture.Abstraction()
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := &a.Spec.Resources[0]
+	r.Fields = append(r.Fields, abstraction.Field{Path: []string{"metadata", "annotations", "example.org/contract"}, Name: "contract", Type: abstraction.TypeBool, Equals: `"v1"`})
+	r.ValueDomains = map[string][]string{"contract": {"false", "true"}}
+	if err := a.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	ps := adaptergen.FromAbstraction(a)
+	var predicate *adaptergen.Projection
+	for i := range ps {
+		if ps[i].State == "Database_db1_contract" {
+			predicate = &ps[i]
+		}
+	}
+	if predicate == nil || !predicate.Compare || predicate.Equals != "v1" || predicate.Type != abstraction.TypeBool {
+		t.Fatalf("projections %+v", ps)
+	}
+	readers, err := adaptergen.FromSpec(a.Spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		`state["Database_db1_contract"] = false`,
+		`unstructured.NestedString(obj.Object, "metadata", "annotations", "example.org/contract")`,
+		`state["Database_db1_contract"] = v == "v1"`,
+	}
+	for name, generate := range map[string]func() ([]byte, error){
+		"dynamic": func() ([]byte, error) { return adaptergen.GenerateProjection(fixture.Package, ps) },
+		"reader":  func() ([]byte, error) { return adaptergen.GenerateReaderProjection(fixture.Package, readers) },
+	} {
+		src, err := generate()
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		for _, w := range want {
+			if !strings.Contains(string(src), w) {
+				t.Errorf("%s projection lacks %q:\n%s", name, w, src)
+			}
+		}
+		typecheck(t, src)
+	}
+	for name, generate := range map[string]func() ([]byte, error){
+		"cycling": func() ([]byte, error) {
+			return adaptergen.GenerateReaderEnvironment(fixture.Package, a.Spec, []string{"db1"}, nil)
+		},
+		"per-value": func() ([]byte, error) {
+			return adaptergen.GenerateReaderValueEnvironment(fixture.Package, a.Spec, []string{"db1"}, nil)
+		},
+	} {
+		if _, err := generate(); err == nil || !strings.Contains(err.Error(), "predicate") {
+			t.Errorf("%s environment sets a predicate field: %v", name, err)
+		}
+	}
+	r.Fields[len(r.Fields)-1].Equals = "v1"
+	if _, err := adaptergen.FromSpec(a.Spec); err == nil || !strings.Contains(err.Error(), "not a string literal") {
+		t.Fatalf("FromSpec accepted an invalid predicate: %v", err)
+	}
+}
+
 func TestGenerateProjectionRejects(t *testing.T) {
 	key := ir.ObjectRef{Namespace: "demo", Name: "db-1"}
 	field := adaptergen.Projection{State: "endpoint", Resource: fixture.Database, Key: key, JSONPath: []string{"status", "endpoint"}, Type: "string"}
@@ -92,6 +159,8 @@ func TestGenerateProjectionRejects(t *testing.T) {
 		"string existence":    {"p", []adaptergen.Projection{{State: "x", Resource: fixture.Database, Key: key, Type: "string"}}, "must be bool"},
 		"empty path element":  {"p", []adaptergen.Projection{{State: "x", Resource: fixture.Database, Key: key, JSONPath: []string{"status", ""}, Type: "string"}}, "empty element"},
 		"existence collision": {"p", []adaptergen.Projection{field, {State: "endpointExists", Resource: fixture.Instance, Key: key, Type: "bool"}}, "collides"},
+		"string predicate":    {"p", []adaptergen.Projection{{State: "x", Resource: fixture.Database, Key: key, JSONPath: []string{"a"}, Type: "string", Equals: "v1", Compare: true}}, "predicate must be bool"},
+		"existence predicate": {"p", []adaptergen.Projection{{State: "x", Resource: fixture.Database, Key: key, Type: "bool", Equals: "v1", Compare: true}}, "needs a JSON path"},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {

@@ -2,6 +2,7 @@ package adaptergen
 
 import (
 	"fmt"
+	"strconv"
 
 	"generative-architecture/pkg/abstraction"
 	"generative-architecture/pkg/ir"
@@ -19,6 +20,11 @@ type Projection struct {
 	// Type is the model type of the value: string, bool or int (read as an
 	// int64 through unstructured).
 	Type string
+	// Equals, when Compare is set, makes the projection a predicate: the
+	// value at JSONPath is read as a string and State is whether it equals
+	// Equals. An absent value projects as false. Type must be bool.
+	Equals  string
+	Compare bool
 	// Reader names the client.Reader parameter a reader projection reads
 	// the object through: ReaderAPI (the default when empty) or ReaderCache.
 	// Dynamic-client projections accept only the default.
@@ -41,9 +47,9 @@ func (p Projection) reader() string {
 // Exists reports whether the projection is an object's existence flag.
 func (p Projection) Exists() bool { return len(p.JSONPath) == 0 }
 
-// FromAbstraction derives projections from an abstraction document: for every
-// object an existence flag plus one projection per declared field, named as
-// the abstraction derives its state variables.
+// FromAbstraction derives projections from a validated abstraction document:
+// for every object an existence flag plus one projection per declared field,
+// named as the abstraction derives its state variables.
 func FromAbstraction(a abstraction.Abstraction) []Projection {
 	var out []Projection
 	for _, r := range a.Spec.Resources {
@@ -51,11 +57,23 @@ func FromAbstraction(a abstraction.Abstraction) []Projection {
 			key := ir.ObjectRef{GVK: r.GVK, Namespace: o.Namespace, Name: o.Name}
 			out = append(out, Projection{State: abstraction.ExistsVariable(r.GVK.Kind, o.ID), Resource: r.GVK, Key: key, Type: abstraction.TypeBool})
 			for _, f := range r.Fields {
-				out = append(out, Projection{State: abstraction.VariableName(r.GVK.Kind, o.ID, f.Path), Resource: r.GVK, Key: key, JSONPath: append([]string(nil), f.Path...), Type: f.Type})
+				out = append(out, fieldProjection(r, o, key, f))
 			}
 		}
 	}
 	return out
+}
+
+// fieldProjection projects one declared field of one object, named as the
+// abstraction derives its state variable; a predicate field projects as a
+// comparison. The field must be valid (abstraction.Validate).
+func fieldProjection(r abstraction.Resource, o abstraction.Object, key ir.ObjectRef, f abstraction.Field) Projection {
+	p := Projection{State: abstraction.FieldVariable(r.GVK.Kind, o.ID, f), Resource: r.GVK, Key: key, JSONPath: append([]string(nil), f.Path...), Type: f.Type}
+	if f.Equals != "" {
+		p.Equals, _ = f.Compared()
+		p.Compare = true
+	}
+	return p
 }
 
 // projectedObject groups the projections of one object. When no existence
@@ -73,6 +91,9 @@ type projectedField struct {
 	Path  []string
 	Read  string // unstructured.Nested* accessor
 	Zero  string // Go literal of the zero value
+	// Compare, when set, is the Go string literal a predicate compares the
+	// value read to.
+	Compare string
 }
 
 var accessors = map[string]struct{ read, zero string }{
@@ -123,13 +144,23 @@ func groupProjections(ps []Projection) ([]projectedObject, error) {
 			objects = append(objects, projectedObject{Reader: p.reader(), Key: key})
 		}
 		if p.Exists() {
+			if p.Compare {
+				return nil, fmt.Errorf("projection %s: a predicate needs a JSON path", p.State)
+			}
 			if p.Type != abstraction.TypeBool {
 				return nil, fmt.Errorf("projection %s: an existence flag must be bool, got %s", p.State, p.Type)
 			}
 			objects[i].Exists = append(objects[i].Exists, p.State)
 			continue
 		}
-		objects[i].Fields = append(objects[i].Fields, projectedField{State: p.State, Path: append([]string(nil), p.JSONPath...), Read: acc.read, Zero: acc.zero})
+		f := projectedField{State: p.State, Path: append([]string(nil), p.JSONPath...), Read: acc.read, Zero: acc.zero}
+		if p.Compare {
+			if p.Type != abstraction.TypeBool {
+				return nil, fmt.Errorf("projection %s: a predicate must be bool, got %s", p.State, p.Type)
+			}
+			f.Read, f.Compare = accessors[abstraction.TypeString].read, strconv.Quote(p.Equals)
+		}
+		objects[i].Fields = append(objects[i].Fields, f)
 	}
 	for i := range objects {
 		if len(objects[i].Exists) > 0 {
@@ -216,7 +247,7 @@ func Project(ctx context.Context, api dynamic.Interface, mapper meta.RESTMapper)
 			if v, ok, err := unstructured.{{.Read}}(obj.Object, {{path .Path}}); err != nil {
 				return nil, fmt.Errorf("%s: %w", {{q .State}}, err)
 			} else if ok {
-				state[{{q .State}}] = v
+				state[{{q .State}}] = v{{if .Compare}} == {{.Compare}}{{end}}
 			}
 {{- end}}
 		}

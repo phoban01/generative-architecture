@@ -1,0 +1,15 @@
+apiVersion: architecture.local/v1alpha1
+kind: Project
+metadata:
+  name: database
+spec:
+  module: generative-architecture
+  packages:
+    - ./examples/database
+  constraints:
+    - constraints.yaml
+  runtime:
+    profile: controller-runtime
+  bounds:
+    maxObjectsPerResource: 1
+    maxInvocations: 4

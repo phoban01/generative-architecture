@@ -1,0 +1,53 @@
+apiVersion: architecture.local/v1alpha1
+kind: Abstraction
+metadata:
+  name: database
+spec:
+  resources:
+    - gvk: {group: demo.architecture.local, version: v1alpha1, kind: Database}
+      objects:
+        - {id: db1, namespace: demo, name: db-1}
+      fields:
+        - {path: [status, endpoint], type: string}
+        # The provisioning contract is an annotation; the model sees only
+        # whether it carries the supported version.
+        - path: [metadata, annotations, architecture.local/provisioning-contract]
+          name: contractSatisfied
+          type: bool
+          equals: '"v1"'
+      valueDomains:
+        status.endpoint: ['""', '"db-1.internal"']
+        contractSatisfied: ['false', 'true']
+      identity:
+        - [metadata, name]
+    - gvk: {group: demo.architecture.local, version: v1alpha1, kind: DatabaseInstance}
+      objects:
+        - {id: inst1, namespace: demo, name: instance-for-db-1}
+      fields:
+        - {path: [spec, databaseName], type: string}
+        - {path: [status, endpoint], type: string}
+      valueDomains:
+        spec.databaseName: ['"db-1"']
+        status.endpoint: ['""', '"db-1.internal"']
+      identity:
+        - [metadata, name]
+      references:
+        - path: [spec, databaseName]
+          targetGVK: {group: demo.architecture.local, version: v1alpha1, kind: Database}
+  locals:
+    - {name: found, type: bool}
+    - {name: compatible, type: bool}
+    - {name: instanceFound, type: bool}
+    - {name: endpoint, type: string}
+    - {name: outcome, type: string}
+    - {name: invocations, type: int}
+    - {name: instanceCreates, type: int}
+  bounds:
+    # One Database and its one instance; four reconcile invocations.
+    maxObjectsPerResource: 1
+    maxInvocations: 4
+  excludes:
+    - Kubernetes API errors and retries
+    - informer cache staleness
+    - contract revocation
+    - list

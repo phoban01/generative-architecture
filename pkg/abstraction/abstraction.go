@@ -6,7 +6,9 @@ package abstraction
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"sort"
+	"strconv"
 	"strings"
 
 	"generative-architecture/pkg/expr"
@@ -41,9 +43,42 @@ type Object struct {
 }
 
 // Field selects one JSON path of a resource and gives it a model type.
+//
+// Path elements are identifiers, except that the element after
+// metadata.annotations or metadata.labels is a map key, such as an
+// annotation key containing dots and slashes. A field whose path holds such
+// a key cannot be named by its path and declares Name instead.
 type Field struct {
 	Path []string `yaml:"path"`
 	Type string   `yaml:"type"`
+	// Name, an identifier, names the field in derived variables and in
+	// valueDomains in place of its path. It is required when the path holds
+	// a map key and optional otherwise.
+	Name string `yaml:"name,omitempty"`
+	// Equals makes the field a predicate on a string: the value at Path is
+	// read as a string and the model sees the bool whether it equals this
+	// string literal (written like a valueDomains entry). An absent value
+	// does not equal it. A predicate field has type bool.
+	Equals string `yaml:"equals,omitempty"`
+}
+
+// Key names the field in derived variables and valueDomains: its Name when
+// declared, otherwise its path joined with dots.
+func (f Field) Key() string {
+	if f.Name != "" {
+		return f.Name
+	}
+	return PathKey(f.Path)
+}
+
+// Compared is the string a predicate field compares the value at its path
+// to; ok is false when the field is not a valid predicate.
+func (f Field) Compared() (value string, ok bool) {
+	if f.Equals == "" {
+		return "", false
+	}
+	v, err := strconv.Unquote(f.Equals)
+	return v, err == nil
 }
 
 // Reference says that a field of this resource names an object of another.
@@ -101,7 +136,8 @@ func Load(path string) (Abstraction, error) {
 	return a, a.Validate()
 }
 
-// PathKey joins a field path the way valueDomains keys are written.
+// PathKey joins a field path the way valueDomains keys of unnamed fields are
+// written (see Field.Key).
 func PathKey(path []string) string { return strings.Join(path, ".") }
 
 // Validate checks types, populations, domains, references and bounds.
@@ -144,7 +180,7 @@ func (a Abstraction) Validate() error {
 		}
 		paths := map[string]bool{}
 		for _, f := range r.Fields {
-			key, err := validPath(f.Path)
+			key, err := validField(f)
 			if err != nil {
 				return fmt.Errorf("%s: %w", where, err)
 			}
@@ -205,6 +241,51 @@ func (a Abstraction) Validate() error {
 	return nil
 }
 
+// mapFields are the object paths whose next element is a map key rather
+// than a field name.
+var mapFields = [][]string{{"metadata", "annotations"}, {"metadata", "labels"}}
+
+// validField checks a field's path, name and predicate and returns its key.
+func validField(f Field) (string, error) {
+	if len(f.Path) == 0 {
+		return "", fmt.Errorf("empty field path")
+	}
+	keyed := false
+	for i, p := range f.Path {
+		if identifier.MatchString(p) {
+			continue
+		}
+		if p == "" || i != 2 || len(f.Path) != 3 || !isMapField(f.Path[:2]) {
+			return "", fmt.Errorf("field path element %q must be an identifier (only the key after metadata.annotations or metadata.labels may be any string)", p)
+		}
+		keyed = true
+	}
+	if f.Name != "" && !identifier.MatchString(f.Name) {
+		return "", fmt.Errorf("field name %q must be an identifier", f.Name)
+	}
+	if keyed && f.Name == "" {
+		return "", fmt.Errorf("field %s holds a map key and needs a name", strings.Join(f.Path, "."))
+	}
+	if f.Equals != "" {
+		if f.Type != TypeBool {
+			return "", fmt.Errorf("field %s: a predicate (equals) has type bool, got %q", f.Key(), f.Type)
+		}
+		if _, ok := f.Compared(); !ok {
+			return "", fmt.Errorf("field %s: equals %s is not a string literal", f.Key(), f.Equals)
+		}
+	}
+	return f.Key(), nil
+}
+
+func isMapField(prefix []string) bool {
+	for _, m := range mapFields {
+		if slices.Equal(prefix, m) {
+			return true
+		}
+	}
+	return false
+}
+
 func validPath(path []string) (string, error) {
 	if len(path) == 0 {
 		return "", fmt.Errorf("empty field path")
@@ -223,13 +304,23 @@ func VariableName(kind, objectID string, path []string) string {
 	return kind + "_" + objectID + "_" + strings.Join(path, "_")
 }
 
+// FieldVariable is the model variable for one declared field of one
+// object: <kind>_<objectID>_<name> for a named field, otherwise
+// VariableName of the field's path.
+func FieldVariable(kind, objectID string, f Field) string {
+	if f.Name != "" {
+		return kind + "_" + objectID + "_" + f.Name
+	}
+	return VariableName(kind, objectID, f.Path)
+}
+
 // ExistsVariable is the model variable saying whether the object exists.
 func ExistsVariable(kind, objectID string) string { return kind + "_" + objectID + "_exists" }
 
 func (r Resource) variableNames(o Object) []string {
 	out := []string{ExistsVariable(r.GVK.Kind, o.ID)}
 	for _, f := range r.Fields {
-		out = append(out, VariableName(r.GVK.Kind, o.ID, f.Path))
+		out = append(out, FieldVariable(r.GVK.Kind, o.ID, f))
 	}
 	return out
 }
@@ -254,7 +345,7 @@ func (a Abstraction) StateVariables() map[string]model.Variable {
 		for _, o := range r.Objects {
 			out[ExistsVariable(r.GVK.Kind, o.ID)] = model.Variable{Type: TypeBool, Initial: expr.Expression("false")}
 			for _, f := range r.Fields {
-				out[VariableName(r.GVK.Kind, o.ID, f.Path)] = model.Variable{Type: f.Type, Initial: expr.Expression(Initial(f.Type))}
+				out[FieldVariable(r.GVK.Kind, o.ID, f)] = model.Variable{Type: f.Type, Initial: expr.Expression(Initial(f.Type))}
 			}
 		}
 	}
