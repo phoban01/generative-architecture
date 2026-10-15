@@ -16,7 +16,7 @@ See [the project plan](PROJECT-PLAN.md) for the requirements index, milestones a
 
 | Example | Role |
 | --- | --- |
-| `examples/database/` | The sample controller. Process, watches and dynamic-client accesses are extracted from Go; constraints are authored separately; replay runs the real reconcile against a fake dynamic API. |
+| `examples/database/` | The sample controller. Process, watches and dynamic-client accesses are extracted from Go; constraints are authored separately; replay runs the real reconcile against a fake dynamic API through a projection generated from `abstraction.yaml`. |
 | `examples/refsystem/` | Neutral multi-controller reference system: API types and CRDs now, controllers and composition in later milestones |
 | `examples/configmirror/` | The first source-generated controller. Typed extraction of its reconciler, an abstraction document and the built-in client summaries generate its model and its replay projection, environment and boundary gating. Quint traces of that model are replayed against the real controller, a mutation suite checks detection and a receipt records the inputs. |
 | `examples/runtimegroup/` | A multi-controller runtime profile checked against real controller-runtime workers and client-go FIFO queues. |
