@@ -6,8 +6,13 @@
 package fixture
 
 import (
+	"context"
+	"fmt"
+	"go/types"
 	"path/filepath"
 	"runtime"
+
+	"golang.org/x/tools/go/packages"
 
 	"generative-architecture/pkg/abstraction"
 	"generative-architecture/pkg/adaptergen"
@@ -85,6 +90,53 @@ func Process() ir.Process {
 			{ID: "n6", Kind: ir.NodeReturn},
 			{ID: "n7", Kind: ir.NodeEffect, Effect: "createInstance", Next: "n6"},
 		},
+	}
+}
+
+// Provisioner is an external provisioning service the sample reconciler
+// calls outside the Kubernetes API. Its internals are not extracted.
+type Provisioner interface {
+	// Provision asks for a database of size and returns its endpoint.
+	Provision(ctx context.Context, name string, size int) (endpoint string, err error)
+	// Deprovision releases the database name.
+	Deprovision(name string) error
+	// Status reports the provider's view of name. It is not an effect.
+	Status(name string) string
+	// Tag labels a database with tags.
+	Tag(name string, tags ...string)
+}
+
+// ProvisionerPath is the import path of Provisioner.
+const ProvisionerPath = "generative-architecture/pkg/adaptergen/internal/fixture"
+
+// ProvisionerType loads the type of Provisioner, as a generator sees it.
+func ProvisionerType() (*types.Named, error) {
+	_, file, _, _ := runtime.Caller(0)
+	pkgs, err := packages.Load(&packages.Config{Dir: filepath.Dir(file), Mode: packages.NeedName | packages.NeedTypes}, ProvisionerPath)
+	if err != nil {
+		return nil, err
+	}
+	if len(pkgs) != 1 || len(pkgs[0].Errors) > 0 || pkgs[0].Types == nil {
+		return nil, fmt.Errorf("load %s: %v", ProvisionerPath, pkgs)
+	}
+	named, ok := pkgs[0].Types.Scope().Lookup("Provisioner").Type().(*types.Named)
+	if !ok {
+		return nil, fmt.Errorf("Provisioner is not a named type")
+	}
+	return named, nil
+}
+
+// ProvisionerEffects declares the external effects of Provisioner: a
+// provision that becomes ready or exceeds the quota, a deprovision that
+// succeeds, and a tag with one outcome.
+func ProvisionerEffects() map[string]ir.Effect {
+	external := func(id, method string, outcomes ...ir.Outcome) ir.Effect {
+		return ir.Effect{ID: id, Kind: ir.KindExternal, Actor: "database", Target: &ir.Callee{Package: ProvisionerPath, Receiver: "Provisioner", Func: method}, Outcomes: outcomes, Evidence: ir.Declared}
+	}
+	return map[string]ir.Effect{
+		"Provision":   external("provision", "Provision", ir.Outcome{Name: "ready"}, ir.Outcome{Name: "quotaExceeded", Error: true}),
+		"Deprovision": external("deprovision", "Deprovision", ir.Outcome{Name: "released"}),
+		"Tag":         external("tag", "Tag", ir.Outcome{Name: "tagged"}),
 	}
 }
 
