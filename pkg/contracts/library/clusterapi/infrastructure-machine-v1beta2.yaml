@@ -1,0 +1,26 @@
+# Cluster API InfrastructureMachine provider contract, version v1beta2.
+# Source: the InfraMachine contract page for cluster-api v1.11, the first
+# release with the v1beta2 contract. The v1.9 page announces it only.
+#
+# status.initialization.provisioned replaces status.ready. The contract drops
+# status.failureReason and status.failureMessage.
+#
+# A "*" type also accepts a pointer, because a pointer has the same JSON shape.
+#
+# Not checked yet: status.addresses (a list) and status.conditions. The
+# contract vocabulary has no list or condition types.
+apiVersion: architecture.local/v1alpha1
+kind: InteractionContract
+metadata:
+  name: capi.infrastructure-machine
+  annotations:
+    architecture.local/upstream: sigs.k8s.io/cluster-api
+    architecture.local/upstream-version: v1.11.0
+    architecture.local/reference: https://release-1-11.cluster-api.sigs.k8s.io/developer/providers/contracts/infra-machine
+spec:
+  version: v1beta2
+  fields:
+    spec.providerID: "*string"
+    status.initialization.provisioned: "*bool"
+  optional:
+    status.failureDomain: "*string"

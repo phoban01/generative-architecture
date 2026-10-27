@@ -1,0 +1,28 @@
+# Cluster API InfrastructureCluster provider contract, version v1beta1.
+# Source: the InfraCluster contract page for cluster-api v1.9, the version
+# that the clustercache boundary in pkg/boundary/library/clusterapi pins.
+#
+# spec.controlPlaneEndpoint is optional: a provider sets it only when no other
+# component provides the endpoint. Its host and port are typed when present.
+#
+# A "*" type also accepts a pointer, because a pointer has the same JSON shape.
+#
+# Not checked yet: status.failureDomains (a map) and status.conditions. The
+# contract vocabulary has no map or condition types.
+apiVersion: architecture.local/v1alpha1
+kind: InteractionContract
+metadata:
+  name: capi.infrastructure-cluster
+  annotations:
+    architecture.local/upstream: sigs.k8s.io/cluster-api
+    architecture.local/upstream-version: v1.9.0
+    architecture.local/reference: https://release-1-9.cluster-api.sigs.k8s.io/developer/providers/contracts/infra-cluster
+spec:
+  version: v1beta1
+  fields:
+    status.ready: bool
+  optional:
+    spec.controlPlaneEndpoint.host: string
+    spec.controlPlaneEndpoint.port: int32
+    status.failureReason: "*string"
+    status.failureMessage: "*string"
