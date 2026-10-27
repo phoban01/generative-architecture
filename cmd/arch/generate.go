@@ -186,12 +186,11 @@ func located(root string, err error) error {
 }
 
 // loadConstraints reads the properties of every constraints document.
+// arch check reads the temporal properties (see loadTemporal).
 func loadConstraints(p project.Project) ([]model.Property, error) {
 	var out []model.Property
 	for _, rel := range p.Spec.Constraints {
-		var doc struct {
-			Properties []model.Property `yaml:"properties"`
-		}
+		var doc model.Constraints
 		if _, err := krm.Read(filepath.Join(p.Dir, rel), constraintsKind, &doc); err != nil {
 			return nil, err
 		}

@@ -1,0 +1,21 @@
+apiVersion: architecture.local/v1alpha1
+kind: ModelConstraints
+metadata:
+  name: config-mirror-temporal
+spec:
+  # The sample's constraints with two temporal properties. arch check
+  # reports them as unchecked unless --verify runs quint verify.
+  properties:
+    - name: queueSafety
+      expression: '!(ready && processing) && (!ready || dirty)'
+    - name: writesObservedValue
+      expression: 'event != "writeTarget_ok" || ConfigMap_copy_data_value == snapshot'
+    - name: boundedRetries
+      expression: 'retries >= 0 && retries <= 3'
+  temporal:
+    - name: queueDrains
+      leadsTo: {from: 'ready', to: '!ready'}
+    - name: copyCatchesUp
+      eventually: 'ConfigMap_copy_data_value == snapshot'
+  fairness:
+    weak: [begin, finish]

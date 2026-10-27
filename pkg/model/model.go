@@ -6,7 +6,9 @@ import (
 	"generative-architecture/pkg/effect"
 	"generative-architecture/pkg/expr"
 	"regexp"
+	"slices"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -28,9 +30,13 @@ type Property struct {
 // Spec is the payload of a KRM TransitionModel. Actions update variables
 // simultaneously. Unmentioned variables stutter. Effects label observation
 // boundaries; their state semantics are explicitly supplied by the frontend.
+// Domains are named finite sets of strings: the only collections that the
+// CEL quantifiers all() and exists() may range over. They are constants,
+// not state.
 type Spec struct {
 	Name       string                       `yaml:"name"`
 	Records    map[string]map[string]string `yaml:"records,omitempty"`
+	Domains    map[string][]string          `yaml:"domains,omitempty"`
 	State      map[string]Variable          `yaml:"state"`
 	Effects    []effect.Descriptor          `yaml:"effects,omitempty"`
 	Actions    []Action                     `yaml:"actions"`
@@ -96,6 +102,24 @@ func Compile(s Spec) (*Compiled, error) {
 			fields = append(fields, field+": "+qt)
 		}
 		fmt.Fprintf(&b, " type %s = { %s }\n", name, strings.Join(fields, ", "))
+	}
+	for _, name := range names(s.Domains) {
+		if err := checkName(name); err != nil {
+			return nil, fmt.Errorf("domain: %w", err)
+		}
+		values := s.Domains[name]
+		if len(values) == 0 {
+			return nil, fmt.Errorf("domain %s: needs at least one value", name)
+		}
+		quoted := make([]string, len(values))
+		for i, v := range values {
+			if slices.Contains(values[:i], v) {
+				return nil, fmt.Errorf("domain %s: duplicate value %q", name, v)
+			}
+			quoted[i] = strconv.Quote(v)
+		}
+		scope[name] = expr.Symbol{Type: expr.Domain, Quint: name}
+		fmt.Fprintf(&b, " pure val %s: Set[str] = Set(%s)\n", name, strings.Join(quoted, ", "))
 	}
 	for _, name := range names(s.State) {
 		if err := checkName(name); err != nil {
@@ -181,6 +205,11 @@ func Compile(s Spec) (*Compiled, error) {
 	// Defensive deep copy: callers cannot change replay semantics after compilation.
 	s.State = cloneState(s.State)
 	s.Records = cloneRecords(s.Records)
+	domains := map[string][]string{}
+	for k, v := range s.Domains {
+		domains[k] = slices.Clone(v)
+	}
+	s.Domains = domains
 	s.Effects = append([]effect.Descriptor(nil), s.Effects...)
 	s.Properties = append([]Property(nil), s.Properties...)
 	actionsCopy := make([]Action, len(s.Actions))
@@ -235,11 +264,12 @@ func (m *Compiled) Next(state map[string]any, action string) (map[string]any, er
 	if err != nil {
 		return nil, err
 	}
+	vars := m.vars(state)
 	for _, a := range m.spec.Actions {
 		if a.Name != action {
 			continue
 		}
-		enabled, err := e.Eval(a.Guard, state)
+		enabled, err := e.Eval(a.Guard, vars)
 		if err != nil {
 			return nil, err
 		}
@@ -251,7 +281,7 @@ func (m *Compiled) Next(state map[string]any, action string) (map[string]any, er
 			out[k] = v
 		}
 		for name, update := range a.Updates {
-			v, err := e.Eval(update, state)
+			v, err := e.Eval(update, vars)
 			if err != nil {
 				return nil, err
 			}
@@ -266,10 +296,7 @@ func (m *Compiled) Check(state map[string]any, event string) error {
 	if err != nil {
 		return err
 	}
-	vars := map[string]any{}
-	for k, v := range state {
-		vars[k] = v
-	}
+	vars := m.vars(state)
 	vars["event"] = event
 	for _, p := range m.spec.Properties {
 		v, err := e.Eval(p.Expression, vars)
@@ -281,4 +308,17 @@ func (m *Compiled) Check(state map[string]any, event string) error {
 		}
 	}
 	return nil
+}
+
+// vars binds the CEL variables of a state: the state itself and each
+// declared domain as a list of its values.
+func (m *Compiled) vars(state map[string]any) map[string]any {
+	out := make(map[string]any, len(state)+len(m.spec.Domains)+1)
+	for k, v := range state {
+		out[k] = v
+	}
+	for name, values := range m.spec.Domains {
+		out[name] = slices.Clone(values)
+	}
+	return out
 }

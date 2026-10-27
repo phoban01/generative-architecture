@@ -98,6 +98,8 @@ type Verification struct {
 	// of protocol conformance (CON-10).
 	Bindings  []BindingResult  `yaml:"bindings,omitempty"`
 	Protocols []ProtocolResult `yaml:"protocols,omitempty"`
+	// Temporal lists the liveness properties with their status (CON-6).
+	Temporal []TemporalResult `yaml:"temporal,omitempty"`
 	// Receipt is the input closure of the run. A run without one may
 	// record its inputs in InputHashes instead.
 	Receipt receipt.Receipt `yaml:"receipt,omitempty"`
@@ -189,6 +191,9 @@ func (v Verification) Validate() error {
 		return fmt.Errorf("verification report: result %s does not match the findings, which give %s", v.Result, want)
 	}
 	if err := v.validateComposition(); err != nil {
+		return err
+	}
+	if err := v.validateTemporal(); err != nil {
 		return err
 	}
 	if reflect.ValueOf(v.Receipt).IsZero() {
