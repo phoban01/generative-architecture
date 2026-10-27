@@ -233,10 +233,108 @@ func (e *extractor) fieldAssign(x *ast.AssignStmt, lhs *ast.SelectorExpr, next i
 				return 0, err
 			}
 		}
+	} else if opaque, err := e.opaqueLiteral(root, path, x.Rhs[0]); err != nil {
+		return 0, err
+	} else if opaque {
+		return e.add(Node{Kind: "assign", Unmodelled: []string{root + "." + strings.Join(path, ".")}}, x, next, 0), nil
 	} else if err := set(lhs, path, x.Rhs[0]); err != nil {
 		return 0, err
 	}
 	return e.add(Node{Kind: "assign", Updates: updates}, x, next, 0), nil
+}
+
+// opaqueLiteral reports whether value, assigned to the field at path of
+// root, is a slice, array or struct literal (optionally behind &) that
+// writes no model state: Options.Field maps neither the field nor any
+// field below it (see selectsBelow). Such a write is recorded without a
+// value. A literal that holds a call to a declared function or method is a
+// diagnostic, because the call would be dropped. It reports false for any
+// other value, which is then lowered as an ordinary field assignment.
+func (e *extractor) opaqueLiteral(root string, path []string, value ast.Expr) (bool, error) {
+	x := ast.Unparen(value)
+	if u, ok := x.(*ast.UnaryExpr); ok && u.Op == token.AND {
+		x = ast.Unparen(u.X)
+	}
+	lit, ok := x.(*ast.CompositeLit)
+	if !ok {
+		return false, nil
+	}
+	t := e.info.TypeOf(lit)
+	if t == nil {
+		return false, nil
+	}
+	switch t.Underlying().(type) {
+	case *types.Slice, *types.Array, *types.Struct:
+	default:
+		return false, nil
+	}
+	if _, mapped := e.opts.Field(root, path); mapped {
+		return false, nil
+	}
+	if e.selectsBelow(root, path, t, map[types.Type]bool{}) {
+		return false, nil
+	}
+	var err error
+	ast.Inspect(lit, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok || err != nil {
+			return err == nil
+		}
+		if c, ok := e.callee(call); ok {
+			err = e.diagnose(call, "call", "call to "+c.String()+" inside a literal written without a model value")
+		}
+		return true
+	})
+	return err == nil, err
+}
+
+// selectsBelow reports whether the abstraction may select a field below
+// path of root, whose Go type is t: Options.Field maps a JSON path below
+// it, or a map with string keys below it has selected keys. List entries
+// add no path element, as the abstraction addresses them by scalar paths.
+// Without Options.MapKeys the keys of a map cannot be enumerated, so any
+// map with string keys counts as selected. A type that contains itself has
+// unbounded paths and counts as selected too.
+func (e *extractor) selectsBelow(root string, path []string, t types.Type, visiting map[types.Type]bool) bool {
+	t = types.Unalias(t)
+	switch u := t.Underlying().(type) {
+	case *types.Pointer:
+		return e.selectsBelow(root, path, u.Elem(), visiting)
+	case *types.Slice:
+		return e.selectsBelow(root, path, u.Elem(), visiting)
+	case *types.Array:
+		return e.selectsBelow(root, path, u.Elem(), visiting)
+	case *types.Map:
+		if b, ok := u.Key().Underlying().(*types.Basic); !ok || b.Info()&types.IsString == 0 {
+			return false
+		}
+		return e.opts.MapKeys == nil || len(e.opts.MapKeys(root, path)) > 0
+	case *types.Struct:
+		if visiting[t] {
+			// A recursive type has unbounded paths, so a field below it may
+			// be selected at any depth.
+			return true
+		}
+		visiting[t] = true
+		defer delete(visiting, t)
+		for i := range u.NumFields() {
+			name, serialized := jsonName(u, i)
+			if !serialized {
+				continue
+			}
+			child := path
+			if name != "" {
+				child = append(slices.Clone(path), name)
+				if _, ok := e.opts.Field(root, child); ok {
+					return true
+				}
+			}
+			if e.selectsBelow(root, child, u.Field(i).Type(), visiting) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // returnCall lowers a return statement whose error result is a call to a

@@ -121,12 +121,12 @@ func TestDatabaseToBackups(t *testing.T) {
 	}
 }
 
-// TestExtraction pins the two constructs the extractor cannot read yet.
-// Reconcile builds the Job's containers with a slice literal, which goflow
-// cannot lower; it stops at that statement. The Database watch needs a map
-// function that lists Backups, and watchgen accepts only a package function
-// returning one key from a field of the watched object. The test fails when
-// either gap closes or a new one appears.
+// TestExtraction pins the one construct the extractor cannot read yet. The
+// Database watch needs a map function that lists Backups, and watchgen
+// accepts only a package function returning one key from a field of the
+// watched object. Reconcile extracts: the Job's containers are a slice
+// literal that writes no model state. The test fails when the gap closes
+// or a new one appears.
 func TestExtraction(t *testing.T) {
 	res, err := extractcheck.Run("./examples/refsystem/controllers/backup", "BackupReconciler")
 	if err != nil {
@@ -135,9 +135,11 @@ func TestExtraction(t *testing.T) {
 	if len(res.Controllers) != 1 || res.Controllers[0].Name != "BackupReconciler" {
 		t.Fatalf("controllers %+v", res.Controllers)
 	}
+	if res.Program == nil || len(res.Program.Nodes) == 0 {
+		t.Fatal("Reconcile not extracted")
+	}
 	type gap struct{ construct, source, reason string }
 	want := []gap{
-		{"field", "job.Spec.Template.Spec.Containers", "unmapped field job.spec.template.spec.containers"},
 		{"handler", "r.databaseToBackups", "mapping must name a local function"},
 	}
 	if len(res.Diagnostics) != len(want) {

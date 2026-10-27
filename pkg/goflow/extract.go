@@ -41,6 +41,10 @@ type Node struct {
 	// Error names the Results entry bound to the call's error result, so
 	// the process lowering can record which outcomes fail.
 	Error expr.Expression `yaml:"error,omitempty"`
+	// Unmodelled lists the fields an assign node writes without a model
+	// value, as root.json.path: the abstraction selects nothing at or
+	// below them, so the write changes no model state.
+	Unmodelled []string `yaml:"unmodelled,omitempty"`
 }
 type Program struct {
 	Entry        int    `yaml:"entry"`
