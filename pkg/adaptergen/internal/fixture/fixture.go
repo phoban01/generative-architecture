@@ -12,6 +12,7 @@ import (
 	"generative-architecture/pkg/abstraction"
 	"generative-architecture/pkg/adaptergen"
 	"generative-architecture/pkg/catalog"
+	cr "generative-architecture/pkg/controllerruntime"
 	"generative-architecture/pkg/ir"
 )
 
@@ -84,6 +85,24 @@ func Process() ir.Process {
 			{ID: "n6", Kind: ir.NodeReturn},
 			{ID: "n7", Kind: ir.NodeEffect, Effect: "createInstance", Next: "n6"},
 		},
+	}
+}
+
+// Runtime is the group model of one FIFO controller reconciling the sample
+// Database with one worker, retrying after two ticks, over a ten-tick clock.
+func Runtime() (cr.GroupModel, error) {
+	return cr.BuildGroupModel(cr.GroupProfile{Name: "DatabaseRuntime", MaxTicks: 10, Controllers: []cr.ModelController{{
+		Name: "db", Workers: 1, RetryTicks: 2, AfterTicks: 2,
+		Keys: []cr.ModelKey{{ID: "db1", Namespace: "demo", Name: "db-1"}},
+	}}})
+}
+
+// RuntimeBinding names the runtime events and worker variables of Runtime
+// as a composed model would: short names without the controller and key.
+func RuntimeBinding() adaptergen.RuntimeBinding {
+	return adaptergen.RuntimeBinding{
+		Events:    map[string]string{"advance": "advance", "db_db1_enqueue": "enqueue", "db_db1_start": "begin", "db_db1_fire": "fire", "db_db1_success": "finish", "db_db1_error": "finishError"},
+		Variables: map[string]string{"now": "now", "db_db1_ready": "ready", "db_db1_dirty": "dirty", "db_db1_processing": "processing", "db_db1_retries": "retries", "db_db1_due": "due"},
 	}
 }
 

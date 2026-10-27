@@ -35,9 +35,9 @@ var targetKey = client.ObjectKey{Namespace: "demo", Name: "copy"}
 
 // Adapter supplies fixtures and runs the replay. It receives events, never
 // expected state, and does not implement copy logic. Environment events,
-// effect boundaries and the projection of API state are generated
-// (generated/*_generated.go, see gen_test.go); the adapter routes events to
-// them and drives the controller-runtime worker.
+// effect boundaries, the worker routing and the projection of API and
+// worker state are generated (generated/*_generated.go, see gen_test.go);
+// the adapter builds the fixtures and routes events to them.
 type Adapter struct {
 	api, cache client.Client
 	worker     *cr.Worker
@@ -97,19 +97,8 @@ func (a *Adapter) Close() error { a.cancel(); return a.worker.Close() }
 // Observed lists, in order, the model variables Project returns.
 func (a *Adapter) Observed() []string { return append([]string(nil), a.observed...) }
 
-// workerEvents drive the controller-runtime worker and its queue: the
-// runtime profile's actions, as Generate names them.
-var workerEvents = map[string]func(*Adapter) error{
-	EventEnqueue:     func(a *Adapter) error { a.worker.Enqueue(); return nil },
-	EventBegin:       func(a *Adapter) error { return a.worker.StartOne() },
-	EventFinish:      func(a *Adapter) error { return a.worker.Wait() },
-	EventFinishError: func(a *Adapter) error { return a.worker.Wait() },
-	EventAdvance:     func(a *Adapter) error { a.worker.Advance(); return nil },
-	EventFire:        func(a *Adapter) error { return a.worker.Fire() },
-}
-
 // Apply routes event to the generated environment, the generated boundary
-// gating or the worker.
+// gating or the generated worker routing.
 func (a *Adapter) Apply(ctx context.Context, event string) error {
 	if ok, err := generated.ApplyEnvironment(ctx, a.api, a.cache, event); ok {
 		return err
@@ -117,8 +106,8 @@ func (a *Adapter) Apply(ctx context.Context, event string) error {
 	if _, ok, err := generated.ApplyBoundary(ctx, a.gate, event); ok {
 		return err
 	}
-	if step, ok := workerEvents[event]; ok {
-		return step(a)
+	if ok, err := generated.ApplyRuntime(a.worker, event); ok {
+		return err
 	}
 	// The controller takes its own branches, assignments and returns
 	// between effect boundaries: the model's process steps need no driving.
@@ -143,14 +132,16 @@ func (a *Adapter) Project(ctx context.Context) (map[string]any, error) {
 }
 
 // project reads everything the adapter can observe, under the names of the
-// generated projection and of the runtime profile.
+// generated API and runtime projections.
 func (a *Adapter) project(ctx context.Context) (map[string]any, error) {
 	state, err := generated.Project(ctx, a.api, a.cache)
 	if err != nil {
 		return nil, err
 	}
-	now, due := a.worker.Clock()
-	for name, v := range map[string]any{"ready": a.worker.Ready(), "dirty": a.worker.Dirty(), "processing": a.worker.Processing(), "retries": a.worker.Retries(), "now": now, "due": due} {
+	for name, v := range generated.ProjectRuntime(a.worker) {
+		if _, dup := state[name]; dup {
+			return nil, fmt.Errorf("runtime variable %s collides with a projected API variable", name)
+		}
 		state[name] = v
 	}
 	return state, nil
