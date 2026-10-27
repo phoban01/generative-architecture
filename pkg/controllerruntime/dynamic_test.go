@@ -14,7 +14,9 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
+	k8stesting "k8s.io/client-go/testing"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -273,4 +275,149 @@ func TestDynamicDeleteIsObserved(t *testing.T) {
 	if len(rec.calls) != 2 || len(base.Actions()) != 2 {
 		t.Fatal("rejected delete reached the hook or the API")
 	}
+}
+
+func TestDynamicPatchIsObserved(t *testing.T) {
+	ctx := context.Background()
+	binding, base, observer, rec := dynamicPeople(t, []string{"patch", "status.patch"}, person("tenant", "one", nil))
+	resource := observer.Dynamic(base, peopleMapper(t, binding)).Resource(binding.GVR()).Namespace("tenant")
+	patched, err := resource.Patch(ctx, "one", types.MergePatchType, []byte(`{"spec":{"value":"patched"}}`), metav1.PatchOptions{FieldManager: "x"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if value, _, _ := unstructured.NestedString(patched.Object, "spec", "value"); value != "patched" {
+		t.Fatalf("patch did not reach the API: %+v", patched.Object)
+	}
+	if _, err = resource.Patch(ctx, "one", types.MergePatchType, []byte(`{"status":{"endpoint":"db-1.internal"}}`), metav1.PatchOptions{}, "status"); err != nil {
+		t.Fatal(err)
+	}
+	if len(rec.calls) != 2 {
+		t.Fatalf("expected two observed calls, got %d", len(rec.calls))
+	}
+	call := rec.calls[0]
+	if call.Descriptor.Operation != "patch" || call.Key != (effect.Key{Namespace: "tenant", Name: "one"}) || call.Submitted != nil {
+		t.Fatalf("wrong call: %+v", call)
+	}
+	if call.Options["patchType"] != string(types.MergePatchType) || call.Options["patch"] != `{"spec":{"value":"patched"}}` || call.Options["fieldManager"] != "x" {
+		t.Fatalf("wrong patch options: %+v", call.Options)
+	}
+	if rec.results[0].Snapshot["spec"].(map[string]any)["value"] != "patched" {
+		t.Fatalf("snapshot lacks the patched value: %+v", rec.results[0].Snapshot)
+	}
+	if rec.calls[1].Descriptor.Operation != "status.patch" || base.Actions()[1].GetSubresource() != "status" {
+		t.Fatalf("wrong status patch: %+v", rec.calls[1])
+	}
+	merge := []byte(`{}`)
+	for name, fn := range map[string]func() error{
+		"dry run": func() error {
+			_, err := resource.Patch(ctx, "one", types.MergePatchType, merge, metav1.PatchOptions{DryRun: []string{metav1.DryRunAll}})
+			return err
+		},
+		"force on merge": func() error {
+			force := true
+			_, err := resource.Patch(ctx, "one", types.MergePatchType, merge, metav1.PatchOptions{Force: &force})
+			return err
+		},
+		"other subresource": func() error {
+			_, err := resource.Patch(ctx, "one", types.MergePatchType, merge, metav1.PatchOptions{}, "scale")
+			return err
+		},
+		"unregistered apply": func() error {
+			_, err := resource.Patch(ctx, "one", types.ApplyPatchType, merge, metav1.PatchOptions{FieldManager: "x"})
+			return err
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			before := len(base.Actions())
+			if err := fn(); err == nil {
+				t.Fatal("unsupported patch accepted")
+			}
+			if len(base.Actions()) != before || len(rec.calls) != 2 {
+				t.Fatal("unsupported patch reached the API or the hook")
+			}
+		})
+	}
+}
+
+func TestDynamicApplyIsObserved(t *testing.T) {
+	ctx := context.Background()
+	binding, base, observer, rec := dynamicPeople(t, []string{"apply", "status.apply"})
+	// The fake tracker cannot apply to unstructured objects, so this reactor
+	// stands in for the API server: it returns the applied object.
+	base.PrependReactor("patch", "people", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		patch := action.(k8stesting.PatchAction)
+		if patch.GetPatchType() != types.ApplyPatchType {
+			return false, nil, nil
+		}
+		obj := &unstructured.Unstructured{}
+		if err := obj.UnmarshalJSON(patch.GetPatch()); err != nil {
+			return true, nil, err
+		}
+		obj.SetResourceVersion("1")
+		return true, obj, nil
+	})
+	resource := observer.Dynamic(base, peopleMapper(t, binding)).Resource(binding.GVR()).Namespace("tenant")
+	desired := person("tenant", "one", nil)
+	desired.SetGroupVersionKind(binding.GVK())
+	applied, err := resource.Apply(ctx, "one", desired, metav1.ApplyOptions{FieldManager: "x", Force: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if applied.GetName() != "one" {
+		t.Fatalf("wrong response: %+v", applied.Object)
+	}
+	status := desired.DeepCopy()
+	if err = unstructured.SetNestedField(status.Object, "db-1.internal", "status", "endpoint"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = resource.ApplyStatus(ctx, "one", status, metav1.ApplyOptions{FieldManager: "x"}); err != nil {
+		t.Fatal(err)
+	}
+	if len(rec.calls) != 2 {
+		t.Fatalf("expected two observed calls, got %d", len(rec.calls))
+	}
+	call := rec.calls[0]
+	if call.Descriptor.Operation != "apply" || call.Key != (effect.Key{Namespace: "tenant", Name: "one"}) || call.Options["fieldManager"] != "x" || call.Options["force"] != "true" {
+		t.Fatalf("wrong apply call: %+v", call)
+	}
+	if call.Submitted["spec"].(map[string]any)["value"] != "one" {
+		t.Fatalf("submitted snapshot is not the desired object: %+v", call.Submitted)
+	}
+	call = rec.calls[1]
+	if call.Descriptor.Operation != "status.apply" || call.Options["fieldManager"] != "x" || call.Options["force"] != "" {
+		t.Fatalf("wrong status apply call: %+v", call)
+	}
+	actions := base.Actions()
+	if len(actions) != 2 || actions[1].GetSubresource() != "status" {
+		t.Fatalf("wrong API endpoint: %+v", actions)
+	}
+	for name, fn := range map[string]func() error{
+		"dry run": func() error {
+			_, err := resource.Apply(ctx, "one", desired, metav1.ApplyOptions{FieldManager: "x", DryRun: []string{metav1.DryRunAll}})
+			return err
+		},
+		"no field manager": func() error { _, err := resource.Apply(ctx, "one", desired, metav1.ApplyOptions{}); return err },
+		"wrong name": func() error {
+			_, err := resource.Apply(ctx, "two", desired, metav1.ApplyOptions{FieldManager: "x"})
+			return err
+		},
+		"other subresource": func() error {
+			_, err := resource.Apply(ctx, "one", desired, metav1.ApplyOptions{FieldManager: "x"}, "scale")
+			return err
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			before := len(base.Actions())
+			if err := fn(); err == nil {
+				t.Fatal("unsupported apply accepted")
+			}
+			if len(base.Actions()) != before || len(rec.calls) != 2 {
+				t.Fatal("unsupported apply reached the API or the hook")
+			}
+		})
+	}
+	expectRejected(t, func() error {
+		_, err := resource.Apply(ctx, "one", desired, metav1.ApplyOptions{FieldManager: "x", DryRun: []string{metav1.DryRunAll}})
+		return err
+	}(), "dynamic.Apply with dry run")
 }

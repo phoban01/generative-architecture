@@ -77,6 +77,22 @@ func (s *Store) ListPeople() {
 func (s *Store) DeletePerson() {
 	s.Client.Resource(s.People).Namespace(s.Namespace).Delete(s.Context, s.Name, metav1.DeleteOptions{})
 }
+
+func (s *Store) PatchPerson() {
+	s.Client.Resource(s.People).Namespace(s.Namespace).Patch(s.Context, s.Name, types.MergePatchType, s.Data, metav1.PatchOptions{})
+}
+
+func (s *Store) ApplyPatchPerson() {
+	s.Client.Resource(s.People).Namespace(s.Namespace).Patch(s.Context, s.Name, types.ApplyPatchType, s.Data, metav1.PatchOptions{FieldManager: "x"})
+}
+
+func (s *Store) ApplyPerson() {
+	s.Client.Resource(s.People).Namespace(s.Namespace).Apply(s.Context, s.Name, s.Object, metav1.ApplyOptions{FieldManager: "x"})
+}
+
+func (s *Store) ApplyPersonStatus() {
+	s.Client.Resource(s.People).Namespace(s.Namespace).ApplyStatus(s.Context, s.Name, s.Object, metav1.ApplyOptions{FieldManager: "x"})
+}
 `
 
 func peopleCatalog() dynamicgen.Catalog {
@@ -103,6 +119,29 @@ func TestExtractDynamicListAndDelete(t *testing.T) {
 	withSubresource := strings.Replace(storeSource, "metav1.DeleteOptions{})", `metav1.DeleteOptions{}, "status")`, 1)
 	if _, err := dynamicgen.Extract([]byte(withSubresource), "Store", "s.Client", methods, peopleCatalog()); err == nil {
 		t.Fatal("delete with a subresource accepted")
+	}
+}
+
+func TestExtractDynamicPatchAndApply(t *testing.T) {
+	methods := map[string]string{"PatchPerson": "patch", "ApplyPatchPerson": "applyPatch", "ApplyPerson": "apply", "ApplyPersonStatus": "applyStatus"}
+	result, err := dynamicgen.Extract([]byte(storeSource), "Store", "s.Client", methods, peopleCatalog())
+	if err != nil {
+		t.Fatal(err)
+	}
+	operations := map[string]string{}
+	for _, a := range result.Accesses {
+		operations[a.Method] = a.Operation
+	}
+	want := map[string]string{"PatchPerson": "patch", "ApplyPatchPerson": "apply", "ApplyPerson": "apply", "ApplyPersonStatus": "status.apply"}
+	for method, op := range want {
+		if operations[method] != op {
+			t.Fatalf("%s: got operation %q, want %q", method, operations[method], op)
+		}
+	}
+	variable := strings.Replace(storeSource, "types.MergePatchType", "s.PatchType", 1)
+	_, err = dynamicgen.Extract([]byte(variable), "Store", "s.Client", map[string]string{"PatchPerson": "patch"}, peopleCatalog())
+	if d, ok := goflow.AsDiagnostic(err); !ok || d.Construct != "Patch" {
+		t.Fatalf("expected a located Patch diagnostic, got %v", err)
 	}
 }
 

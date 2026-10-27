@@ -19,8 +19,9 @@ import (
 // Dynamic observes direct dynamic-client reads and writes without a typed Scheme.
 // The mapper must come from discovery or a checked catalog; plural names are never
 // guessed. The supported operations are Get, Create, Update, UpdateStatus and
-// Delete with zero options, and List with an equality label selector. Other
-// methods and options fail closed instead of bypassing instrumentation.
+// Delete with zero options, List with an equality label selector, and Patch,
+// Apply and ApplyStatus with a field manager and force. Other methods,
+// subresources and options fail closed instead of bypassing instrumentation.
 func (o Observer) Dynamic(base dynamic.Interface, mapper meta.RESTMapper) dynamic.Interface {
 	return &dynamicProxy{base: base, mapper: mapper, observer: o}
 }
@@ -247,12 +248,81 @@ func (r *dynamicResource) List(ctx context.Context, opts metav1.ListOptions) (*u
 func (*dynamicResource) Watch(context.Context, metav1.ListOptions) (watch.Interface, error) {
 	return nil, unsupported("dynamic.Watch transport")
 }
-func (*dynamicResource) Patch(context.Context, string, types.PatchType, []byte, metav1.PatchOptions, ...string) (*unstructured.Unstructured, error) {
-	return nil, unsupported("dynamic.Patch")
+
+// statusOperation prefixes op with the status subresource. Other
+// subresources fail closed.
+func statusOperation(method, op string, sub []string) (string, error) {
+	switch {
+	case len(sub) == 0:
+		return op, nil
+	case len(sub) == 1 && sub[0] == "status":
+		return "status." + op, nil
+	}
+	return "", unsupported(fmt.Sprintf("dynamic.%s subresource %v", method, sub))
 }
-func (*dynamicResource) Apply(context.Context, string, *unstructured.Unstructured, metav1.ApplyOptions, ...string) (*unstructured.Unstructured, error) {
-	return nil, unsupported("dynamic.Apply")
+
+// Patch records a direct patch, or apply for a server-side apply patch, on
+// the object or its status. The options carry the patch type, the patch
+// bytes, the field manager and force.
+func (r *dynamicResource) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, sub ...string) (*unstructured.Unstructured, error) {
+	apply := pt == types.ApplyPatchType
+	op := "patch"
+	if apply {
+		op = "apply"
+	}
+	operation, err := statusOperation("Patch", op, sub)
+	if err != nil {
+		return nil, err
+	}
+	other := !reflect.DeepEqual(opts, metav1.PatchOptions{DryRun: opts.DryRun, FieldManager: opts.FieldManager, Force: opts.Force})
+	recorded, err := writeOptions("dynamic.Patch", apply, opts.DryRun, opts.FieldManager, opts.Force, other)
+	if err != nil {
+		return nil, err
+	}
+	if pt == "" || data == nil {
+		return nil, unsupported("dynamic.Patch without a patch type or patch")
+	}
+	if recorded == nil {
+		recorded = map[string]string{}
+	}
+	recorded["patchType"] = string(pt)
+	recorded["patch"] = string(data)
+	return r.invoke(ctx, operation, name, nil, recorded, func(*unstructured.Unstructured) (*unstructured.Unstructured, error) {
+		return r.base().Patch(ctx, name, pt, data, opts, sub...)
+	})
 }
-func (*dynamicResource) ApplyStatus(context.Context, string, *unstructured.Unstructured, metav1.ApplyOptions) (*unstructured.Unstructured, error) {
-	return nil, unsupported("dynamic.ApplyStatus")
+
+// Apply records a direct apply, or status.apply for the status subresource.
+// It records the field manager, which apply requires, and force.
+func (r *dynamicResource) Apply(ctx context.Context, name string, obj *unstructured.Unstructured, opts metav1.ApplyOptions, sub ...string) (*unstructured.Unstructured, error) {
+	operation, err := statusOperation("Apply", "apply", sub)
+	if err != nil {
+		return nil, err
+	}
+	return r.apply(ctx, "dynamic.Apply", operation, name, obj, opts, func(input *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+		return r.base().Apply(ctx, name, input, opts, sub...)
+	})
+}
+
+// ApplyStatus records status.apply. It records the field manager and force.
+func (r *dynamicResource) ApplyStatus(ctx context.Context, name string, obj *unstructured.Unstructured, opts metav1.ApplyOptions) (*unstructured.Unstructured, error) {
+	return r.apply(ctx, "dynamic.ApplyStatus", "status.apply", name, obj, opts, func(input *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+		return r.base().ApplyStatus(ctx, name, input, opts)
+	})
+}
+
+func (r *dynamicResource) apply(ctx context.Context, method, operation, name string, obj *unstructured.Unstructured, opts metav1.ApplyOptions, execute func(*unstructured.Unstructured) (*unstructured.Unstructured, error)) (*unstructured.Unstructured, error) {
+	force := opts.Force
+	other := !reflect.DeepEqual(opts, metav1.ApplyOptions{DryRun: opts.DryRun, FieldManager: opts.FieldManager, Force: opts.Force})
+	recorded, err := writeOptions(method, true, opts.DryRun, opts.FieldManager, &force, other)
+	if err != nil {
+		return nil, err
+	}
+	if opts.FieldManager == "" {
+		return nil, unsupported(method + " without a field manager")
+	}
+	if obj == nil {
+		return nil, unsupported(method + " of a nil object")
+	}
+	return r.invoke(ctx, operation, name, obj, recorded, execute)
 }

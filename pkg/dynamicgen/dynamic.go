@@ -86,6 +86,9 @@ var dynamicOperations = map[string]struct {
 	"UpdateStatus": {"status.update", 3},
 	"List":         {"list", 2},
 	"Delete":       {"delete", 3},
+	"Patch":        {"patch", 5},
+	"Apply":        {"apply", 4},
+	"ApplyStatus":  {"status.apply", 4},
 }
 
 type Access struct {
@@ -172,7 +175,20 @@ func Extract(source []byte, receiver, clientExpression string, methods map[strin
 				failure = goflow.NewDiagnostic(fs, sel.Sel, sel.Sel.Name, "unsupported dynamic operation or arguments")
 				return false
 			}
-			out.Accesses = append(out.Accesses, Access{Method: name, Effect: methods[name], Operation: op.name, Binding: binding, Namespace: namespace, Line: fs.Position(sel.Sel.Pos()).Line, MethodSHA256: goflow.Hash([]byte(goflow.Code(fn)))})
+			operation := op.name
+			if sel.Sel.Name == "Patch" {
+				// The patch type decides the operation, so it must be a
+				// literal: types.ApplyPatchType is apply, any other is patch.
+				patchType := goflow.Code(call.Args[2])
+				if !strings.HasPrefix(patchType, "types.") || !strings.HasSuffix(patchType, "PatchType") {
+					failure = goflow.NewDiagnostic(fs, call.Args[2], "Patch", "dynamic patch type must be a types.*PatchType constant")
+					return false
+				}
+				if patchType == "types.ApplyPatchType" {
+					operation = "apply"
+				}
+			}
+			out.Accesses = append(out.Accesses, Access{Method: name, Effect: methods[name], Operation: operation, Binding: binding, Namespace: namespace, Line: fs.Position(sel.Sel.Pos()).Line, MethodSHA256: goflow.Hash([]byte(goflow.Code(fn)))})
 			return true
 		})
 		if failure != nil {
