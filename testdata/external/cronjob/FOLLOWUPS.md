@@ -5,6 +5,13 @@ lists one unsupported construct. No `ir.yaml` exists, because the extractor
 writes no IR while a construct is unsupported. A test in
 `cmd/arch/external_test.go` fails when the committed report drifts.
 
+`abstraction.yaml` (#133) is the abstraction an adopter would write for this
+controller. `report.yaml` is the `VerificationReport` of the whole pipeline:
+`extract` fails closed, and `generate`, `check` and `replay` refuse to run.
+Its result is `incomplete`. Gaps 16 to 20 come from writing the abstraction
+and from running the `generate` frontend past the missing IR in a scratch
+test.
+
 Line numbers refer to `internal/controller/cronjob_controller.go` at the pin.
 
 ## How the gaps were found
@@ -210,6 +217,68 @@ smallest extension that would support it.
   gap.
 - Smallest extension: record `InNamespace` and `MatchingFields` on the List
   node. Fail with a located diagnostic on other options.
+
+## Gaps in the abstraction and in arch generate (#133)
+
+The scratch test wrote the IR that `extract` builds before it fails, and
+ran `arch generate` on it. Each finding below was removed in a scratch copy
+of `project.yaml` or `abstraction.yaml` to find the next one. The committed
+documents keep what an adopter would write.
+
+### 16. arch generate supports Get and Update only
+
+- Construct: the declared effects for `client.Reader.List`,
+  `client.Writer.Delete` and `client.Writer.Create`.
+- Location: `project.yaml`, `spec.controllers[0].effects`.
+- Diagnostic: `controller cronjob: sigs.k8s.io/controller-runtime/pkg/client.Reader.List: method List is not supported; supported methods are Get and Update`.
+- Smallest extension: built-in summaries and model bindings for `Create`
+  and `Delete` on a declared object, and for `List` bounded by
+  `maxObjectsPerResource`. Gap 15 applies to `List`.
+
+### 17. arch generate takes one field per resource
+
+- Construct: three fields of `CronJob` and two of `Job`.
+- Location: `abstraction.yaml`.
+- Diagnostic: `resource batch.tutorial.kubebuilder.io/v1/CronJob: generation supports exactly one selected field, got 3`.
+- Problem: `abstraction.Load` accepts the document. Only `arch generate`
+  rejects it, after extraction.
+- Smallest extension: one model variable per selected field in the
+  generated state, and field-local bindings for each.
+
+### 18. No list, pointer or time types in the abstraction
+
+- Construct: `status.active` (a list of object references),
+  `spec.suspend` (a `*bool`), `status.lastScheduleTime` (a `*metav1.Time`)
+  and the Job conditions.
+- Location: `abstraction.yaml`.
+- Diagnostic: none. The author maps them to `bool` and `string` domains by
+  hand or leaves them out.
+- Smallest extension: an optional marker on a basic field (gap 12), and a
+  bounded set type whose elements are declared objects.
+
+### 19. Owner references have no form
+
+- Construct: `ctrl.SetControllerReference(cronJob, job, r.Scheme)` (495)
+  and the field index on the controller owner (557).
+- Location: `abstraction.yaml`, Job `references`.
+- Diagnostic: none. The loader accepts
+  `path: [metadata, ownerReferences, name]`, but `ownerReferences` is a
+  list. The generated reference check reads the path as a scalar, so it
+  would report a valid Job as broken.
+- Smallest extension: an `owner` reference form that selects the entry
+  with `controller: true` and checks its kind and name.
+
+### 20. arch generate after a failed extract names the wrong step
+
+- Construct: `arch generate` after `arch extract` failed closed.
+- Diagnostic: `generated/ir.yaml not found; run arch extract first`.
+- Problem: the author ran `arch extract`. The message should say that
+  extraction failed and point to `support.yaml`.
+- Smallest extension: when `support.yaml` exists beside the missing IR and
+  lists unsupported items, name the first one in the error.
+
+After gaps 16 and 17 were removed, the first `Reconcile` diagnostic was
+gap 7 at line 528 (`result must be the zero value of its type`).
 
 ## What worked
 

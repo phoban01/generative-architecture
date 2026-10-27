@@ -60,7 +60,12 @@ The Go source is not changed. Only the module files differ:
 
 - `project.yaml` and `constraints.yaml` come from
   `arch init --module tutorial.kubebuilder.io/project --package ./internal/controller --package ./api/v1 --name cronjob`.
-  The catalog section is added by hand.
+  The catalog section is added by hand. The `abstraction`, `controllers`
+  and `runtime.maxTicks` fields are added by hand for #133.
+- `abstraction.yaml` selects the CronJob and Job state the model needs.
+- `generated/support.yaml` is the output of `arch extract`.
+- `report.yaml` is the `VerificationReport` of `extract`, `generate`,
+  `check` and `replay`. A test in `cmd/arch` writes and checks it.
 - `catalog/batch-v1.json` is a discovery snapshot with the `batch/v1` Job
   resource only. The CronJob kind comes from the upstream CRD. A snapshot
   that also lists `batch/v1` CronJob would make the kind `CronJob` in

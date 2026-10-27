@@ -1,0 +1,59 @@
+apiVersion: architecture.local/v1alpha1
+kind: Abstraction
+metadata:
+  name: cronjob
+spec:
+  resources:
+    # The reconciled CronJob. One object; its name is the reconcile key.
+    - gvk: {group: batch.tutorial.kubebuilder.io, version: v1, kind: CronJob}
+      objects:
+        - {id: cron, namespace: default, name: nightly}
+      fields:
+        - {path: [spec, schedule], type: string}
+        # A *bool upstream. The model reads nil as false.
+        - {path: [spec, suspend], type: bool}
+        # A *metav1.Time upstream. The model sees three instants: unset and
+        # the two scheduled runs of the Job population below.
+        - {path: [status, lastScheduleTime], type: string}
+      valueDomains:
+        spec.schedule: ['"*/1 * * * *"']
+        spec.suspend: ['false', 'true']
+        status.lastScheduleTime: ['""', '"2026-01-01T00:00:00Z"', '"2026-01-01T00:01:00Z"']
+      identity:
+        - [metadata, name]
+    # The Jobs the controller creates. The controller names each Job
+    # <cronjob>-<scheduled unix time>, so the population is the Jobs of the
+    # two runs above. status.active of the CronJob lists the running Jobs.
+    # The abstraction has no list type, so the model sees the Jobs, not the
+    # list.
+    - gvk: {group: batch, version: v1, kind: Job}
+      objects:
+        - {id: run1, namespace: default, name: nightly-1767225600}
+        - {id: run2, namespace: default, name: nightly-1767225660}
+      fields:
+        - path: [metadata, annotations, batch.tutorial.kubebuilder.io/scheduled-at]
+          name: scheduledAt
+          type: string
+        - {path: [status, active], type: int}
+      valueDomains:
+        scheduledAt: ['"2026-01-01T00:00:00Z"', '"2026-01-01T00:01:00Z"']
+        status.active: ['0', '1']
+      identity:
+        - [metadata, name]
+      references:
+        # The controller owner reference. ownerReferences is a list, and
+        # the controller selects the entry with controller: true. The
+        # abstraction has no form for a list element. The loader accepts
+        # this path, but no generator reads it as a list (ADR-0008).
+        - path: [metadata, ownerReferences, name]
+          targetGVK: {group: batch.tutorial.kubebuilder.io, version: v1, kind: CronJob}
+  bounds:
+    # One CronJob and the Jobs of two scheduled runs; four reconciles.
+    maxObjectsPerResource: 2
+    maxInvocations: 4
+  excludes:
+    - the clock and schedule parsing; time is the instant domain above
+    - concurrencyPolicy, startingDeadlineSeconds and the history limits
+    - Job conditions; a Job runs while status.active is 1
+    - the Job template
+    - Kubernetes API errors and retries
