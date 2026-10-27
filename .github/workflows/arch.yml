@@ -1,0 +1,200 @@
+# Reusable architecture pipeline for adopters. It runs arch extract,
+# generate, check, replay, render and diff on one project document and
+# uploads the generated artifacts, the reports with their receipts, the
+# rendered diagrams and the IR diff.
+#
+# The job fails on a constraint violation or a Quint finding (arch check),
+# on replay findings or invalidated evidence (arch replay), and on any tool
+# failure. An IR difference against the base branch is reported, not
+# failed. Sampling is bounded: a passing check is not exhaustive
+# verification.
+#
+# Call it from a workflow in your repository:
+#
+#   jobs:
+#     architecture:
+#       uses: <owner>/<repo>/.github/workflows/arch.yml@<ref>
+#       with:
+#         project: path/to/project.yaml
+#         arch-package: <module>/cmd/arch@<version>
+#
+# Every step reads its inputs from the job environment, never from an
+# expression inside a script, so input values cannot inject shell code.
+name: Architecture
+
+on:
+  workflow_call:
+    inputs:
+      project:
+        description: Project document, relative to the repository root.
+        type: string
+        required: true
+      out:
+        description: Output directory for generated artifacts and reports.
+        type: string
+        default: arch-out
+      arch-package:
+        description: Package that go install builds arch from, such as ./cmd/arch or <module>/cmd/arch@<version>.
+        type: string
+        required: true
+      go-version-file:
+        description: File that setup-go reads the Go version from.
+        type: string
+        default: go.mod
+      node-version:
+        description: Node.js version for the Quint and LikeC4 CLIs.
+        type: string
+        default: "24"
+      tools-dir:
+        description: Directory with a package.json and package-lock.json that pin Quint and LikeC4. When empty, the versions below are installed.
+        type: string
+        default: ""
+      quint-version:
+        description: Quint version to install when tools-dir is empty.
+        type: string
+        default: 0.33.0
+      likec4-version:
+        description: LikeC4 version to install when tools-dir is empty.
+        type: string
+        default: 1.59.4
+      strict:
+        description: Run extract, generate and check in verification mode.
+        type: boolean
+        default: true
+      replay-strict:
+        description: Fail replay on unsupported findings. arch has no replay adapter yet, so a strict replay always fails today.
+        type: boolean
+        default: false
+      samples:
+        description: Number of Quint traces arch check samples.
+        type: number
+        default: 40
+      steps:
+        description: Maximum steps per trace.
+        type: number
+        default: 60
+      seed:
+        description: Quint random seed.
+        type: number
+        default: 1
+      steer-weight:
+        description: Weight of process steps and effect outcomes in sampling. 0 samples uniformly.
+        type: number
+        default: 0
+      steer-except:
+        description: Comma-separated effect outcomes that keep weight 1 under steer-weight.
+        type: string
+        default: ""
+      base-ref:
+        description: Branch to diff the IR against. Defaults to the pull request base branch; empty on other events.
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  arch:
+    name: Architecture pipeline
+    runs-on: ubuntu-latest
+    env:
+      ARCH_PROJECT: ${{ inputs.project }}
+      ARCH_OUT: ${{ inputs.out }}
+      ARCH_PACKAGE: ${{ inputs.arch-package }}
+      ARCH_TOOLS_DIR: ${{ inputs.tools-dir }}
+      ARCH_QUINT_VERSION: ${{ inputs.quint-version }}
+      ARCH_LIKEC4_VERSION: ${{ inputs.likec4-version }}
+      ARCH_STRICT: ${{ inputs.strict }}
+      ARCH_REPLAY_STRICT: ${{ inputs.replay-strict }}
+      ARCH_SAMPLES: ${{ inputs.samples }}
+      ARCH_STEPS: ${{ inputs.steps }}
+      ARCH_SEED: ${{ inputs.seed }}
+      ARCH_STEER_WEIGHT: ${{ inputs.steer-weight }}
+      ARCH_STEER_EXCEPT: ${{ inputs.steer-except }}
+      ARCH_BASE_REF: ${{ inputs.base-ref || github.base_ref }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: ${{ inputs.go-version-file }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+      - name: Install arch
+        run: |
+          GOBIN="$RUNNER_TEMP/arch-bin" go install "$ARCH_PACKAGE"
+          echo "$RUNNER_TEMP/arch-bin" >> "$GITHUB_PATH"
+      - name: Install Quint and LikeC4
+        run: |
+          if [ -n "$ARCH_TOOLS_DIR" ]; then
+            npm ci --prefix "$ARCH_TOOLS_DIR" --no-audit --no-fund
+            bin="$(cd "$ARCH_TOOLS_DIR" && pwd)/node_modules/.bin"
+          else
+            npm install --prefix "$RUNNER_TEMP/arch-tools" --no-audit --no-fund --save-exact \
+              "@informalsystems/quint@$ARCH_QUINT_VERSION" "likec4@$ARCH_LIKEC4_VERSION"
+            bin="$RUNNER_TEMP/arch-tools/node_modules/.bin"
+          fi
+          echo "QUINT_BIN=$bin/quint" >> "$GITHUB_ENV"
+          echo "LIKEC4_BIN=$bin/likec4" >> "$GITHUB_ENV"
+          echo "Quint $("$bin/quint" --version), LikeC4 $("$bin/likec4" --version)"
+      - name: Extract
+        run: |
+          strict=(); [ "$ARCH_STRICT" = true ] && strict=(--strict)
+          arch --project "$ARCH_PROJECT" --out "$ARCH_OUT" "${strict[@]}" extract
+      - id: generate
+        name: Generate
+        run: |
+          strict=(); [ "$ARCH_STRICT" = true ] && strict=(--strict)
+          arch --project "$ARCH_PROJECT" --out "$ARCH_OUT" "${strict[@]}" generate
+      - name: Check
+        run: |
+          strict=(); [ "$ARCH_STRICT" = true ] && strict=(--strict)
+          steer=()
+          if [ "$ARCH_STEER_WEIGHT" != 0 ]; then
+            steer=(--steer-weight "$ARCH_STEER_WEIGHT")
+            [ -n "$ARCH_STEER_EXCEPT" ] && steer+=(--steer-except "$ARCH_STEER_EXCEPT")
+          fi
+          arch --project "$ARCH_PROJECT" --out "$ARCH_OUT" "${strict[@]}" check \
+            --samples "$ARCH_SAMPLES" --steps "$ARCH_STEPS" --seed "$ARCH_SEED" "${steer[@]}"
+      - name: Replay
+        run: |
+          strict=(); [ "$ARCH_REPLAY_STRICT" = true ] && strict=(--strict)
+          arch --project "$ARCH_PROJECT" --out "$ARCH_OUT" "${strict[@]}" replay
+      - name: Render diagrams
+        if: ${{ !cancelled() && steps.generate.outcome == 'success' }}
+        run: arch --out "$ARCH_OUT" render
+      - name: Diff IR against the base branch
+        if: ${{ !cancelled() && steps.generate.outcome == 'success' }}
+        run: |
+          diff="$ARCH_OUT/ir-diff.txt"
+          if [ -z "$ARCH_BASE_REF" ]; then
+            echo "no base branch: IR diff skipped" | tee "$diff"
+            exit 0
+          fi
+          base="$(git rev-parse --verify --quiet "origin/$ARCH_BASE_REF" || git rev-parse --verify "$ARCH_BASE_REF")"
+          tree="$RUNNER_TEMP/arch-base"
+          git worktree add --detach "$tree" "$base"
+          trap 'git worktree remove --force "$tree"' EXIT
+          if ! (cd "$tree" && arch --project "$ARCH_PROJECT" --out "$RUNNER_TEMP/arch-base-out" extract); then
+            echo "base $ARCH_BASE_REF ($base): extract failed, no IR to diff against" | tee "$diff"
+            exit 0
+          fi
+          status=0
+          arch diff "$RUNNER_TEMP/arch-base-out/ir.yaml" "$ARCH_OUT/ir.yaml" > "$diff" || status=$?
+          case "$status" in
+            0) echo "IR unchanged against $ARCH_BASE_REF" | tee -a "$diff" ;;
+            2) echo "IR changed against $ARCH_BASE_REF:"; cat "$diff" ;;
+            *) exit "$status" ;;
+          esac
+          if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+            { echo "### IR diff against $ARCH_BASE_REF"; echo '```'; cat "$diff"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload architecture artifacts
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: architecture
+          path: ${{ inputs.out }}
+          if-no-files-found: error

@@ -1,4 +1,4 @@
-.PHONY: api-generate walkthrough library-demo general-demo consumer-test test check verify render serve build clean
+.PHONY: api-generate walkthrough library-demo general-demo consumer-test test check verify render serve build clean envtest arch-pipeline
 
 # Standard controller-gen handles Kubernetes deepcopy methods for the example APIs
 # and the CRD manifests of the reference system.
@@ -28,6 +28,31 @@ consumer-test:
 
 test:
 	go test ./...
+
+# Envtest: install kube-apiserver and etcd with setup-envtest from the
+# controller-runtime release branch in go.mod, for the Kubernetes minor of
+# k8s.io/api, then run every Envtest test. ENVTEST_REQUIRED makes a test
+# fail rather than skip without assets, and the target fails when no
+# Envtest test passed or any skipped.
+ENVTEST_VERSION = $(shell go list -m -f '{{.Version}}' sigs.k8s.io/controller-runtime | awk -F'[v.]' '{printf "release-%d.%d", $$2, $$3}')
+ENVTEST_K8S_VERSION = $(shell go list -m -f '{{.Version}}' k8s.io/api | awk -F'[v.]' '{printf "1.%d.x", $$3}')
+ENVTEST_DIR ?= bin/envtest
+envtest:
+	@set -eu; \
+	assets="$$(go run sigs.k8s.io/controller-runtime/tools/setup-envtest@$(ENVTEST_VERSION) use $(ENVTEST_K8S_VERSION) --bin-dir $(ENVTEST_DIR) -p path)"; \
+	test -n "$$assets" || { echo "setup-envtest printed no asset path" >&2; exit 1; }; \
+	log="$$(mktemp)"; \
+	KUBEBUILDER_ASSETS="$$(cd "$$assets" && pwd)" ENVTEST_REQUIRED=1 go test -p 2 -count=1 -v -run Envtest ./... > "$$log" 2>&1 || { tail -50 "$$log"; exit 1; }; \
+	grep -E -e '--- (PASS|SKIP|FAIL): .*Envtest' "$$log"; \
+	if grep -q -e '--- SKIP' "$$log"; then echo "an envtest test skipped" >&2; exit 1; fi; \
+	grep -q -e '--- PASS: .*Envtest' "$$log" || { echo "no envtest test ran" >&2; exit 1; }
+
+# Run the script steps of the adopter pipeline (.github/workflows/arch.yml)
+# on ConfigMirror, as CI's architecture job does, into a temporary
+# directory. Requires Quint and LikeC4 (QUINT_BIN, LIKEC4_BIN). Set
+# ARCH_PIPELINE_BASE=main to diff the IR against a branch.
+arch-pipeline:
+	ARCH_PIPELINE=1 go test -count=1 -v -run TestArchPipeline ./hack/ci
 
 # Native Go only: replay checked-in, hash-verified evidence.
 check: test walkthrough

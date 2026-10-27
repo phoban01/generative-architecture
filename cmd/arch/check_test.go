@@ -182,6 +182,39 @@ func TestCheckConfigMirror(t *testing.T) {
 	}
 }
 
+func TestCheckSteeringFlags(t *testing.T) {
+	out := t.TempDir()
+	if _, err := arch(t, configMirror, out, false, "check", "--steer-except", "error"); err == nil || !strings.Contains(err.Error(), "--steer-weight") {
+		t.Fatalf("--steer-except without --steer-weight: %v", err)
+	}
+}
+
+// A steered check records its strategy and weights in the receipt, and its
+// scope names the strategy.
+func TestCheckSteered(t *testing.T) {
+	if os.Getenv("QUINT_BIN") == "" {
+		t.Skip("QUINT_BIN not set")
+	}
+	out, err := generateTo(t, configMirror)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := arch(t, configMirror, out, false, "check", "--samples", "4", "--steps", "30", "--steer-weight", "1"); err == nil || !strings.Contains(err.Error(), "same weight") {
+		t.Fatalf("weight 1 accepted: %v", err)
+	}
+	if _, err := arch(t, configMirror, out, false, "check", "--samples", "4", "--steps", "30", "--steer-weight", "8", "--steer-except", "error"); err != nil {
+		t.Fatal(err)
+	}
+	v := readVerification(t, filepath.Join(out, checkReport))
+	s := v.Receipt.Sampling
+	if v.Result != report.Passed || s == nil || s.Strategy != "weighted" || s.Weights["writeTarget_ok"] != 8 || s.Weights["writeTarget_error"] != 0 || s.Samples != 4 {
+		t.Fatalf("report %s sampling %+v", v.Result, s)
+	}
+	if !strings.Contains(v.Scope, "weighted sampling") || !strings.Contains(v.Scope, "not exhaustive") {
+		t.Fatalf("scope %q", v.Scope)
+	}
+}
+
 func TestCheckReportsSafetyViolation(t *testing.T) {
 	if os.Getenv("QUINT_BIN") == "" {
 		t.Skip("QUINT_BIN not set")

@@ -75,6 +75,41 @@ make verify
 
 `make verify` refreshes the sample controller's 40 sampled Quint traces and replays them against Go, samples 40 multi-controller runtime traces, refreshes ConfigMirror's 40 traces sampled from its generated model with its mutation matrix and input-closure receipt, runs every test and checks the separate consumer module. Simulation is bounded, not exhaustive verification or a liveness proof. Fixtures also contain deliberate source mutations; a passing run means the constraints detected them.
 
+## Continuous integration
+
+### Envtest
+
+Some tests start a local API server with controller-runtime's envtest, through `pkg/envtest`. They need the kube-apiserver and etcd binaries, which `setup-envtest` installs. Use the release branch of the controller-runtime version in `go.mod` and the Kubernetes minor of `k8s.io/api`:
+
+```sh
+export KUBEBUILDER_ASSETS="$(go run sigs.k8s.io/controller-runtime/tools/setup-envtest@release-0.23 use 1.35.x --bin-dir bin/envtest -p path)"
+go test -p 2 -run Envtest ./...
+```
+
+Without `KUBEBUILDER_ASSETS` these tests skip. With `ENVTEST_REQUIRED=1` they fail instead, so CI cannot pass by skipping them.
+
+`make envtest` does both steps. It reads the versions from `go.mod` and fails when the assets cannot be installed, a test skips or no test runs. The `envtest` job in `.github/workflows/ci.yml` runs it on each supported Go release after the build job. `hack/ci` parses the workflows and checks these jobs in `go test`.
+
+### Architecture pipeline
+
+`.github/workflows/arch.yml` is a reusable workflow for adopters. It installs `arch`, Quint and LikeC4, then runs `arch extract`, `generate`, `check`, `replay`, `render` and `diff` on one project document. It uploads the output directory as the `architecture` artifact: generated models and diagrams, the rendered site, the reports with their receipts, the sampled traces and the IR diff.
+
+The job fails on a constraint violation or Quint finding, on a replay finding, on evidence whose inputs changed, and on any tool failure. A changed IR against the base branch is reported, not failed. Replay runs in inventory mode by default, because `arch` has no replay adapter yet. Sampling is bounded, so a pass is not exhaustive verification.
+
+```yaml
+jobs:
+  architecture:
+    uses: <owner>/<repo>/.github/workflows/arch.yml@<ref>
+    with:
+      project: project.yaml
+      arch-package: <module>/cmd/arch@<version>
+      tools-dir: hack/tools   # a package.json and lockfile that pin Quint and LikeC4
+```
+
+Without `tools-dir`, the workflow installs the Quint and LikeC4 versions in its `quint-version` and `likec4-version` inputs. The other inputs set the sampling bounds, the seed, steering (`steer-weight`, `steer-except`) and strict mode.
+
+The `architecture` job in `ci.yml` runs the workflow on ConfigMirror with tools from `hack/tools`, so CI uses the versions the receipts record. `make arch-pipeline` runs the same script steps locally into a temporary directory. Set `ARCH_PIPELINE_BASE` to a branch to include the IR diff.
+
 ## Diagrams and binaries
 
 ```sh
