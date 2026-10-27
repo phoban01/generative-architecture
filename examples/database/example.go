@@ -10,6 +10,7 @@ import (
 	"generative-architecture/pkg/goflow"
 	"generative-architecture/pkg/model"
 	"generative-architecture/pkg/watchgen"
+	"generative-architecture/pkg/watchmodel"
 	"k8s.io/apimachinery/pkg/api/meta"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	"os"
@@ -53,11 +54,21 @@ func LoadSource(root string, source []byte) (Example, error) {
 // Schedule follows the extracted branches. Only environment changes and the
 // number of invocations are selected here; controller decisions come from Go.
 func (e Example) Schedule(name string) (conformance.Trace, error) {
-	state, err := e.Model.Initial()
+	actions, err := e.scheduleActions(name)
 	if err != nil {
 		return conformance.Trace{}, err
 	}
+	return conformance.Scenario(e.Model, actions...)
+}
+
+// scheduleActions returns the actions of schedule name. On error it returns
+// the actions taken before the step that failed.
+func (e Example) scheduleActions(name string) ([]string, error) {
 	actions := []string{}
+	state, err := e.Model.Initial()
+	if err != nil {
+		return actions, err
+	}
 	advance := func(name string) error {
 		next, err := e.Model.Next(state, name)
 		if err != nil {
@@ -92,58 +103,58 @@ func (e Example) Schedule(name string) (conformance.Trace, error) {
 	case "unsupported":
 		contract = "false"
 	default:
-		return conformance.Trace{}, fmt.Errorf("unknown scenario %s", name)
+		return actions, fmt.Errorf("unknown scenario %s", name)
 	}
 	discover, err := e.EnvironmentEvent(contractVariable, contract)
 	if err != nil {
-		return conformance.Trace{}, err
+		return actions, err
 	}
 	provision, err := e.EnvironmentEvent(instanceEndpointVariable, `"db-1.internal"`)
 	if err != nil {
-		return conformance.Trace{}, err
+		return actions, err
 	}
 	if err = advance(discover.Name); err != nil {
-		return conformance.Trace{}, err
+		return actions, err
 	}
 	if name == "absent" {
 		if err = advance("removeDatabaseBeforeRead"); err != nil {
-			return conformance.Trace{}, err
+			return actions, err
 		}
 	}
-	if err = advance("deliverDatabase"); err != nil {
-		return conformance.Trace{}, err
+	if err = advance(deliverDatabase); err != nil {
+		return actions, err
 	}
 	if err = invoke(); err != nil {
-		return conformance.Trace{}, err
+		return actions, err
 	}
 	if name == "pending" || name == "provisioned" || name == "repeated" {
-		if err = advance("deliverInstance"); err != nil {
-			return conformance.Trace{}, err
+		if err = advance(deliverInstance); err != nil {
+			return actions, err
 		}
 		if err = invoke(); err != nil {
-			return conformance.Trace{}, err
+			return actions, err
 		}
 	}
 	if name == "provisioned" || name == "repeated" {
 		if err = advance(provision.Name); err != nil {
-			return conformance.Trace{}, err
+			return actions, err
 		}
-		if err = advance("deliverInstance"); err != nil {
-			return conformance.Trace{}, err
+		if err = advance(deliverInstance); err != nil {
+			return actions, err
 		}
 		if err = invoke(); err != nil {
-			return conformance.Trace{}, err
+			return actions, err
 		}
 	}
 	if name == "repeated" {
-		if err = advance("deliverDatabase"); err != nil {
-			return conformance.Trace{}, err
+		if err = advance(deliverDatabase); err != nil {
+			return actions, err
 		}
 		if err = invoke(); err != nil {
-			return conformance.Trace{}, err
+			return actions, err
 		}
 	}
-	return conformance.Scenario(e.Model, actions...)
+	return actions, nil
 }
 
 // Adapter holds actual fixture contents and observations. It receives events,
@@ -154,8 +165,9 @@ type Adapter struct {
 	api                              *dynamicfake.FakeDynamicClient
 	watches                          watchgen.Result
 	queue                            *eventQueue
-	databaseEvent, instanceEvent     string
-	instanceUpdatePending            bool
+	objects                          map[string]*watchedObject
+	deliveries                       map[string]string
+	observed                         []string
 	ctx                              context.Context
 	cancel                           context.CancelFunc
 	gate                             *effect.Gate
@@ -163,7 +175,6 @@ type Adapter struct {
 	initErr                          error
 	environment                      map[string]EnvironmentAction
 	instanceExists                   bool
-	instanceEndpoint, statusEndpoint string
 	instanceCreates, invocations     int64
 	found, compatible, instanceFound bool
 	endpoint, outcome                string
@@ -175,7 +186,10 @@ type Adapter struct {
 
 func New(ctx context.Context, e Example, mutant bool) *Adapter {
 	ctx, cancel := context.WithCancel(ctx)
-	a := &Adapter{watches: e.Watches, ctx: ctx, cancel: cancel, gate: effect.NewGate(), result: make(chan string, 1), nodes: e.Program.Nodes, mutant: mutant, environment: map[string]EnvironmentAction{}}
+	a := &Adapter{watches: e.Watches, ctx: ctx, cancel: cancel, gate: effect.NewGate(), result: make(chan string, 1), nodes: e.Program.Nodes, mutant: mutant, environment: map[string]EnvironmentAction{}, objects: newWatchedObjects(), deliveries: map[string]string{}, observed: e.Observed}
+	for _, o := range a.objects {
+		a.deliveries[watchmodel.DeliverAction(o.gvk)] = o.gvk.Kind
+	}
 	for _, env := range e.Environment {
 		a.environment[env.Name] = env
 	}
@@ -237,7 +251,7 @@ func (a *Adapter) CreateDatabaseInstance() {
 			return effect.Result{Err: a.dynamicStore.Err}
 		}
 		a.instanceExists = true
-		a.instanceEvent = "create"
+		a.record("DatabaseInstance", watchmodel.Create, false)
 		return effect.Result{}
 	})
 }
@@ -250,8 +264,7 @@ func (a *Adapter) UpdateDatabaseStatus(endpoint string) {
 		if a.dynamicStore.Err != nil {
 			return effect.Result{Err: a.dynamicStore.Err}
 		}
-		a.statusEndpoint = endpoint
-		a.databaseEvent = "update"
+		a.record("Database", watchmodel.Update, false)
 		return effect.Result{Snapshot: map[string]any{"endpoint": endpoint}}
 	})
 }
@@ -262,13 +275,12 @@ func (a *Adapter) Apply(ctx context.Context, event string) error {
 	if env, ok := a.environment[event]; ok {
 		return a.applyEnvironment(env)
 	}
+	if kind, ok := a.deliveries[event]; ok {
+		return a.deliver(kind)
+	}
 	switch event {
-	case "deliverDatabase":
-		return a.deliver("Database")
-	case "deliverInstance":
-		return a.deliver("DatabaseInstance")
 	case "removeDatabaseBeforeRead":
-		a.databaseEvent = "delete"
+		a.record("Database", watchmodel.Delete, false)
 		return a.removeDynamic()
 	case "idle":
 		return nil
@@ -357,22 +369,28 @@ func (a *Adapter) Project(context.Context) (map[string]any, error) {
 	}
 	// API state comes from the generated projection under the abstraction's
 	// names; the rest is the adapter's observation of the queue and of Go.
-	state := map[string]any{
-		"queued": a.queue.queued, "wrongKey": a.queue.err != nil, "databaseEvent": a.databaseEvent, "instanceEvent": a.instanceEvent, "instanceUpdatePending": a.instanceUpdatePending,
+	all := map[string]any{
 		"instanceCreates": a.instanceCreates, "found": a.found, "compatible": a.compatible, "instanceFound": a.instanceFound, "endpoint": a.endpoint,
 		"outcome": a.outcome, "invocations": a.invocations,
 	}
+	a.observeWatches(all)
 	for name, v := range apiState {
-		if _, dup := state[name]; dup {
+		if _, dup := all[name]; dup {
 			return nil, fmt.Errorf("projected %s collides with an observed local", name)
+		}
+		all[name] = v
+	}
+	// The model holds no watch state for a resource nobody watches.
+	state := make(map[string]any, len(a.observed))
+	for _, name := range a.observed {
+		v, ok := all[name]
+		if !ok {
+			return nil, fmt.Errorf("adapter does not observe %s", name)
 		}
 		state[name] = v
 	}
 	return state, nil
 }
-
-// watchVariables are the state of the reviewed one-key FIFO summary.
-var watchVariables = []string{"queued", "wrongKey", "databaseEvent", "instanceEvent", "instanceUpdatePending"}
 
 // applyEnvironment performs a generated environment action on the fake API:
 // it creates the Database with its contract annotation, or provisions the
@@ -380,7 +398,7 @@ var watchVariables = []string{"queued", "wrongKey", "databaseEvent", "instanceEv
 func (a *Adapter) applyEnvironment(env EnvironmentAction) error {
 	switch {
 	case env.Operation == EnvCreate && env.Variable == contractVariable:
-		a.databaseEvent = "create"
+		a.record("Database", watchmodel.Create, false)
 		return a.discoverDynamic(env.Value == "true")
 	case env.Operation == EnvUpdate && env.Variable == instanceEndpointVariable:
 		if !a.instanceExists {
@@ -393,12 +411,8 @@ func (a *Adapter) applyEnvironment(env EnvironmentAction) error {
 		if err := a.provisionDynamic(endpoint); err != nil {
 			return err
 		}
-		a.instanceEndpoint = endpoint
-		if a.instanceEvent == "create" {
-			a.instanceUpdatePending = true
-		} else {
-			a.instanceEvent = "update"
-		}
+		// A status write leaves the generation alone.
+		a.record("DatabaseInstance", watchmodel.Update, false)
 		return nil
 	}
 	return fmt.Errorf("environment action %s has no fixture operation", env.Name)

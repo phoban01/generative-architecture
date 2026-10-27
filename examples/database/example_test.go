@@ -55,42 +55,6 @@ func TestFullProvisioningFlow(t *testing.T) {
 		})
 	}
 }
-func TestSourceMutationsViolateUnchangedConstraints(t *testing.T) {
-	source, err := os.ReadFile("controller.go")
-	if err != nil {
-		t.Fatal(err)
-	}
-	original, err := LoadSource(".", source)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, mutation := range []struct{ name, from, to, scenario, property string }{
-		{"contract-check", "if !compatible", "if compatible", "unsupported", "instancesRequireCompatibleDatabase"},
-		{"provisioning-check", `if endpoint == ""`, `if endpoint != ""`, "pending", "readyHasEndpoint"},
-		{"wrong-id", "store.UpdateDatabaseStatus(endpoint)", `store.UpdateDatabaseStatus("wrong-endpoint")`, "provisioned", "publicationRequiresProvisionedInstance"},
-	} {
-		t.Run(mutation.name, func(t *testing.T) {
-			changed := strings.Replace(string(source), mutation.from, mutation.to, 1)
-			if changed == string(source) {
-				t.Fatal("mutation did not change source")
-			}
-			e, err := LoadSource(".", []byte(changed))
-			if err != nil {
-				t.Fatal(err)
-			}
-			if e.Model.Quint() == original.Model.Quint() {
-				t.Fatal("source mutation did not change generated model")
-			}
-			trace, err := e.Schedule(mutation.scenario)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if err = e.CheckConstraints(trace); err == nil || !strings.Contains(err.Error(), mutation.property) {
-				t.Fatalf("independent constraint missed mutation: %v", err)
-			}
-		})
-	}
-}
 func TestReplayDetectsWrongStatusWrite(t *testing.T) {
 	e, err := Load(".")
 	if err != nil {

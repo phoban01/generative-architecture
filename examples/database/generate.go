@@ -18,9 +18,12 @@ import (
 	"generative-architecture/pkg/effect"
 	"generative-architecture/pkg/expr"
 	"generative-architecture/pkg/goflow"
+	"generative-architecture/pkg/ir"
 	"generative-architecture/pkg/krm"
 	"generative-architecture/pkg/model"
 	"generative-architecture/pkg/process"
+	"generative-architecture/pkg/watchgen"
+	"generative-architecture/pkg/watchmodel"
 )
 
 // This file derives the Database controller's TransitionModel from its
@@ -472,7 +475,7 @@ func LoadSources(root string, source, wiring []byte) (Example, error) {
 			return Example{}, fmt.Errorf("watch identity does not match this slice's API resources: %w", err)
 		}
 	}
-	spec, err := addWatchModel(g.Spec, watches, g.Environment)
+	spec, watchState, err := composeWatches(g.Spec, watches, g.Environment, abs)
 	if err != nil {
 		return Example{}, err
 	}
@@ -489,7 +492,244 @@ func LoadSources(root string, source, wiring []byte) (Example, error) {
 	constrained := spec
 	constrained.Properties = requirements.Properties
 	e := Example{Dynamic: accesses, Resources: catalog, Watches: watches, Program: g.Program, Spec: spec, Environment: g.Environment, Model: compiled}
-	e.Observed = append(append([]string(nil), watchVariables...), abs.SortedVariables()...)
+	e.Observed = append(watchState, abs.SortedVariables()...)
 	e.Constrained, err = model.Compile(constrained)
 	return e, err
+}
+
+// watchController and watchFile locate the extracted watches in IR
+// provenance.
+const (
+	watchController = "DatabaseReconciler"
+	watchFile       = "wiring.go"
+)
+
+// extractWatches reads the watch registrations of SetupWithManager in
+// wiring. The native delivery in the adapter supports the primary Database
+// and DatabaseInstance through InstanceToDatabase.
+func extractWatches(wiring []byte) (watchgen.Result, error) {
+	resources := map[string]effect.Resource{}
+	for _, kind := range []string{"Database", "DatabaseInstance"} {
+		resources["generative-architecture/examples/database/api/v1alpha1."+kind] = effect.Resource{Group: "demo.architecture.local", Version: "v1alpha1", Kind: kind}
+	}
+	w, err := watchgen.Extract(wiring, watchController, "SetupWithManager", resources)
+	if err != nil {
+		return w, err
+	}
+	for _, r := range w.Rules {
+		self := r.Mapping == "self" && r.Resource.Kind == "Database"
+		mapped := r.Mapping == "InstanceToDatabase" && r.Resource.Kind == "DatabaseInstance"
+		if !self && !mapped {
+			return w, fmt.Errorf("native delivery has no handler for %s with mapping %s", r.Resource.Kind, r.Mapping)
+		}
+	}
+	return w, nil
+}
+
+// composeWatches adds the watch model that pkg/watchmodel generates from
+// the extracted watches. The objects and the reconcile keys come from the
+// abstraction: the keys are the objects of the primary resource. Each
+// action that changes a watched object records its event with Emit. It
+// returns the spec and the state the watch model added, sorted.
+func composeWatches(spec model.Spec, w watchgen.Result, env []EnvironmentAction, abs abstraction.Abstraction) (model.Spec, []string, error) {
+	watches := w.IR(watchController, watchFile)
+	watched := map[string]ir.GVK{}
+	var primary ir.GVK
+	for _, x := range watches {
+		watched[x.Resource.Kind] = x.Resource
+		if x.Primary {
+			primary = x.Resource
+		}
+	}
+	var objects, keys []ir.ObjectRef
+	refs := map[string]ir.ObjectRef{}
+	for _, r := range abs.Spec.Resources {
+		for _, o := range r.Objects {
+			ref := ir.ObjectRef{GVK: r.GVK, Namespace: o.Namespace, Name: o.Name}
+			objects = append(objects, ref)
+			refs[r.GVK.Kind] = ref
+			if r.GVK == primary {
+				keys = append(keys, ref)
+			}
+		}
+	}
+	if len(keys) != 1 {
+		return spec, nil, fmt.Errorf("the reconcile action pops one key; the abstraction declares %d", len(keys))
+	}
+	fields, err := watchFields(abs, watches, refs)
+	if err != nil {
+		return spec, nil, err
+	}
+	out, err := watchmodel.Add(spec, watches, objects, keys, watchmodel.WithFields(fields))
+	if err != nil {
+		return spec, nil, err
+	}
+	queued := watchmodel.QueuedVar(keys[0])
+	// A delayed event can refer to an object already gone by reconciliation
+	// time: the environment removes the Database before the first read.
+	out.Actions = append(out.Actions, model.Action{Name: "removeDatabaseBeforeRead", Guard: expr.Expression(databaseExistsVariable + " && !" + instanceExistsVariable + " && " + invocationCounter + " == 0"), Updates: map[string]expr.Expression{databaseExistsVariable: "false", contractVariable: "false", databaseEndpointVariable: `""`}})
+	emits, err := watchEmits(out, env, abs)
+	if err != nil {
+		return spec, nil, err
+	}
+	for i := range out.Actions {
+		a := &out.Actions[i]
+		updates := make(map[string]expr.Expression, len(a.Updates))
+		for k, v := range a.Updates {
+			updates[k] = v
+		}
+		// An object nobody watches raises no event.
+		if e, ok := emits[a.Name]; ok && watched[e.kind] != (ir.GVK{}) {
+			u, err := watchmodel.Emit(watched[e.kind], e.event, e.generation)
+			if err != nil {
+				return spec, nil, err
+			}
+			for k, v := range u {
+				if _, dup := updates[k]; dup {
+					return spec, nil, fmt.Errorf("action %s already updates %s", a.Name, k)
+				}
+				updates[k] = v
+			}
+		}
+		// The worker pops the key: a reconcile needs a queued key and
+		// clears it, so an event during processing queues it again.
+		if a.Name == "reconcile" {
+			a.Guard = expr.Expression("(" + string(a.Guard) + ") && " + queued)
+			updates[queued] = "false"
+		}
+		a.Updates = updates
+	}
+	var added []string
+	for name := range out.State {
+		if _, ok := spec.State[name]; !ok {
+			added = append(added, name)
+		}
+	}
+	sort.Strings(added)
+	return out, added, nil
+}
+
+// watchFields supplies the value of each field a field mapping reads, from
+// the abstraction field at the same path. That field must have one value
+// in its domain. A path the abstraction does not declare stays unsupplied,
+// and watchmodel then treats the target as outside the key set.
+func watchFields(abs abstraction.Abstraction, watches []ir.Watch, refs map[string]ir.ObjectRef) (map[ir.ObjectRef]map[string]string, error) {
+	out := map[ir.ObjectRef]map[string]string{}
+	for _, w := range watches {
+		if w.Mapping.Kind != ir.MappingField {
+			continue
+		}
+		for _, r := range abs.Spec.Resources {
+			if r.GVK != w.Resource {
+				continue
+			}
+			for _, f := range r.Fields {
+				if !goPath(f.Path, w.Mapping.FieldPath) {
+					continue
+				}
+				domain := r.ValueDomains[f.Key()]
+				if len(domain) != 1 {
+					return nil, fmt.Errorf("watch on %s maps through %s, which needs one value in its domain; found %d", r.GVK.Kind, f.Key(), len(domain))
+				}
+				value, err := strconv.Unquote(domain[0])
+				if err != nil {
+					return nil, fmt.Errorf("field %s: %w", f.Key(), err)
+				}
+				ref := refs[r.GVK.Kind]
+				if out[ref] == nil {
+					out[ref] = map[string]string{}
+				}
+				out[ref][strings.Join(w.Mapping.FieldPath, ".")] = value
+			}
+		}
+	}
+	return out, nil
+}
+
+// goPath reports whether the Go field path names the API path: each Go
+// field is the API field with its first letter in upper case.
+func goPath(api, fields []string) bool {
+	if len(api) != len(fields) {
+		return false
+	}
+	for i := range api {
+		if api[i] == "" || strings.ToUpper(api[i][:1])+api[i][1:] != fields[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// watchEvent is the event an action raises on the object of kind.
+type watchEvent struct {
+	kind, event string
+	generation  bool
+}
+
+// watchEmits finds the event each action raises. An environment action
+// creates or updates its object; an update of a spec field moves the
+// generation. An effect action raises the event of its API operation.
+// removeDatabaseBeforeRead deletes the Database.
+func watchEmits(spec model.Spec, env []EnvironmentAction, abs abstraction.Abstraction) (map[string]watchEvent, error) {
+	out := map[string]watchEvent{"removeDatabaseBeforeRead": {kind: "Database", event: watchmodel.Delete}}
+	for _, e := range env {
+		switch e.Operation {
+		case EnvCreate:
+			out[e.Name] = watchEvent{kind: e.Kind, event: watchmodel.Create}
+		case EnvUpdate:
+			path, ok := variablePath(abs, e.Kind, e.Object, e.Variable)
+			if !ok {
+				return nil, fmt.Errorf("environment action %s sets %s, which the abstraction does not declare", e.Name, e.Variable)
+			}
+			out[e.Name] = watchEvent{kind: e.Kind, event: watchmodel.Update, generation: path[0] == "spec"}
+		default:
+			return nil, fmt.Errorf("environment action %s: unknown operation %s", e.Name, e.Operation)
+		}
+	}
+	effects := map[string]effect.Descriptor{}
+	for _, d := range spec.Effects {
+		effects[d.ID] = d
+	}
+	for _, a := range spec.Actions {
+		if a.Effect == "" {
+			continue
+		}
+		d, ok := effects[a.Effect]
+		if !ok {
+			return nil, fmt.Errorf("action %s performs undeclared effect %s", a.Name, a.Effect)
+		}
+		e := watchEvent{kind: d.Resource.Kind}
+		switch d.Operation {
+		case "get", "list", derivedOperation:
+			continue
+		case "create":
+			e.event = watchmodel.Create
+		case "update":
+			e.event, e.generation = watchmodel.Update, true
+		case "status.update":
+			e.event = watchmodel.Update
+		case "delete":
+			e.event = watchmodel.Delete
+		default:
+			return nil, fmt.Errorf("effect %s: operation %s has no watch event", d.ID, d.Operation)
+		}
+		out[a.Name] = e
+	}
+	return out, nil
+}
+
+// variablePath returns the API path of the field of object whose state
+// variable is variable.
+func variablePath(abs abstraction.Abstraction, kind, object, variable string) ([]string, bool) {
+	for _, r := range abs.Spec.Resources {
+		if r.GVK.Kind != kind {
+			continue
+		}
+		for _, f := range r.Fields {
+			if abstraction.FieldVariable(kind, object, f) == variable {
+				return f.Path, true
+			}
+		}
+	}
+	return nil, false
 }

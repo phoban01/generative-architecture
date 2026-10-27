@@ -24,11 +24,21 @@ var name = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]*$`)
 // Mutation is one textual change to one file and the constraints that
 // should detect it.
 type Mutation struct {
-	Name    string   `yaml:"name"`
-	File    string   `yaml:"file"`
-	Find    string   `yaml:"find"`
-	Replace string   `yaml:"replace"`
-	Expect  []string `yaml:"expect"`
+	Name    string `yaml:"name"`
+	File    string `yaml:"file"`
+	Find    string `yaml:"find"`
+	Replace string `yaml:"replace"`
+	// Edits are further find/replace pairs in the same file, applied in
+	// order after Find. A change such as a new call and its import needs
+	// them.
+	Edits  []Edit   `yaml:"edits,omitempty"`
+	Expect []string `yaml:"expect"`
+}
+
+// Edit is one find/replace pair.
+type Edit struct {
+	Find    string `yaml:"find"`
+	Replace string `yaml:"replace"`
 }
 
 // Spec is the payload of a MutationSuite document.
@@ -87,6 +97,11 @@ func (s Suite) Validate() error {
 		if m.Find == m.Replace {
 			return fmt.Errorf("mutation %s: replace equals find", m.Name)
 		}
+		for i, e := range m.Edits {
+			if e.Find == "" || e.Find == e.Replace {
+				return fmt.Errorf("mutation %s: edit %d needs a find that differs from its replace", m.Name, i+1)
+			}
+		}
 		if len(m.Expect) == 0 {
 			return fmt.Errorf("mutation %s: expect at least one constraint", m.Name)
 		}
@@ -102,17 +117,21 @@ func (s Suite) Validate() error {
 }
 
 // Apply returns the contents of root/m.File with every occurrence of find
-// replaced. Nothing is written to disk. A pattern that does not occur is an
-// error: the mutation would be a no-op.
+// replaced, then every occurrence of each edit's find. Nothing is written
+// to disk. A pattern that does not occur is an error: the mutation would be
+// a no-op.
 func Apply(root string, m Mutation) ([]byte, error) {
 	b, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(m.File)))
 	if err != nil {
 		return nil, fmt.Errorf("mutation %s: %w", m.Name, err)
 	}
-	if !bytes.Contains(b, []byte(m.Find)) {
-		return nil, fmt.Errorf("mutation %s: %q does not occur in %s", m.Name, m.Find, m.File)
+	for _, e := range append([]Edit{{Find: m.Find, Replace: m.Replace}}, m.Edits...) {
+		if !bytes.Contains(b, []byte(e.Find)) {
+			return nil, fmt.Errorf("mutation %s: %q does not occur in %s", m.Name, e.Find, m.File)
+		}
+		b = bytes.ReplaceAll(b, []byte(e.Find), []byte(e.Replace))
 	}
-	return bytes.ReplaceAll(b, []byte(m.Find), []byte(m.Replace)), nil
+	return b, nil
 }
 
 // Run applies each mutation, hands the mutated contents (file path to

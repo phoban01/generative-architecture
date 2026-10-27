@@ -29,6 +29,45 @@ spec:
     databaseEvent:
       type: string
       initial: '""'
+    databaseEventPending:
+      type: bool
+      initial: "false"
+    databaseGeneration:
+      type: int
+      initial: "0"
+    databaseGenerationSeen:
+      type: int
+      initial: "0"
+    databaseInstance_Spec_DatabaseName:
+      type: string
+      initial: '"db-1"'
+    databaseInstance_Spec_DatabaseNameSeen:
+      type: string
+      initial: '"db-1"'
+    databaseInstanceEvent:
+      type: string
+      initial: '""'
+    databaseInstanceEventPending:
+      type: bool
+      initial: "false"
+    databaseInstanceGeneration:
+      type: int
+      initial: "0"
+    databaseInstanceGenerationSeen:
+      type: int
+      initial: "0"
+    databaseInstanceResourceVersion:
+      type: int
+      initial: "0"
+    databaseInstanceResourceVersionSeen:
+      type: int
+      initial: "0"
+    databaseResourceVersion:
+      type: int
+      initial: "0"
+    databaseResourceVersionSeen:
+      type: int
+      initial: "0"
     endpoint:
       type: string
       initial: '""'
@@ -41,13 +80,7 @@ spec:
     instanceCreates:
       type: int
       initial: "0"
-    instanceEvent:
-      type: string
-      initial: '""'
     instanceFound:
-      type: bool
-      initial: "false"
-    instanceUpdatePending:
       type: bool
       initial: "false"
     invocations:
@@ -59,7 +92,7 @@ spec:
     pc:
       type: int
       initial: "-1"
-    queued:
+    queued_demo_db_1:
       type: bool
       initial: "false"
     wrongKey:
@@ -108,18 +141,29 @@ spec:
         Database_db1_contractSatisfied: "false"
         Database_db1_exists: "true"
         databaseEvent: '"create"'
+        databaseEventPending: "false"
+        databaseGeneration: databaseGeneration + 1
+        databaseGenerationSeen: databaseGeneration + 1
+        databaseResourceVersion: databaseResourceVersion + 1
+        databaseResourceVersionSeen: databaseResourceVersion + 1
     - name: createDb1_true
       guard: '!Database_db1_exists && invocations == 0'
       updates:
         Database_db1_contractSatisfied: "true"
         Database_db1_exists: "true"
         databaseEvent: '"create"'
+        databaseEventPending: "false"
+        databaseGeneration: databaseGeneration + 1
+        databaseGenerationSeen: databaseGeneration + 1
+        databaseResourceVersion: databaseResourceVersion + 1
+        databaseResourceVersionSeen: databaseResourceVersion + 1
     - name: changeInst1_1
       guard: DatabaseInstance_inst1_exists && DatabaseInstance_inst1_status_endpoint == ""
       updates:
         DatabaseInstance_inst1_status_endpoint: '"db-1.internal"'
-        instanceEvent: 'instanceEvent == "create" ? "create" : "update"'
-        instanceUpdatePending: instanceEvent == "create" || instanceUpdatePending
+        databaseInstanceEvent: 'databaseInstanceEvent == "" ? "update" : databaseInstanceEvent'
+        databaseInstanceEventPending: databaseInstanceEventPending || databaseInstanceEvent == "create"
+        databaseInstanceResourceVersion: databaseInstanceResourceVersion + 1
     - name: node0_return
       guard: '!finished && pc == 0 && (true)'
       updates:
@@ -130,7 +174,9 @@ spec:
       guard: '!finished && pc == 1 && (true)'
       updates:
         Database_db1_status_endpoint: endpoint
-        databaseEvent: '"update"'
+        databaseEvent: 'databaseEvent == "" ? "update" : databaseEvent'
+        databaseEventPending: databaseEventPending || databaseEvent == "create"
+        databaseResourceVersion: databaseResourceVersion + 1
         pc: "0"
       effect: publish
     - name: node2_return
@@ -154,8 +200,13 @@ spec:
       updates:
         DatabaseInstance_inst1_exists: "true"
         DatabaseInstance_inst1_spec_databaseName: '"db-1"'
+        databaseInstanceEvent: '"create"'
+        databaseInstanceEventPending: "false"
+        databaseInstanceGeneration: databaseInstanceGeneration + 1
+        databaseInstanceGenerationSeen: databaseInstanceGeneration + 1
+        databaseInstanceResourceVersion: databaseInstanceResourceVersion + 1
+        databaseInstanceResourceVersionSeen: databaseInstanceResourceVersion + 1
         instanceCreates: instanceCreates + 1
-        instanceEvent: '"create"'
         pc: "4"
       effect: createInstance
     - name: node6_branch
@@ -202,7 +253,7 @@ spec:
         pc: "12"
       effect: readDatabase
     - name: reconcile
-      guard: (finished && invocations < 4) && queued
+      guard: (finished && invocations < 4) && queued_demo_db_1
       updates:
         compatible: "false"
         endpoint: '""'
@@ -212,23 +263,28 @@ spec:
         invocations: invocations + 1
         outcome: '""'
         pc: "13"
-        queued: "false"
+        queued_demo_db_1: "false"
     - name: idle
       guard: finished
       updates: {}
     - name: deliverDatabase
       guard: databaseEvent != ""
       updates:
-        databaseEvent: '""'
-        queued: queued || (true)
-        wrongKey: wrongKey
-    - name: deliverInstance
-      guard: instanceEvent != ""
+        databaseEvent: 'databaseEventPending ? "update" : ""'
+        databaseEventPending: "false"
+        databaseGenerationSeen: 'databaseEvent == "create" ? databaseGenerationSeen : databaseGeneration'
+        databaseResourceVersionSeen: 'databaseEvent == "create" ? databaseResourceVersionSeen : databaseResourceVersion'
+        queued_demo_db_1: "true"
+    - name: deliverDatabaseInstance
+      guard: databaseInstanceEvent != ""
       updates:
-        instanceEvent: 'instanceEvent == "create" && instanceUpdatePending ? "update" : ""'
-        instanceUpdatePending: "false"
-        queued: queued || (true)
-        wrongKey: wrongKey
+        databaseInstance_Spec_DatabaseNameSeen: 'databaseInstanceEvent == "create" ? databaseInstance_Spec_DatabaseNameSeen : databaseInstance_Spec_DatabaseName'
+        databaseInstanceEvent: 'databaseInstanceEventPending ? "update" : ""'
+        databaseInstanceEventPending: "false"
+        databaseInstanceGenerationSeen: 'databaseInstanceEvent == "create" ? databaseInstanceGenerationSeen : databaseInstanceGeneration'
+        databaseInstanceResourceVersionSeen: 'databaseInstanceEvent == "create" ? databaseInstanceResourceVersionSeen : databaseInstanceResourceVersion'
+        queued_demo_db_1: queued_demo_db_1 || (databaseInstance_Spec_DatabaseName == "db-1") || ((databaseInstanceEvent == "update") && (databaseInstance_Spec_DatabaseNameSeen == "db-1"))
+        wrongKey: wrongKey || (databaseInstance_Spec_DatabaseName != "" && !(databaseInstance_Spec_DatabaseName == "db-1")) || ((databaseInstanceEvent == "update") && (databaseInstance_Spec_DatabaseNameSeen != "" && !(databaseInstance_Spec_DatabaseNameSeen == "db-1")))
     - name: removeDatabaseBeforeRead
       guard: Database_db1_exists && !DatabaseInstance_inst1_exists && invocations == 0
       updates:
@@ -236,4 +292,6 @@ spec:
         Database_db1_exists: "false"
         Database_db1_status_endpoint: '""'
         databaseEvent: '"delete"'
+        databaseEventPending: "false"
+        databaseResourceVersion: databaseResourceVersion + 1
   properties: []

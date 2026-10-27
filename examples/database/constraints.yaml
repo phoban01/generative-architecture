@@ -17,8 +17,8 @@ spec:
     - name: readyHasEndpoint
       expression: 'outcome != "ready" || Database_db1_status_endpoint != ""'
     - name: databaseWatchEnqueuesReconciler
-      expression: 'event != "deliverDatabase" || queued'
+      expression: 'event != "deliverDatabase" || queued_demo_db_1'
     - name: instanceProvisioningEnqueuesReconciler
-      expression: 'event != "deliverInstance" || DatabaseInstance_inst1_status_endpoint == "" || queued'
+      expression: 'event != "deliverDatabaseInstance" || DatabaseInstance_inst1_status_endpoint == "" || queued_demo_db_1'
     - name: watchTargetsDatabase
       expression: '!wrongKey'
