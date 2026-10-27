@@ -38,6 +38,12 @@ const (
 	MappingField  = "field"  // a field path on the object names the key
 	MappingOwner  = "owner"  // the owner reference of the given GVK
 	MappingCustom = "custom" // a mapper the extractor could not summarize
+	// MappingLabel lists the dependent kind in the object's namespace and
+	// maps to every dependent whose label value is the object's name.
+	MappingLabel = "label"
+	// MappingReference lists the dependent kind in the object's namespace
+	// and maps to every dependent whose field value is the object's name.
+	MappingReference = "reference"
 )
 
 // KeyMapping says how events on a watched resource become reconcile keys.
@@ -47,6 +53,13 @@ type KeyMapping struct {
 	OwnerGVK  *GVK     `yaml:"ownerGVK,omitempty"`
 	// OnlyController limits an owner mapping to the controlling owner.
 	OnlyController bool `yaml:"onlyController,omitempty"`
+	// Dependent is the kind that a label or reference mapping lists.
+	Dependent *GVK `yaml:"dependent,omitempty"`
+	// Label is the label key that a label mapping selects on.
+	Label string `yaml:"label,omitempty"`
+	// DependentPath is the field path on the dependent that a reference
+	// mapping compares with the object's name.
+	DependentPath []string `yaml:"dependentPath,omitempty"`
 }
 
 // Validate checks the mapping kind and its required arguments.
@@ -64,8 +77,21 @@ func (m KeyMapping) Validate() error {
 		if err := m.OwnerGVK.Validate(); err != nil {
 			return err
 		}
+	case MappingLabel, MappingReference:
+		if m.Dependent == nil {
+			return fmt.Errorf("%s mapping requires a dependent GVK", m.Kind)
+		}
+		if err := m.Dependent.Validate(); err != nil {
+			return err
+		}
+		if m.Kind == MappingLabel && m.Label == "" {
+			return fmt.Errorf("label mapping requires a label key")
+		}
+		if m.Kind == MappingReference && len(m.DependentPath) == 0 {
+			return fmt.Errorf("reference mapping requires a dependent field path")
+		}
 	default:
-		return fmt.Errorf("unknown mapping kind %q; expected self, field, owner or custom", m.Kind)
+		return fmt.Errorf("unknown mapping kind %q; expected self, field, owner, label, reference or custom", m.Kind)
 	}
 	return nil
 }
