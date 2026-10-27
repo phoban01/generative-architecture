@@ -2,6 +2,7 @@
 package expr
 
 import (
+	"errors"
 	"fmt"
 	"go.yaml.in/yaml/v3"
 	"regexp"
@@ -93,6 +94,11 @@ func (compiler Compiler) Compile(source Expression, scope map[string]Symbol, exp
 		return Symbol{}, fmt.Errorf("invalid CEL %q: %w", source, issues.Err())
 	}
 	result, err := compiler.lowerCEL(ast.Expr(), scope)
+	var at *locatedError
+	if errors.As(err, &at) {
+		l := ast.NativeRep().SourceInfo().GetStartLocation(at.id)
+		err = fmt.Errorf("line %d, column %d: %w", l.Line(), l.Column()+1, at.err)
+	}
 	if err == nil && expected != "" && result.Type != expected {
 		err = fmt.Errorf("CEL type mismatch: expected %s, got %s", expected, result.Type)
 	}
@@ -102,7 +108,7 @@ func (compiler Compiler) Compile(source Expression, scope map[string]Symbol, exp
 	return result, nil
 }
 func (compiler Compiler) lowerCEL(e *exprpb.Expr, scope map[string]Symbol) (Symbol, error) {
-	bad := func(f string, a ...any) (Symbol, error) { return Symbol{}, fmt.Errorf(f, a...) }
+	bad := func(f string, a ...any) (Symbol, error) { return located(e, fmt.Errorf(f, a...)) }
 	if s, ok := scope[dotted(e)]; ok {
 		return s, nil
 	}
@@ -189,32 +195,36 @@ func (compiler Compiler) lowerCEL(e *exprpb.Expr, scope map[string]Symbol) (Symb
 		return Symbol{matches[0], "{ " + strings.Join(fields, ", ") + " }"}, nil
 	}
 	if c := e.GetComprehensionExpr(); c != nil {
-		init := c.AccuInit.GetConstExpr()
-		step := c.LoopStep.GetCallExpr()
-		condition := c.LoopCondition.GetCallExpr()
-		if c.IterVar2 != "" || init == nil || !init.GetBoolValue() || step == nil || step.Function != "_&&_" || len(step.Args) != 2 || dotted(step.Args[0]) != c.AccuVar || condition == nil || condition.Function != "@not_strictly_false" || len(condition.Args) != 1 || dotted(condition.Args[0]) != c.AccuVar || dotted(c.Result) != c.AccuVar {
-			return bad("only CEL all() comprehensions are supported")
+		q, ok := quantifier(c)
+		if !ok {
+			return bad("only CEL all() and exists() comprehensions are supported")
 		}
 		if _, ok := scope[c.IterVar]; ok || !identifier.MatchString(c.IterVar) {
 			return bad("CEL binder shadows existing symbol")
+		}
+		// The range must be a declared finite domain: Quint quantifies over
+		// exactly the declared values, so the lowering is sound only there.
+		name := dotted(c.IterRange)
+		if _, declared := scope[name]; name != "" && !declared {
+			return located(c.IterRange, fmt.Errorf("%s() ranges over %s, which is not a declared domain", q.name, name))
 		}
 		r, err := compiler.lowerCEL(c.IterRange, scope)
 		if err != nil {
 			return r, err
 		}
-		if r.Type != "domain(string)" {
-			return bad("all() requires a declared string domain")
+		if r.Type != Domain {
+			return located(c.IterRange, fmt.Errorf("%s() requires a declared string domain, got %s", q.name, r.Type))
 		}
 		nested := copyScope(scope)
 		nested[c.IterVar] = Symbol{"string", c.IterVar}
-		b, err := compiler.lowerCEL(step.Args[1], nested)
+		b, err := compiler.lowerCEL(q.predicate, nested)
 		if err != nil {
 			return b, err
 		}
 		if b.Type != "bool" {
-			return bad("all() predicate must be bool")
+			return bad("%s() predicate must be bool", q.name)
 		}
-		return Symbol{"bool", r.Quint + ".forall(" + c.IterVar + " => " + b.Quint + ")"}, nil
+		return Symbol{"bool", r.Quint + "." + q.quint + "(" + c.IterVar + " => " + b.Quint + ")"}, nil
 	}
 	if c := e.GetCallExpr(); c != nil {
 		if c.Target != nil {
@@ -281,6 +291,59 @@ func (compiler Compiler) lowerCEL(e *exprpb.Expr, scope map[string]Symbol) (Symb
 		return bad("unsupported CEL function %s", c.Function)
 	}
 	return bad("unsupported CEL syntax")
+}
+
+// Domain is the type of a declared finite string domain. all() and
+// exists() range only over symbols of this type.
+const Domain = "domain(string)"
+
+// comprehension is a recognised CEL quantifier macro.
+type comprehension struct {
+	// name is the CEL macro, quint the Quint set operator.
+	name, quint string
+	predicate   *exprpb.Expr
+}
+
+// quantifier recognises the expansions of the CEL macros all() and
+// exists(), as the cel-go parser writes them:
+//
+//	all:    init true,  condition @not_strictly_false(acc),  step acc && p
+//	exists: init false, condition @not_strictly_false(!acc), step acc || p
+//
+// Both return the accumulator. Any other comprehension is rejected.
+func quantifier(c *exprpb.Expr_Comprehension) (comprehension, bool) {
+	init := c.AccuInit.GetConstExpr()
+	step := c.LoopStep.GetCallExpr()
+	condition := c.LoopCondition.GetCallExpr()
+	if c.IterVar2 != "" || init == nil || step == nil || len(step.Args) != 2 || dotted(step.Args[0]) != c.AccuVar || condition == nil || condition.Function != "@not_strictly_false" || len(condition.Args) != 1 || dotted(c.Result) != c.AccuVar {
+		return comprehension{}, false
+	}
+	if _, ok := init.ConstantKind.(*exprpb.Constant_BoolValue); !ok {
+		return comprehension{}, false
+	}
+	accumulator := condition.Args[0]
+	if init.GetBoolValue() && step.Function == "_&&_" && dotted(accumulator) == c.AccuVar {
+		return comprehension{"all", "forall", step.Args[1]}, true
+	}
+	negated := accumulator.GetCallExpr()
+	if !init.GetBoolValue() && step.Function == "_||_" && negated != nil && negated.Function == "!_" && len(negated.Args) == 1 && dotted(negated.Args[0]) == c.AccuVar {
+		return comprehension{"exists", "exists", step.Args[1]}, true
+	}
+	return comprehension{}, false
+}
+
+// locatedError carries the CEL node an error arose at. Compile turns the
+// node into a line and column of the source.
+type locatedError struct {
+	id  int64
+	err error
+}
+
+func (e *locatedError) Error() string { return e.err.Error() }
+func (e *locatedError) Unwrap() error { return e.err }
+
+func located(e *exprpb.Expr, err error) (Symbol, error) {
+	return Symbol{}, &locatedError{id: e.GetId(), err: err}
 }
 
 // Evaluator runs original CEL, independently of the lowering logic above.

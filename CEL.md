@@ -37,9 +37,25 @@ The parser is `cel.dev/cel-go`, pinned in `go.mod`. The compiler uses its parsed
 - Equality and inequality on strings, integers, booleans and declared records.
 - Integer addition, subtraction, unary minus and comparisons.
 - Conditional expressions: `condition ? valueA : valueB`.
-- `DOMAIN.all(x, predicate)` over a declared string domain, including nested quantifiers.
+- `DOMAIN.all(x, predicate)` and `DOMAIN.exists(x, predicate)` over a declared string domain, including nested quantifiers.
 
-State types are `bool`, `int`, `string`, declared record names and `map(string, T)` over those. Unsupported expressions fail compilation with a message naming the construct. This includes `has()`, `exists()`, `filter()`, `map()`, receiver functions, regexes, message literals, list literals, optional access, doubles and unsigned integers. Supporting more CEL requires adding and testing a sound translation, rather than passing expressions through to Quint.
+State types are `bool`, `int`, `string`, declared record names and `map(string, T)` over those. Unsupported expressions fail compilation with a message that names the construct and its line and column. This includes `has()`, `exists_one()`, `filter()`, `map()`, receiver functions, regexes, message literals, list literals, optional access, doubles and unsigned integers. Supporting more CEL requires adding and testing a sound translation, rather than passing expressions through to Quint.
+
+### Quantifiers over declared domains
+
+A `TransitionModel` declares its finite domains under `domains:`. Each domain is a named, non-empty list of distinct strings. It is a constant, not state:
+
+```yaml
+domains:
+  Keys: [a, b]
+properties:
+  - name: someKeyReady
+    expression: 'Keys.exists(k, (k == "a" && aReady) || (k == "b" && bReady))'
+```
+
+`Keys.exists(k, p)` lowers to `Keys.exists(k => p)` and `Keys.all(k, p)` lowers to `Keys.forall(k => p)`, where Quint's `Keys` is `Set("a", "b")`. Over a finite, declared domain both sides quantify over the same values, so the lowering is sound. A quantifier over anything else fails with a located message: an undeclared name (`exists() ranges over Pods, which is not a declared domain`), map state, a string, or a list literal. The binder must not shadow a declared name. `exists_one()` and the two-variable forms are not supported.
+
+`TestQuantifierTruthTable` in `pkg/expr` compares cel-go with the truth table of the lowering on every state of a two-element domain. `TestQuantifierDifferentialOverSampledTraces` in `pkg/quint` samples a model with Quint, stores each quantifier's Quint value in state, and recomputes it with cel-go through `quint.Differential`. It also requires that each quantifier is both true and false somewhere in the sample.
 
 CEL has int64 semantics while Quint has mathematical integers. Models keep integer state within small declared bounds and are checked using exact int64 values in CEL. The compiler does **not** prove absence of overflow or missing-key errors for arbitrary new models. CEL's error-aware boolean semantics are not modelled as separate Quint values. New expressions must stay within the declared, total finite domains; simulation and differential checks provide evidence for exercised states, not a universal proof of equivalence.
 
