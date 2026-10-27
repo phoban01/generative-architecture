@@ -1,0 +1,49 @@
+apiVersion: architecture.local/v1alpha1
+kind: BoundaryModel
+metadata:
+  name: flux-source-controller-gitrepository
+spec:
+  upstream: github.com/fluxcd/source-controller
+  version: v1.4.1
+  model: gitrepository-model.yaml
+  owns:
+  - {group: source.toolkit.fluxcd.io, version: v1, kind: GitRepository}
+  watches:
+  - id: gitRepositories
+    resource: {group: source.toolkit.fluxcd.io, version: v1, kind: GitRepository}
+  effects:
+  - id: readGitRepository
+    resource: {group: source.toolkit.fluxcd.io, version: v1, kind: GitRepository}
+    operation: get
+    consistency: cached
+  - id: patchStatus
+    resource: {group: source.toolkit.fluxcd.io, version: v1, kind: GitRepository}
+    operation: patch
+    consistency: direct
+    subresource: status
+  ports:
+    # The artifact revision is published in the GitRepository status.
+    artifact:
+      state: revision
+      resource: {group: source.toolkit.fluxcd.io, version: v1, kind: GitRepository}
+      direction: out
+  assumptions:
+  - id: interval
+    statement: The controller fetches the remote repository again after spec.interval, which the model shows as a periodic requeue (tick).
+    evidence: declared
+    reference: https://fluxcd.io/flux/components/source/gitrepositories/#interval
+    conformance: {kind: documentation, reference: https://fluxcd.io/flux/components/source/gitrepositories/#interval}
+  - id: artifactRevision
+    statement: When the fetched commit differs from status.artifact.revision, the controller stores a new artifact and advances status.artifact.revision to that commit.
+    evidence: declared
+    reference: https://fluxcd.io/flux/components/source/gitrepositories/#artifact
+    conformance: {kind: documentation, reference: https://fluxcd.io/flux/components/source/gitrepositories/#artifact}
+  - id: readyCondition
+    statement: The Ready condition is true once the artifact for the current revision is stored.
+    evidence: declared
+    reference: https://fluxcd.io/flux/components/source/gitrepositories/#conditions
+    conformance: {kind: documentation, reference: https://fluxcd.io/flux/components/source/gitrepositories/#conditions}
+  - id: monotoneRevision
+    statement: The remote branch only moves forward, so the model counts revisions; a force push that rewinds the branch is outside the model.
+    evidence: assumed
+    conformance: {kind: none}

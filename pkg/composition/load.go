@@ -2,7 +2,9 @@ package composition
 
 import (
 	"fmt"
+	"generative-architecture/pkg/boundary"
 	"generative-architecture/pkg/goflow"
+	"generative-architecture/pkg/ir"
 	"generative-architecture/pkg/krm"
 	"generative-architecture/pkg/model"
 	"generative-architecture/pkg/protocol"
@@ -10,6 +12,7 @@ import (
 	"golang.org/x/mod/modfile"
 	"os"
 	"path/filepath"
+	"sort"
 )
 
 // Projects are explicit local checkouts. The library neither fetches nor updates
@@ -18,11 +21,16 @@ type Project struct {
 	Root   string `yaml:"root"`
 	Module string `yaml:"module"`
 }
+
+// ComponentRef names one component: a TransitionModel with declared ports,
+// or a BoundaryModel that brings its own model, ports and facts. Exactly one
+// of Model and Boundary is set. Both paths are relative to the project.
 type ComponentRef struct {
-	Name    string          `yaml:"name"`
-	Project string          `yaml:"project,omitempty"`
-	Model   string          `yaml:"model"`
-	Ports   map[string]Port `yaml:"ports,omitempty"`
+	Name     string          `yaml:"name"`
+	Project  string          `yaml:"project,omitempty"`
+	Model    string          `yaml:"model,omitempty"`
+	Boundary string          `yaml:"boundary,omitempty"`
+	Ports    map[string]Port `yaml:"ports,omitempty"`
 }
 type Document struct {
 	Name       string             `yaml:"name"`
@@ -34,7 +42,10 @@ type Document struct {
 }
 type Loaded struct {
 	Result Result
-	Inputs map[string]string
+	// Components are the loaded components in document order, with their
+	// evidence and IR facts.
+	Components []Component
+	Inputs     map[string]string
 }
 
 func Load(root, path string) (Loaded, error) {
@@ -93,10 +104,24 @@ func Load(root, path string) (Loaded, error) {
 		}
 	}
 	components := []Component{}
-	for _, ref := range doc.Components {
+	for i, ref := range doc.Components {
 		dir, ok := roots[ref.Project]
 		if !ok {
 			return out, fmt.Errorf("unknown project %s", ref.Project)
+		}
+		if ref.Boundary != "" {
+			at := fmt.Sprintf("%s: spec.components[%d] (%s)", full, i, ref.Name)
+			c, files, err := loadBoundary(dir, ref)
+			if err != nil {
+				return out, fmt.Errorf("%s: %w", at, err)
+			}
+			for _, file := range files {
+				if err = record(file); err != nil {
+					return out, err
+				}
+			}
+			components = append(components, c)
+			continue
 		}
 		file, err := sourcegen.LocalPath(dir, ref.Model)
 		if err != nil {
@@ -137,6 +162,47 @@ func Load(root, path string) (Loaded, error) {
 		}
 		protocols[l.Protocol] = c
 	}
+	out.Components = components
 	out.Result, err = ComposeWithProtocols(doc.Name, components, links, doc.Properties, protocols)
 	return out, err
+}
+
+// loadBoundary loads the BoundaryModel a component names. The component's
+// model is the boundary's TransitionModel fragment. A boundary never
+// contributes an extracted process. Its ports, watches and effects are
+// assumed. A resource port gets the resource contract of its GVK, so it joins
+// like a derived port. loadBoundary returns every file it read.
+func loadBoundary(dir string, ref ComponentRef) (Component, []string, error) {
+	if ref.Model != "" {
+		return Component{}, nil, fmt.Errorf("model and boundary are exclusive; the boundary names its model")
+	}
+	if len(ref.Ports) > 0 {
+		return Component{}, nil, fmt.Errorf("ports: a boundary component takes its ports from the boundary document")
+	}
+	file, err := sourcegen.LocalPath(dir, ref.Boundary)
+	if err != nil {
+		return Component{}, nil, fmt.Errorf("boundary: %w", err)
+	}
+	b, err := boundary.Load(file)
+	if err != nil {
+		return Component{}, nil, err
+	}
+	if b.Model == nil {
+		return Component{}, nil, fmt.Errorf("boundary %s: a boundary component needs spec.model; a boundary without a model describes but does not compose", file)
+	}
+	c := Component{Name: ref.Name, Model: *b.Model, Ports: map[string]Port{}, Evidence: ir.Assumed}
+	c.Watches, c.Effects = b.Facts(ref.Name)
+	for name, p := range b.Spec.Ports {
+		port := Port{State: p.State, Contract: p.Contract, Version: p.Version, Direction: p.Direction, Writable: p.Writable, Evidence: ir.Assumed, Provenance: []ir.Provenance{b.Provenance()}}
+		if p.Resource != nil {
+			port.Contract, port.Version = ResourceContract(*p.Resource), ResourceContractVersion
+		}
+		c.Ports[name] = port
+	}
+	files := make([]string, 0, len(b.Files))
+	for f := range b.Files {
+		files = append(files, f)
+	}
+	sort.Strings(files)
+	return c, files, nil
 }

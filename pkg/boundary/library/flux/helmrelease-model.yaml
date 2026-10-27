@@ -1,0 +1,49 @@
+apiVersion: architecture.local/v1alpha1
+kind: TransitionModel
+metadata:
+  name: flux-helmrelease
+spec:
+  name: FluxHelmRelease
+  state:
+    now: {type: int, initial: '0'}
+    due: {type: bool, initial: 'true'}
+    dependsOnReady: {type: bool, initial: 'false'}
+    chartVersion: {type: int, initial: '1'}
+    appliedChart: {type: int, initial: '0'}
+    releaseVersion: {type: int, initial: '0'}
+    ready: {type: bool, initial: 'false'}
+  actions:
+  # tick is the periodic requeue after spec.interval, bounded to three rounds.
+  - name: tick
+    guard: now < 3
+    updates: {now: now + 1, due: 'true'}
+  # dependenciesReady is the environment step in which every dependsOn entry
+  # becomes ready.
+  - name: dependenciesReady
+    guard: '!dependsOnReady'
+    updates: {dependsOnReady: 'true'}
+  # changeChart is the environment step in which a new chart version appears.
+  - name: changeChart
+    guard: chartVersion < 3
+    updates: {chartVersion: chartVersion + 1}
+  - name: install
+    guard: due && dependsOnReady && releaseVersion == 0
+    updates: {releaseVersion: '1', appliedChart: chartVersion, due: 'false', ready: 'false'}
+  - name: upgrade
+    guard: due && dependsOnReady && releaseVersion > 0 && appliedChart != chartVersion
+    updates: {releaseVersion: releaseVersion + 1, appliedChart: chartVersion, due: 'false', ready: 'false'}
+  # unchanged is a reconcile that finds the release current and leaves it.
+  - name: unchanged
+    guard: due && releaseVersion > 0 && appliedChart == chartVersion
+    updates: {due: 'false'}
+  # ready is a state variable, so the action that sets it is markReady.
+  - name: markReady
+    guard: releaseVersion > 0 && !ready
+    updates: {ready: 'true'}
+  properties:
+  - name: readyAfterInstall
+    expression: '!ready || releaseVersion > 0'
+  - name: installWaitsForDependencies
+    expression: releaseVersion == 0 || dependsOnReady
+  - name: releaseTracksChart
+    expression: appliedChart <= chartVersion

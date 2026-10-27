@@ -27,6 +27,13 @@ type Component struct {
 	Name  string
 	Model model.Spec
 	Ports map[string]Port
+	// Evidence says how the component's behaviour is known. A boundary
+	// component is assumed. Empty means the caller vouches for the model.
+	Evidence ir.Evidence
+	// Watches and Effects are the IR facts known about the component, each
+	// with its own evidence. A boundary component's facts are assumed.
+	Watches []ir.Watch
+	Effects []ir.Effect
 }
 
 // Link binds an out port to an in port. A binding is connectivity only.

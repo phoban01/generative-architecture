@@ -75,9 +75,12 @@ type Outcome struct {
 // Effect is one operation an actor performs: an API operation on a resource
 // (the default kind) or an external call identified by its callee.
 type Effect struct {
-	ID          string            `yaml:"id"`
-	Kind        string            `yaml:"kind,omitempty"`
-	Actor       string            `yaml:"actor"`
+	ID    string `yaml:"id"`
+	Kind  string `yaml:"kind,omitempty"`
+	Actor string `yaml:"actor"`
+	// Cluster is the cluster the effect targets. Empty is the implicit
+	// cluster of a one-cluster system.
+	Cluster     ClusterID         `yaml:"cluster,omitempty"`
 	Resource    GVK               `yaml:"resource,omitempty"`
 	Operation   string            `yaml:"operation,omitempty"`
 	Consistency string            `yaml:"consistency,omitempty"`
@@ -182,6 +185,9 @@ func (e Effect) StableID() string {
 	parts := []string{"effect", e.Actor, e.Resource.String(), e.Operation, e.Subresource}
 	for _, k := range keys {
 		parts = append(parts, k+"="+e.Options[k])
+	}
+	if e.Cluster != "" {
+		parts = append(parts, "cluster="+string(e.Cluster))
 	}
 	return stableID(parts...)
 }

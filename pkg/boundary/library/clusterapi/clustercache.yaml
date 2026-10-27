@@ -1,0 +1,79 @@
+apiVersion: architecture.local/v1alpha1
+kind: BoundaryModel
+metadata:
+  name: capi-clustercache
+spec:
+  upstream: sigs.k8s.io/cluster-api
+  version: v1.9.0
+  # The cache runs in the management cluster. Facts without a cluster are
+  # management-cluster facts.
+  cluster: management
+  model: clustercache-model.yaml
+  watches:
+  - id: clusters
+    resource: {group: cluster.x-k8s.io, version: v1beta1, kind: Cluster}
+  - id: nodesWorkloadA
+    resource: {version: v1, kind: Node}
+    cluster: workload_a
+  - id: nodesWorkloadB
+    resource: {version: v1, kind: Node}
+    cluster: workload_b
+  effects:
+  - id: readCluster
+    resource: {group: cluster.x-k8s.io, version: v1beta1, kind: Cluster}
+    operation: get
+    consistency: cached
+  - id: readKubeconfig
+    resource: {version: v1, kind: Secret}
+    operation: get
+    consistency: direct
+  # Cross-cluster reads: each goes through the cache of its workload cluster.
+  - id: listNodesWorkloadA
+    resource: {version: v1, kind: Node}
+    operation: list
+    consistency: cached
+    cluster: workload_a
+  - id: listNodesWorkloadB
+    resource: {version: v1, kind: Node}
+    operation: list
+    consistency: cached
+    cluster: workload_b
+  ports:
+    # Cross-cluster reads never back a resource port. Each workload cluster
+    # offers the same authored contract, so a consumer must choose its
+    # cluster with an explicit link.
+    workloadA:
+      state: workload_a_cached
+      contract: cluster.x-k8s.io/clustercache
+      version: v1
+      direction: out
+    workloadB:
+      state: workload_b_cached
+      contract: cluster.x-k8s.io/clustercache
+      version: v1
+      direction: out
+  assumptions:
+  - id: perClusterCache
+    statement: Reads of workload-cluster objects go through one cache per Cluster, keyed by the Cluster's namespace and name; the cache runs in the management cluster.
+    evidence: declared
+    reference: https://github.com/kubernetes-sigs/cluster-api/blob/v1.9.0/controllers/clustercache/cluster_cache.go
+    conformance: {kind: documentation, reference: https://github.com/kubernetes-sigs/cluster-api/blob/v1.9.0/controllers/clustercache/cluster_cache.go}
+  - id: kubeconfigSecret
+    statement: The cache connects to a workload cluster with the <cluster>-kubeconfig Secret in the management cluster.
+    evidence: declared
+    reference: https://cluster-api.sigs.k8s.io/developer/architecture/controllers/cluster.html
+    conformance: {kind: documentation, reference: https://cluster-api.sigs.k8s.io/developer/architecture/controllers/cluster.html}
+  - id: connectionLoss
+    statement: When health probes to a workload cluster fail, the cache disconnects, drops its cached objects, and reads fail with ErrClusterNotConnected.
+    evidence: declared
+    reference: https://github.com/kubernetes-sigs/cluster-api/blob/v1.9.0/controllers/clustercache/cluster_accessor.go
+    conformance: {kind: documentation, reference: https://github.com/kubernetes-sigs/cluster-api/blob/v1.9.0/controllers/clustercache/cluster_accessor.go}
+  - id: reconnect
+    statement: After a disconnect the cache tries to connect again and fills a fresh cache once the connection succeeds.
+    evidence: declared
+    reference: https://github.com/kubernetes-sigs/cluster-api/blob/v1.9.0/controllers/clustercache/cluster_accessor.go
+    conformance: {kind: documentation, reference: https://github.com/kubernetes-sigs/cluster-api/blob/v1.9.0/controllers/clustercache/cluster_accessor.go}
+  - id: independentClusters
+    statement: A connection loss in one workload cluster does not affect the cache of another, and the model counts cached objects instead of tracking staleness.
+    evidence: assumed
+    conformance: {kind: none}
