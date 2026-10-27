@@ -5,6 +5,7 @@ import (
 	"go/constant"
 	"go/token"
 	"go/types"
+	"slices"
 	"strings"
 
 	"github.com/phoban01/generative-architecture/pkg/expr"
@@ -145,12 +146,39 @@ func (e *extractor) stringMap(x ast.Expr) bool {
 	return ok && b.Info()&types.IsString != 0
 }
 
+// absentValues are the values a selected map key's symbol takes when the
+// key is absent: the zero value of its model type, as reading a missing
+// key in Go returns.
+var absentValues = map[string]expr.Expression{"string": `""`, "int": "0", "bool": "false"}
+
+// clear sets the symbol of an omitted selected key to its absent value.
+func (e *extractor) clear(at ast.Node, root string, path []string, updates map[string]expr.Expression) error {
+	field := root + "." + strings.Join(path, ".")
+	target, ok := e.opts.Field(root, path)
+	if !ok {
+		return e.diagnose(at, "field", "Options.MapKeys names "+field+", which Options.Field does not map")
+	}
+	symbol, ok := e.opts.Scope[string(target)]
+	if !ok {
+		return e.diagnose(at, "assign", "field "+field+" maps to "+string(target)+", which is not a model symbol")
+	}
+	if _, dup := updates[string(target)]; dup {
+		return e.diagnose(at, "assign", "aliased field assignment to "+string(target))
+	}
+	absent, ok := absentValues[symbol.Type]
+	if !ok {
+		return e.diagnose(at, "assign", "field "+field+" has type "+symbol.Type+", which has no absent value")
+	}
+	updates[string(target)] = absent
+	return nil
+}
+
 // fieldAssign lowers an assignment to a field of a local object, mapping the
 // field's JSON path through Options.Field to a model symbol. Assigning a map
-// literal with constant string keys updates the symbol of every listed key;
-// keys the literal omits are not modelled as removed, so an abstraction that
-// selects several keys of one map must not rely on such an assignment
-// clearing them.
+// literal with constant string keys replaces the whole map: every listed
+// key's symbol takes its value, and every key Options.MapKeys selects but
+// the literal omits takes its absent value. Keys outside the selection are
+// not modelled. Without MapKeys only the listed keys are updated.
 func (e *extractor) fieldAssign(x *ast.AssignStmt, lhs *ast.SelectorExpr, next int) (int, error) {
 	root, path, err := e.fieldPath(lhs)
 	if err != nil {
@@ -177,6 +205,7 @@ func (e *extractor) fieldAssign(x *ast.AssignStmt, lhs *ast.SelectorExpr, next i
 		return nil
 	}
 	if lit, ok := ast.Unparen(x.Rhs[0]).(*ast.CompositeLit); ok && e.stringMap(lit) {
+		listed := map[string]bool{}
 		for _, el := range lit.Elts {
 			kv, ok := el.(*ast.KeyValueExpr)
 			if !ok {
@@ -186,7 +215,21 @@ func (e *extractor) fieldAssign(x *ast.AssignStmt, lhs *ast.SelectorExpr, next i
 			if !ok {
 				return 0, e.diagnose(kv.Key, "assign", "map literal key must be a constant string")
 			}
+			listed[key] = true
 			if err := set(kv, append(append([]string(nil), path...), key), kv.Value); err != nil {
+				return 0, err
+			}
+		}
+		var selected []string
+		if e.opts.MapKeys != nil {
+			selected = slices.Clone(e.opts.MapKeys(root, path))
+			slices.Sort(selected)
+		}
+		for _, key := range selected {
+			if listed[key] {
+				continue
+			}
+			if err := e.clear(lit, root, append(append([]string(nil), path...), key), updates); err != nil {
 				return 0, err
 			}
 		}
