@@ -14,5 +14,26 @@ spec:
       - catalog/batch-v1.json
   constraints:
     - constraints.yaml
+  abstraction: abstraction.yaml
   runtime:
     profile: controller-runtime
+    maxTicks: 20
+  controllers:
+    - receiver: CronJobReconciler
+      name: cronjob
+      workers: 1
+      retryTicks: 2
+      key: cron
+      # The reconciler embeds client.Client. Each call names the interface
+      # that declares the method.
+      effects:
+        - call: sigs.k8s.io/controller-runtime/pkg/client.Reader.Get
+          effect: readCronJob
+        - call: sigs.k8s.io/controller-runtime/pkg/client.Reader.List
+          effect: listJobs
+        - call: sigs.k8s.io/controller-runtime/pkg/client.Writer.Delete
+          effect: deleteJob
+        - call: sigs.k8s.io/controller-runtime/pkg/client.SubResourceWriter.Update
+          effect: updateStatus
+        - call: sigs.k8s.io/controller-runtime/pkg/client.Writer.Create
+          effect: createJob

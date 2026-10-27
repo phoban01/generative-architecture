@@ -1,0 +1,32 @@
+apiVersion: architecture.local/v1alpha1
+kind: VerificationReport
+metadata:
+  name: cronjob
+status:
+  result: incomplete
+  mode: inventory
+  failures:
+    conformance: 0
+    safety: 0
+    tool: 0
+    unsupported: 4
+  scope: 'no model: arch extract failed closed on the unmodified controller, so arch generate, check and replay did not run; no tool sampled or replayed anything'
+  traces: 0
+  transitions: 0
+  findings:
+    - category: unsupported
+      message: 'arch extract: internal/controller/cronjob_controller.go:553: preamble "if r.Clock == nil {": expected an unstructured object declaration'
+    - category: unsupported
+      message: 'arch generate: not run: arch extract wrote no ir.yaml'
+    - category: unsupported
+      message: 'arch check: not run: arch extract wrote no ir.yaml'
+    - category: unsupported
+      message: 'arch replay: not run: arch check sampled no traces'
+  inputHashes:
+    abstraction.yaml: df007d061923b87152fe53b978336b5bfda64c9c4bcfcb7baa557f8ee3a12558
+    catalog/batch-v1.json: a972f6b207e83e52f80baf5821e20d7b154c788b092a412945c2254566159d15
+    config/crd/bases/batch.tutorial.kubebuilder.io_cronjobs.yaml: 4016e4984192bbd6ae9e460e5b39bda35a7fac44ed19a63efa60c16018e83630
+    constraints.yaml: d65c2cebdb865f0f4234cfdd8470927640fb9aacf68e7d5f51e7ac7cc57657a4
+    generated/support.yaml: 30a680dda826247dfa9df92a05cf67eb33a2b7e7a38894cc468edd6800be4e42
+    internal/controller/cronjob_controller.go: b9bde9f751609f2661062c88b86e73e70125e4fd136475bb6e1eec37686db5aa
+    project.yaml: b964264e5f1f239bef530a8ed965b19c33baddd4f79e39dcae057b03f84dc2f5
