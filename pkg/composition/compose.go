@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"generative-architecture/pkg/effect"
 	"generative-architecture/pkg/expr"
+	"generative-architecture/pkg/ir"
 	"generative-architecture/pkg/model"
+	"generative-architecture/pkg/protocol"
 	"reflect"
 	"strings"
 )
@@ -16,25 +18,46 @@ type Port struct {
 	Version   string `yaml:"version"`
 	Direction string `yaml:"direction"`
 	Writable  bool   `yaml:"writable,omitempty"`
+	// Evidence and Provenance are set on ports derived from IR facts. A
+	// hand-written port leaves them empty and counts as declared.
+	Evidence   ir.Evidence     `yaml:"evidence,omitempty"`
+	Provenance []ir.Provenance `yaml:"provenance,omitempty"`
 }
 type Component struct {
 	Name  string
 	Model model.Spec
 	Ports map[string]Port
 }
+
+// Link binds an out port to an in port. A binding is connectivity only.
+// Protocol optionally names a ProtocolContract whose semantics the binding
+// must follow; only explicit links carry one.
 type Link struct {
-	From string `yaml:"from"`
-	To   string `yaml:"to"`
+	From     string `yaml:"from"`
+	To       string `yaml:"to"`
+	Protocol string `yaml:"protocol,omitempty"`
 }
 type Result struct {
 	Model       model.Spec
 	StateNames  map[string]string
 	ActionNames map[string]string
+	// Protocols lists the protocol conformance checks generated into Model,
+	// apart from the bindings themselves.
+	Protocols []ProtocolCheck
 }
 
 // Compose namespaces private state and aliases bound ports to one shared state
 // location. Reads observe that shared state; snapshots remain private locals.
+// A link that names a protocol fails here; use ComposeWithProtocols.
 func Compose(name string, components []Component, links []Link, properties []model.Property) (Result, error) {
+	return ComposeWithProtocols(name, components, links, properties, nil)
+}
+
+// ComposeWithProtocols composes like Compose and generates the protocol of
+// each link that names one. protocols maps a link's Protocol value to the
+// loaded contract.
+func ComposeWithProtocols(name string, components []Component, links []Link, properties []model.Property, protocols map[string]protocol.Contract) (Result, error) {
+	owners := map[string]string{}
 	result := Result{Model: model.Spec{Name: name, Records: map[string]map[string]string{}, State: map[string]model.Variable{}, Properties: append([]model.Property(nil), properties...)}, StateNames: map[string]string{}, ActionNames: map[string]string{}}
 	generatedNames := map[string]string{}
 	byName := map[string]Component{}
@@ -186,6 +209,7 @@ func Compose(name string, components []Component, links []Link, properties []mod
 			if a.Effect != "" {
 				a.Effect = c.Name + "_" + a.Effect
 			}
+			owners[a.Name] = c.Name
 			result.Model.Actions = append(result.Model.Actions, a)
 		}
 		// Local properties see a local action name even after action namespacing.
@@ -215,6 +239,9 @@ func Compose(name string, components []Component, links []Link, properties []mod
 			return result, err
 		}
 		result.Model.Properties[i].Expression = v
+	}
+	if err := attachProtocols(&result, links, ports, owners, protocols); err != nil {
+		return result, err
 	}
 	if _, err := effect.NewRegistry(result.Model.Effects); err != nil {
 		return result, err
