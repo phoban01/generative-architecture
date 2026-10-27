@@ -8,6 +8,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -252,5 +253,97 @@ func TestTypedDeleteAllOfIsObserved(t *testing.T) {
 	expectRejected(t, wrapped.DeleteAllOf(ctx, &corev1.ConfigMap{}, client.MatchingLabels{"app": "x"}), "DeleteAllOf options other than the namespace")
 	if len(rec.calls) != 2 {
 		t.Fatal("rejected deleteAllOf reached the hook")
+	}
+}
+
+func TestTypedPatchIsObserved(t *testing.T) {
+	ctx := context.Background()
+	scheme := coreScheme(t)
+	base := fake.NewClientBuilder().WithScheme(scheme).WithObjects(configMap("test", "one", nil)).Build()
+	rec := &recorder{}
+	wrapped := cr.Observer{Scheme: scheme, Registry: configMapRegistry(t, [2]string{"patch", "direct"}, [2]string{"apply", "direct"}), Hook: rec.hook}.Client(base, "cached")
+	held := &corev1.ConfigMap{}
+	if err := base.Get(ctx, client.ObjectKey{Namespace: "test", Name: "one"}, held); err != nil {
+		t.Fatal(err)
+	}
+	original := held.DeepCopy()
+	held.Data["value"] = "patched"
+	if err := wrapped.Patch(ctx, held, client.MergeFrom(original)); err != nil {
+		t.Fatal(err)
+	}
+	if len(rec.calls) != 1 {
+		t.Fatalf("expected one observed call, got %d", len(rec.calls))
+	}
+	call := rec.calls[0]
+	if call.Descriptor.Operation != "patch" || call.Key != (effect.Key{Namespace: "test", Name: "one"}) {
+		t.Fatalf("wrong call: %+v", call)
+	}
+	if call.Options["patchType"] != "application/merge-patch+json" || call.Options["patch"] != `{"data":{"value":"patched"}}` {
+		t.Fatalf("wrong patch options: %+v", call.Options)
+	}
+	if rec.results[0].Snapshot["data"].(map[string]any)["value"] != "patched" {
+		t.Fatalf("snapshot lacks the patched value: %+v", rec.results[0].Snapshot)
+	}
+	stored := &corev1.ConfigMap{}
+	if err := base.Get(ctx, client.ObjectKeyFromObject(held), stored); err != nil || stored.Data["value"] != "patched" {
+		t.Fatalf("patch did not reach the base client: %v %+v", err, stored.Data)
+	}
+
+	applied := configMap("test", "two", nil)
+	applied.TypeMeta = metav1.TypeMeta{APIVersion: "v1", Kind: "ConfigMap"}
+	// The API requires a field manager for apply. The observer records the
+	// call and preserves the API error.
+	if err := wrapped.Patch(ctx, applied, client.Apply); !apierrors.IsInvalid(err) {
+		t.Fatalf("API error not preserved: %v", err)
+	}
+	call = rec.calls[1]
+	if call.Descriptor.Operation != "apply" || call.Options["patchType"] != "application/apply-patch+yaml" || !strings.Contains(call.Options["patch"], `"name":"two"`) {
+		t.Fatalf("wrong apply call: %+v", call)
+	}
+
+	expectRejected(t, wrapped.Patch(ctx, held, client.MergeFrom(original), client.DryRunAll), "Patch with dry run")
+	expectRejected(t, wrapped.Patch(ctx, held, client.MergeFrom(original), client.ForceOwnership), "Patch options")
+	expectRejected(t, wrapped.SubResource("scale").Patch(ctx, held, client.MergeFrom(original)), "scale.Patch")
+	if len(rec.calls) != 2 {
+		t.Fatal("rejected patch reached the hook")
+	}
+}
+
+func TestTypedStatusPatchIsObserved(t *testing.T) {
+	ctx := context.Background()
+	obj := &unstructured.Unstructured{}
+	obj.SetAPIVersion("provider.example/v1")
+	obj.SetKind("Database")
+	obj.SetName("one")
+	obj.SetNamespace("demo")
+	base := fake.NewClientBuilder().WithObjects(obj).WithStatusSubresource(obj).Build()
+	identity := effect.Resource{Group: "provider.example", Version: "v1", Kind: "Database"}
+	registry, err := effect.NewRegistry([]effect.Descriptor{{ID: "publish", Resource: identity, Operation: "status.patch", Consistency: "direct"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := &recorder{}
+	wrapped := cr.Observer{Registry: registry, Hook: rec.hook}.Client(base, "direct")
+	held := obj.DeepCopy()
+	if err := unstructured.SetNestedField(held.Object, "db-1.internal", "status", "endpoint"); err != nil {
+		t.Fatal(err)
+	}
+	if err := wrapped.Status().Patch(ctx, held, client.MergeFrom(obj)); err != nil {
+		t.Fatal(err)
+	}
+	if len(rec.calls) != 1 || rec.calls[0].Descriptor.ID != "publish" || rec.calls[0].Options["patch"] != `{"status":{"endpoint":"db-1.internal"}}` {
+		t.Fatalf("wrong status patch call: %+v", rec.calls)
+	}
+	stored := &unstructured.Unstructured{}
+	stored.SetGroupVersionKind(obj.GroupVersionKind())
+	if err := base.Get(ctx, client.ObjectKeyFromObject(obj), stored); err != nil {
+		t.Fatal(err)
+	}
+	if endpoint, _, _ := unstructured.NestedString(stored.Object, "status", "endpoint"); endpoint != "db-1.internal" {
+		t.Fatalf("status patch did not reach the base client: %+v", stored.Object)
+	}
+	expectRejected(t, wrapped.Status().Patch(ctx, held, client.MergeFrom(obj), client.DryRunAll), "status.Patch with dry run")
+	if len(rec.calls) != 1 {
+		t.Fatal("rejected status patch reached the hook")
 	}
 }

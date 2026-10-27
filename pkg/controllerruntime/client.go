@@ -11,6 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 )
@@ -42,12 +43,12 @@ func (o Observer) gvkFor(obj runtime.Object) (schema.GroupVersionKind, error) {
 
 // observe looks up the effect and runs fn through the hook. fn returns the
 // detached snapshot of a successful call, or nil when the call has none.
-func (o Observer) observe(ctx context.Context, gvk schema.GroupVersionKind, operation, consistency string, key client.ObjectKey, submitted map[string]any, fn func() (map[string]any, error)) error {
+func (o Observer) observe(ctx context.Context, gvk schema.GroupVersionKind, operation, consistency string, key client.ObjectKey, submitted map[string]any, options map[string]string, fn func() (map[string]any, error)) error {
 	d, err := o.Registry.LookupFor(o.Actor, effect.Resource{Group: gvk.Group, Version: gvk.Version, Kind: gvk.Kind}, operation, consistency)
 	if err != nil {
 		return err
 	}
-	call := effect.Call{Descriptor: d, Key: effect.Key{Namespace: key.Namespace, Name: key.Name}, Submitted: submitted}
+	call := effect.Call{Descriptor: d, Key: effect.Key{Namespace: key.Namespace, Name: key.Name}, Submitted: submitted, Options: options}
 	execute := func() effect.Result {
 		snapshot, err := fn()
 		if err != nil {
@@ -63,7 +64,7 @@ func (o Observer) observe(ctx context.Context, gvk schema.GroupVersionKind, oper
 
 // invoke observes a call on one object. The object is the submitted value
 // before the call and the snapshot after it.
-func (o Observer) invoke(ctx context.Context, operation, consistency string, key client.ObjectKey, obj client.Object, fn func() error) error {
+func (o Observer) invoke(ctx context.Context, operation, consistency string, key client.ObjectKey, obj client.Object, options map[string]string, fn func() error) error {
 	gvk, err := o.gvkFor(obj)
 	if err != nil {
 		return err
@@ -72,7 +73,7 @@ func (o Observer) invoke(ctx context.Context, operation, consistency string, key
 	if err != nil {
 		return err
 	}
-	return o.observe(ctx, gvk, operation, consistency, key, submitted, func() (map[string]any, error) {
+	return o.observe(ctx, gvk, operation, consistency, key, submitted, options, func() (map[string]any, error) {
 		if err := fn(); err != nil {
 			return nil, err
 		}
@@ -112,7 +113,7 @@ func (r *readerProxy) Get(ctx context.Context, key client.ObjectKey, obj client.
 	if len(opts) > 0 {
 		return unsupported("Get options")
 	}
-	return r.o.invoke(ctx, "get", r.consistency, key, obj, func() error { return r.base.Get(ctx, key, obj) })
+	return r.o.invoke(ctx, "get", r.consistency, key, obj, nil, func() error { return r.base.Get(ctx, key, obj) })
 }
 func (r *readerProxy) List(context.Context, client.ObjectList, ...client.ListOption) error {
 	return unsupported("List")
@@ -134,13 +135,13 @@ func (c *clientProxy) Update(ctx context.Context, obj client.Object, opts ...cli
 	if len(opts) > 0 {
 		return unsupported("Update options")
 	}
-	return c.o.invoke(ctx, "update", "direct", client.ObjectKeyFromObject(obj), obj, func() error { return c.Client.Update(ctx, obj) })
+	return c.o.invoke(ctx, "update", "direct", client.ObjectKeyFromObject(obj), obj, nil, func() error { return c.Client.Update(ctx, obj) })
 }
 func (c *clientProxy) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
 	if len(opts) > 0 {
 		return unsupported("Create options")
 	}
-	return c.o.invoke(ctx, "create", "direct", client.ObjectKeyFromObject(obj), obj, func() error { return c.Client.Create(ctx, obj) })
+	return c.o.invoke(ctx, "create", "direct", client.ObjectKeyFromObject(obj), obj, nil, func() error { return c.Client.Create(ctx, obj) })
 }
 
 // Delete records a direct delete keyed by the object. Both snapshots carry
@@ -154,10 +155,45 @@ func (c *clientProxy) Delete(ctx context.Context, obj client.Object, opts ...cli
 	if len(opts) > 0 {
 		return unsupported("Delete options")
 	}
-	return c.o.invoke(ctx, "delete", "direct", client.ObjectKeyFromObject(obj), obj, func() error { return c.Client.Delete(ctx, obj) })
+	return c.o.invoke(ctx, "delete", "direct", client.ObjectKeyFromObject(obj), obj, nil, func() error { return c.Client.Delete(ctx, obj) })
 }
-func (c *clientProxy) Patch(context.Context, client.Object, client.Patch, ...client.PatchOption) error {
-	return unsupported("Patch")
+
+// Patch records a direct patch, or apply for a server-side apply patch. The
+// options carry the patch type and the patch bytes.
+func (c *clientProxy) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+	options := &client.PatchOptions{}
+	options.ApplyOptions(opts)
+	if err := rejectDryRun("Patch", options.DryRun); err != nil {
+		return err
+	}
+	if len(opts) > 0 {
+		return unsupported("Patch options")
+	}
+	operation, recorded, err := patchCall("", obj, patch)
+	if err != nil {
+		return err
+	}
+	return c.o.invoke(ctx, operation, "direct", client.ObjectKeyFromObject(obj), obj, recorded, func() error { return c.Client.Patch(ctx, obj, patch) })
+}
+
+// patchCall names a patch effect and records its type and bytes. A
+// server-side apply patch is the apply operation, as in the summaries.
+func patchCall(subresource string, obj client.Object, patch client.Patch) (string, map[string]string, error) {
+	if patch == nil {
+		return "", nil, unsupported("nil patch")
+	}
+	data, err := patch.Data(obj)
+	if err != nil {
+		return "", nil, err
+	}
+	operation := "patch"
+	if patch.Type() == types.ApplyPatchType {
+		operation = "apply"
+	}
+	if subresource != "" {
+		operation = subresource + "." + operation
+	}
+	return operation, map[string]string{"patchType": string(patch.Type()), "patch": string(data)}, nil
 }
 
 // DeleteAllOf records a direct deleteAllOf keyed by the namespace option,
@@ -176,7 +212,7 @@ func (c *clientProxy) DeleteAllOf(ctx context.Context, obj client.Object, opts .
 	if err != nil {
 		return err
 	}
-	return c.o.observe(ctx, gvk, "deleteAllOf", "direct", client.ObjectKey{Namespace: options.Namespace}, nil, func() (map[string]any, error) {
+	return c.o.observe(ctx, gvk, "deleteAllOf", "direct", client.ObjectKey{Namespace: options.Namespace}, nil, nil, func() (map[string]any, error) {
 		return nil, c.Client.DeleteAllOf(ctx, obj, opts...)
 	})
 }
@@ -197,7 +233,7 @@ func (s *subresource) Update(ctx context.Context, obj client.Object, opts ...cli
 	if s.name != "status" || len(opts) > 0 {
 		return unsupported(s.name + ".Update/options")
 	}
-	return s.parent.o.invoke(ctx, "status.update", "direct", client.ObjectKeyFromObject(obj), obj, func() error { return s.parent.Client.Status().Update(ctx, obj) })
+	return s.parent.o.invoke(ctx, "status.update", "direct", client.ObjectKeyFromObject(obj), obj, nil, func() error { return s.parent.Client.Status().Update(ctx, obj) })
 }
 func (s *subresource) Get(context.Context, client.Object, client.Object, ...client.SubResourceGetOption) error {
 	return unsupported(s.name + ".Get")
@@ -205,8 +241,26 @@ func (s *subresource) Get(context.Context, client.Object, client.Object, ...clie
 func (s *subresource) Create(context.Context, client.Object, client.Object, ...client.SubResourceCreateOption) error {
 	return unsupported(s.name + ".Create")
 }
-func (s *subresource) Patch(context.Context, client.Object, client.Patch, ...client.SubResourcePatchOption) error {
-	return unsupported(s.name + ".Patch")
+
+// Patch records status.patch, or status.apply for a server-side apply patch.
+// Other subresources fail closed.
+func (s *subresource) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.SubResourcePatchOption) error {
+	if s.name != "status" {
+		return unsupported(s.name + ".Patch")
+	}
+	options := &client.SubResourcePatchOptions{}
+	options.ApplyOptions(opts)
+	if err := rejectDryRun("status.Patch", options.DryRun); err != nil {
+		return err
+	}
+	if len(opts) > 0 {
+		return unsupported("status.Patch options")
+	}
+	operation, recorded, err := patchCall(s.name, obj, patch)
+	if err != nil {
+		return err
+	}
+	return s.parent.o.invoke(ctx, operation, "direct", client.ObjectKeyFromObject(obj), obj, recorded, func() error { return s.parent.Client.Status().Patch(ctx, obj, patch) })
 }
 func (s *subresource) Apply(context.Context, runtime.ApplyConfiguration, ...client.SubResourceApplyOption) error {
 	return unsupported(s.name + ".Apply")
