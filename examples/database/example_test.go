@@ -4,7 +4,7 @@ import (
 	"context"
 	"generative-architecture/pkg/conformance"
 	"generative-architecture/pkg/goflow"
-	"generative-architecture/pkg/krm"
+	"generative-architecture/pkg/report"
 	"os"
 	"path/filepath"
 	"strings"
@@ -77,21 +77,15 @@ func TestRecordedQuintSchedules(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var report struct {
-		Result      string            `yaml:"result"`
-		Traces      int               `yaml:"traces"`
-		Transitions int               `yaml:"transitions"`
-		Coverage    map[string]int    `yaml:"coverage"`
-		TraceHashes map[string]string `yaml:"traceHashes"`
-		InputHashes map[string]string `yaml:"inputHashes"`
-		ModelSHA256 string            `yaml:"modelSha256"`
-		Scope       string            `yaml:"scope"`
-	}
-	if err = krm.ReadResult("report.yaml", "VerificationReport", &report); err != nil {
+	report, err := report.ReadVerification("report.yaml")
+	if err != nil {
 		t.Fatal(err)
 	}
 	if report.Result != "passed" || report.ModelSHA256 != goflow.Hash([]byte(e.Constrained.Quint())) {
 		t.Fatal("stale evidence; run walkthrough --refresh")
+	}
+	if report.Mode != "strict" || len(report.Failures) != 4 || len(report.InputHashes) == 0 {
+		t.Fatalf("report mode %q failures %v inputs %d", report.Mode, report.Failures, len(report.InputHashes))
 	}
 	for file, want := range report.InputHashes {
 		b, err := os.ReadFile(file)

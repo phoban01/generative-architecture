@@ -22,6 +22,7 @@ import (
 	"generative-architecture/pkg/model"
 	"generative-architecture/pkg/quint"
 	"generative-architecture/pkg/receipt"
+	"generative-architecture/pkg/report"
 )
 
 func main() {
@@ -65,7 +66,11 @@ func run(root string, refresh, generateOnly bool) error {
 	if err = krm.Write(filepath.Join(root, configmirror.SpecFile), "TransitionModel", "config-mirror", spec); err != nil {
 		return err
 	}
-	for file, contents := range map[string]string{configmirror.ModelFile: m.Quint(), configmirror.DiagramFile: m.LikeC4()} {
+	diagram, err := configmirror.Diagram(spec)
+	if err != nil {
+		return err
+	}
+	for file, contents := range map[string]string{configmirror.ModelFile: m.Quint(), configmirror.DiagramFile: diagram} {
 		if err = os.WriteFile(filepath.Join(root, file), []byte(contents), 0644); err != nil {
 			return err
 		}
@@ -141,24 +146,26 @@ func run(root string, refresh, generateOnly bool) error {
 		return err
 	}
 
-	report := map[string]any{
-		"result":      "passed",
-		"model":       configmirror.ModelFile,
-		"modelSha256": fmt.Sprintf("%x", sha256.Sum256([]byte(m.Quint()))),
-		"sampling":    map[string]any{"samples": samples, "steps": steps, "seed": seed},
-		"traces":      len(paths),
-		"transitions": total,
-		"coverage":    coverage,
-		"traceHashes": hashes,
-		"observed":    observed,
-		"bounds":      abs.Spec.Bounds,
-		"excludes":    abs.Spec.Excludes,
-		"mutations":   matrix,
-		"tools":       tools,
-		"receipt":     configmirror.ReceiptFile,
-		"scope":       "bounded simulation of the model generated from Reconcile, abstraction.yaml and the built-in client summaries; real worker/FIFO; fake API; controlled cache; observed object, cache and queue state",
+	v := report.Verification{
+		Name:        "config-mirror",
+		Mode:        report.ModeStrict,
+		Scope:       "bounded simulation of the model generated from Reconcile, abstraction.yaml and the built-in client summaries; real worker/FIFO; fake API; controlled cache; observed object, cache and queue state",
+		Model:       configmirror.ModelFile,
+		ModelSHA256: fmt.Sprintf("%x", sha256.Sum256([]byte(m.Quint()))),
+		Sampling:    &report.Sampling{Samples: samples, Steps: steps, Seed: seed},
+		Traces:      len(paths),
+		Transitions: total,
+		Coverage:    coverage,
+		TraceHashes: hashes,
+		Receipt:     r,
+		Observed:    observed,
+		Mutations:   matrix,
 	}
-	if err = krm.WriteResult(reportPath, "VerificationReport", "config-mirror", report); err != nil {
+	v.Conclude()
+	if blocking := v.Blocking(); len(blocking) > 0 {
+		return fmt.Errorf("%s finding: %s", blocking[0].Category, blocking[0].Message)
+	}
+	if err = v.Write(reportPath); err != nil {
 		return err
 	}
 	fmt.Printf("PASS config mirror: %d traces, %d transitions, Quint %s\n%s", len(paths), total, quintVersion, matrix)

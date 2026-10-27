@@ -233,21 +233,3 @@ func (r Result) CheckEffects(entries []effect.Descriptor) error {
 	}
 	return nil
 }
-func (r Result) LikeC4() string {
-	var b strings.Builder
-	fmt.Fprintln(&b, "specification { element dynamicClientPart }\nmodel {\n dynamic_client = dynamicClientPart \"Dynamic Kubernetes client\"")
-	ids := map[effect.Resource]string{}
-	names := []string{"dynamic_client"}
-	for _, a := range r.Accesses {
-		id, ok := ids[a.Binding.Resource]
-		if !ok {
-			id = fmt.Sprintf("dynamic_resource%d", len(ids))
-			ids[a.Binding.Resource] = id
-			names = append(names, id)
-			fmt.Fprintf(&b, " %s = dynamicClientPart %q { description %q }\n", id, a.Binding.Resource.Kind, a.Binding.GVR().String()+"; "+a.Binding.Scope)
-		}
-		fmt.Fprintf(&b, " dynamic_client -> %s %q\n", id, a.Method+": "+a.Operation+" via "+a.Binding.Expression)
-	}
-	fmt.Fprintf(&b, "}\nviews { view dynamic_client_access { title \"Dynamic resource access extracted from Go\"\n include %s\n } }\n", strings.Join(names, ", "))
-	return b.String()
-}

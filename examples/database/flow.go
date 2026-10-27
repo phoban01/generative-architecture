@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"generative-architecture/pkg/effect"
 	"generative-architecture/pkg/ir"
 	"generative-architecture/pkg/likec4"
 )
@@ -34,20 +35,57 @@ func (e Example) Process() (ir.Process, error) {
 	return out, nil
 }
 
-// FlowLikeC4 draws the extracted control-flow graph with likec4.ProcessView
-// rather than a manually maintained copy of the four-step story. Return
-// nodes end a reconcile attempt.
-func (e Example) FlowLikeC4() (string, error) {
+// controllerID names the Database controller in the IR the diagrams draw.
+const controllerID = "database"
+
+// Workspace draws the example with pkg/likec4 in one workspace with one
+// specification. The resource view shows the watches extracted from
+// wiring.go, the dynamic-client effects extracted from dynamic_store.go
+// and the derived effects the model declares in generate.go. The process
+// view shows the extracted control-flow graph of Reconcile.
+func (e Example) Workspace() (likec4.Workspace, error) {
+	var w likec4.Workspace
+	doc := ir.Document{
+		Controllers: []ir.Controller{{ID: controllerID, Name: "DatabaseReconciler", Provenance: ir.Provenance{Source: ir.Source{File: "controller.go"}}}},
+		Watches:     e.Watches.IR(controllerID, "wiring.go"),
+		Effects:     e.Dynamic.IR(controllerID, "dynamic_store.go"),
+	}
+	extracted := map[string]bool{}
+	for _, eff := range doc.Effects {
+		extracted[eff.ID] = true
+	}
+	var declared []effect.Descriptor
+	for _, d := range e.Spec.Effects {
+		if !extracted[d.ID] {
+			declared = append(declared, d)
+		}
+	}
+	doc.Effects = append(doc.Effects, likec4.EffectsOf(controllerID, declared, ir.Declared, ir.Source{File: "generate.go"})...)
+	elements, relations, view, err := likec4.ResourceView("database_resources", doc)
+	if err != nil {
+		return w, err
+	}
+	view.Title = "Database controller: watches and API effects"
+	if err := w.Add(elements, relations, view); err != nil {
+		return w, err
+	}
 	p, err := e.Process()
 	if err != nil {
-		return "", err
+		return w, err
 	}
-	elements, relations, view, err := likec4.ProcessView("database_provisioning_flow", "Database controller: extracted reconcile flow", p)
-	if err != nil {
-		return "", err
+	if elements, relations, view, err = likec4.ProcessView("database_provisioning_flow", "Database controller: extracted reconcile flow", p); err != nil {
+		return w, err
 	}
-	var w likec4.Workspace
 	if err := w.Add(elements, relations, view); err != nil {
+		return w, err
+	}
+	return w, w.Validate()
+}
+
+// LikeC4 renders Workspace as one .c4 file.
+func (e Example) LikeC4() (string, error) {
+	w, err := e.Workspace()
+	if err != nil {
 		return "", err
 	}
 	src, err := w.Source()

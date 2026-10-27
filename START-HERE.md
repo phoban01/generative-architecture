@@ -203,13 +203,10 @@ All of these are under `examples/database/generated/`:
 | File | What to inspect |
 | --- | --- |
 | `dynamic-client.yaml` | Dynamic access methods, GVR/GVK bindings, API verbs, source lines and hashes |
-| `dynamic-client.c4` | Resource dependencies extracted from dynamic-client calls |
 | `watches.yaml` | Extracted registrations, mapper field paths, predicates, source lines and hashes |
 | `process.yaml` | Extracted control-flow graph and source evidence |
 | `Model.qnt` | Combined process/event/queue behaviour and independent constraints |
-| `watches.c4` | Resource events and their routes to the controller's queue |
-| `process.c4` | Branches, calls and returns extracted from Go |
-| `architecture.c4` | Resource dependencies from the declared effect summaries |
+| `architecture.c4` | One LikeC4 workspace: the watches and API effects (resource view) and the extracted control flow (process view) |
 
 For the **current walkthrough diagrams**, point LikeC4 at this example's generated directory:
 

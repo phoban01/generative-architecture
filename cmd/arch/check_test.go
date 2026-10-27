@@ -61,8 +61,14 @@ func TestReplaySavedConfigMirrorTraces(t *testing.T) {
 	if v.Receipt.Tools["go"] == "" || v.Receipt.Bounds["maxInvocations"] != 3 || len(v.Generated) != 1 {
 		t.Fatalf("report does not embed the receipt: %+v %+v", v.Receipt.Tools, v.Receipt.Bounds)
 	}
+	if v.Mode != report.ModeInventory || v.Failures[report.CategoryUnsupported] != 1 || v.Failures[report.CategorySafety] != 0 {
+		t.Fatalf("mode %q failures %v", v.Mode, v.Failures)
+	}
 	if _, err := arch(t, configMirror, out, true, "replay", "--traces", savedTraces); !errors.Is(err, errStrict) {
 		t.Fatalf("verification mode must refuse the missing adapter, got %v", err)
+	}
+	if v := readVerification(t, filepath.Join(out, replayReport)); v.Mode != report.ModeStrict || len(v.Blocking()) != 1 {
+		t.Fatalf("strict report mode %q blocking %v", v.Mode, v.Blocking())
 	}
 }
 
@@ -84,7 +90,7 @@ func TestReplayReportsSafetyViolation(t *testing.T) {
 			safety = append(safety, f)
 		}
 	}
-	if v.Result != report.Failed || len(safety) == 0 || safety[0].Trace == "" || safety[0].Step == 0 || !strings.Contains(safety[0].Message, "boundedRetries") {
+	if v.Result != report.Failed || len(safety) == 0 || safety[0].Trace == "" || safety[0].Step == 0 || safety[0].Property != "boundedRetries" || !strings.Contains(safety[0].Message, "boundedRetries") {
 		t.Fatalf("report %s, safety findings %+v", v.Result, safety)
 	}
 }

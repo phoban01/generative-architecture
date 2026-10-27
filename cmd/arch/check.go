@@ -138,7 +138,7 @@ func check(g globals, ev evidence, v *report.Verification) []report.Finding {
 		// than as a disagreement between Quint and CEL.
 		for i, s := range t.States {
 			if err := ev.model.Check(s.Values, s.Event); err != nil {
-				findings = append(findings, report.Finding{Category: report.CategorySafety, Trace: name, Step: i, Event: s.Event, Message: err.Error()})
+				findings = append(findings, report.Finding{Category: report.CategorySafety, Trace: name, Step: i, Event: s.Event, Property: violatedProperty(err), Message: err.Error()})
 				break
 			}
 		}

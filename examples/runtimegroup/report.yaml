@@ -3,6 +3,20 @@ kind: VerificationReport
 metadata:
   name: multiple-controllers
 status:
+  result: passed
+  mode: strict
+  failures:
+    conformance: 0
+    safety: 0
+    tool: 0
+    unsupported: 0
+  scope: bounded runtime simulation; real FIFO workers; scripted reconcile outcomes
+  sampling:
+    samples: 40
+    steps: 60
+    seed: 20261013
+  traces: 40
+  transitions: 2400
   coverage:
     advance: 274
     reader_a_after: 11
@@ -41,7 +55,4 @@ status:
     writer_b_start: 101
     writer_b_success: 11
     writer_b_terminal: 20
-  result: passed
-  scope: bounded runtime simulation; real FIFO workers; scripted reconcile outcomes
-  traces: 40
-  transitions: 2400
+  findings: []

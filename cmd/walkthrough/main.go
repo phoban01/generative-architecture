@@ -9,6 +9,7 @@ import (
 	"generative-architecture/pkg/goflow"
 	"generative-architecture/pkg/krm"
 	"generative-architecture/pkg/quint"
+	"generative-architecture/pkg/report"
 	"os"
 	"path/filepath"
 	"time"
@@ -32,11 +33,11 @@ func run(refresh bool) error {
 	if err = os.MkdirAll(dir, 0755); err != nil {
 		return err
 	}
-	flow, err := e.FlowLikeC4()
+	diagram, err := e.LikeC4()
 	if err != nil {
 		return err
 	}
-	for name, contents := range map[string]string{"Model.qnt": e.Constrained.Quint(), "architecture.c4": e.Model.LikeC4(), "process.c4": flow, "watches.c4": e.WatchLikeC4(), "dynamic-client.c4": e.Dynamic.LikeC4()} {
+	for name, contents := range map[string]string{"Model.qnt": e.Constrained.Quint(), "architecture.c4": diagram} {
 		if err = os.WriteFile(filepath.Join(dir, name), []byte(contents), 0644); err != nil {
 			return err
 		}
@@ -79,7 +80,8 @@ func run(refresh bool) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	sampled, err := quint.Sample(ctx, e.Constrained, quint.Options{Samples: 40, Steps: 60, Seed: 20261013})
+	options := quint.Options{Samples: 40, Steps: 60, Seed: 20261013}
+	sampled, err := quint.Sample(ctx, e.Constrained, options)
 	if err != nil {
 		return err
 	}
@@ -127,8 +129,24 @@ func run(refresh bool) error {
 		}
 		inputs[name] = goflow.Hash(b)
 	}
-	report := map[string]any{"result": "passed", "traces": len(sampled.Traces), "transitions": steps, "coverage": coverage, "traceHashes": hashes, "inputHashes": inputs, "modelSha256": goflow.Hash([]byte(e.Constrained.Quint())), "scope": "source-derived Database controller reconcile; one Database/instance; up to four invocations; source-extracted watches/mapping and dynamic GVR operations; unstructured Database; observed dynamic client with fake API; native event handlers and FIFO; controlled/coalesced event delivery; summarized contract/store effects; no Kubernetes API errors, cache or revocation"}
-	if err = krm.WriteResult(filepath.Join(root, "report.yaml"), "VerificationReport", "database-provisioning", report); err != nil {
+	v := report.Verification{
+		Name:        "database-provisioning",
+		Mode:        report.ModeStrict,
+		Scope:       "source-derived Database controller reconcile; one Database/instance; up to four invocations; source-extracted watches/mapping and dynamic GVR operations; unstructured Database; observed dynamic client with fake API; native event handlers and FIFO; controlled/coalesced event delivery; summarized contract/store effects; no Kubernetes API errors, cache or revocation",
+		Model:       "generated/Model.qnt",
+		ModelSHA256: goflow.Hash([]byte(e.Constrained.Quint())),
+		Sampling:    &report.Sampling{Samples: options.Samples, Steps: options.Steps, Seed: options.Seed},
+		Traces:      len(sampled.Traces),
+		Transitions: steps,
+		Coverage:    coverage,
+		TraceHashes: hashes,
+		InputHashes: inputs,
+	}
+	v.Conclude()
+	if blocking := v.Blocking(); len(blocking) > 0 {
+		return fmt.Errorf("%s finding: %s", blocking[0].Category, blocking[0].Message)
+	}
+	if err = v.Write(filepath.Join(root, "report.yaml")); err != nil {
 		return err
 	}
 	fmt.Printf("PASS Quint + Go replay: %d traces, %d transitions\n", len(sampled.Traces), steps)

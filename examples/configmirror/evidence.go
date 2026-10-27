@@ -14,7 +14,9 @@ import (
 	"time"
 
 	"generative-architecture/pkg/conformance"
+	"generative-architecture/pkg/ir"
 	"generative-architecture/pkg/krm"
+	"generative-architecture/pkg/likec4"
 	"generative-architecture/pkg/model"
 	"generative-architecture/pkg/mutation"
 )
@@ -35,6 +37,29 @@ const (
 	ReceiptFile   = "receipt.yaml"
 	MutationsFile = "mutations.yaml"
 )
+
+// Diagram draws the effects of the generated model with pkg/likec4: the
+// resource view of one controller and the API effects extracted from
+// controller.go through the built-in client summaries. It is the content
+// of DiagramFile.
+func Diagram(spec model.Spec) (string, error) {
+	const controller = "configmirror"
+	doc := ir.Document{
+		Controllers: []ir.Controller{{ID: controller, Name: spec.Name, Provenance: ir.Provenance{Source: ir.Source{File: "controller.go"}}}},
+		Effects:     likec4.EffectsOf(controller, spec.Effects, ir.Extracted, ir.Source{File: "controller.go"}),
+	}
+	elements, relations, view, err := likec4.ResourceView("config_mirror_resources", doc)
+	if err != nil {
+		return "", err
+	}
+	view.Title = spec.Name + ": API effects"
+	var w likec4.Workspace
+	if err := w.Add(elements, relations, view); err != nil {
+		return "", err
+	}
+	src, err := w.Source()
+	return string(src), err
+}
 
 // Scenarios are targeted event sequences of the generated model, named by
 // the behaviour they pin down. Scenario inserts the process's internal
