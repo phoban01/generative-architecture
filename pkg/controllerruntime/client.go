@@ -4,6 +4,7 @@ package controllerruntime
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"generative-architecture/pkg/effect"
 	"reflect"
@@ -187,17 +188,54 @@ func (c *clientProxy) Get(ctx context.Context, key client.ObjectKey, obj client.
 func (c *clientProxy) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
 	return (&readerProxy{base: c.Client, o: c.o, consistency: c.consistency}).List(ctx, list, opts...)
 }
-func (c *clientProxy) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
-	if len(opts) > 0 {
-		return unsupported("Update options")
+
+// writeOptions checks the options of a write and returns the ones to record.
+// A dry run fails by name. A field manager is recorded as fieldManager.
+// Force is recorded only for an apply, as the apply summary reads it. other
+// reports any further option, which fails closed.
+func writeOptions(op string, apply bool, dryRun []string, fieldManager string, force *bool, other bool) (map[string]string, error) {
+	if err := rejectDryRun(op, dryRun); err != nil {
+		return nil, err
 	}
-	return c.o.invoke(ctx, "update", "direct", client.ObjectKeyFromObject(obj), obj, nil, func() error { return c.Client.Update(ctx, obj) })
+	if force != nil && !apply {
+		return nil, unsupported(op + " with force: force applies only to server-side apply")
+	}
+	if other {
+		return nil, unsupported(op + " options other than the field manager")
+	}
+	recorded := map[string]string{}
+	if fieldManager != "" {
+		recorded["fieldManager"] = fieldManager
+	}
+	if force != nil && *force {
+		recorded["force"] = "true"
+	}
+	if len(recorded) == 0 {
+		return nil, nil
+	}
+	return recorded, nil
 }
-func (c *clientProxy) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
-	if len(opts) > 0 {
-		return unsupported("Create options")
+
+// Update records a direct update. A field owner is recorded as fieldManager.
+func (c *clientProxy) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+	options := &client.UpdateOptions{}
+	options.ApplyOptions(opts)
+	recorded, err := writeOptions("Update", false, options.DryRun, options.FieldManager, nil, !reflect.DeepEqual(*options, client.UpdateOptions{DryRun: options.DryRun, FieldManager: options.FieldManager}))
+	if err != nil {
+		return err
 	}
-	return c.o.invoke(ctx, "create", "direct", client.ObjectKeyFromObject(obj), obj, nil, func() error { return c.Client.Create(ctx, obj) })
+	return c.o.invoke(ctx, "update", "direct", client.ObjectKeyFromObject(obj), obj, recorded, func() error { return c.Client.Update(ctx, obj, opts...) })
+}
+
+// Create records a direct create. A field owner is recorded as fieldManager.
+func (c *clientProxy) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+	options := &client.CreateOptions{}
+	options.ApplyOptions(opts)
+	recorded, err := writeOptions("Create", false, options.DryRun, options.FieldManager, nil, !reflect.DeepEqual(*options, client.CreateOptions{DryRun: options.DryRun, FieldManager: options.FieldManager}))
+	if err != nil {
+		return err
+	}
+	return c.o.invoke(ctx, "create", "direct", client.ObjectKeyFromObject(obj), obj, recorded, func() error { return c.Client.Create(ctx, obj, opts...) })
 }
 
 // Delete records a direct delete keyed by the object. Both snapshots carry
@@ -215,41 +253,47 @@ func (c *clientProxy) Delete(ctx context.Context, obj client.Object, opts ...cli
 }
 
 // Patch records a direct patch, or apply for a server-side apply patch. The
-// options carry the patch type and the patch bytes.
+// options carry the patch type, the patch bytes and any field manager.
 func (c *clientProxy) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
 	options := &client.PatchOptions{}
 	options.ApplyOptions(opts)
-	if err := rejectDryRun("Patch", options.DryRun); err != nil {
-		return err
-	}
-	if len(opts) > 0 {
-		return unsupported("Patch options")
-	}
-	operation, recorded, err := patchCall("", obj, patch)
+	other := !reflect.DeepEqual(*options, client.PatchOptions{DryRun: options.DryRun, FieldManager: options.FieldManager, Force: options.Force})
+	operation, recorded, err := patchCall("Patch", "", obj, patch, options.DryRun, options.FieldManager, options.Force, other)
 	if err != nil {
 		return err
 	}
-	return c.o.invoke(ctx, operation, "direct", client.ObjectKeyFromObject(obj), obj, recorded, func() error { return c.Client.Patch(ctx, obj, patch) })
+	return c.o.invoke(ctx, operation, "direct", client.ObjectKeyFromObject(obj), obj, recorded, func() error { return c.Client.Patch(ctx, obj, patch, opts...) })
 }
 
-// patchCall names a patch effect and records its type and bytes. A
-// server-side apply patch is the apply operation, as in the summaries.
-func patchCall(subresource string, obj client.Object, patch client.Patch) (string, map[string]string, error) {
+// patchCall names a patch effect and records its type, bytes and write
+// options. A server-side apply patch is the apply operation, as in the
+// summaries.
+func patchCall(op, subresource string, obj client.Object, patch client.Patch, dryRun []string, fieldManager string, force *bool, other bool) (string, map[string]string, error) {
 	if patch == nil {
 		return "", nil, unsupported("nil patch")
+	}
+	apply := patch.Type() == types.ApplyPatchType
+	recorded, err := writeOptions(op, apply, dryRun, fieldManager, force, other)
+	if err != nil {
+		return "", nil, err
 	}
 	data, err := patch.Data(obj)
 	if err != nil {
 		return "", nil, err
 	}
 	operation := "patch"
-	if patch.Type() == types.ApplyPatchType {
+	if apply {
 		operation = "apply"
 	}
 	if subresource != "" {
 		operation = subresource + "." + operation
 	}
-	return operation, map[string]string{"patchType": string(patch.Type()), "patch": string(data)}, nil
+	if recorded == nil {
+		recorded = map[string]string{}
+	}
+	recorded["patchType"] = string(patch.Type())
+	recorded["patch"] = string(data)
+	return operation, recorded, nil
 }
 
 // DeleteAllOf records a direct deleteAllOf keyed by the namespace option,
@@ -272,8 +316,52 @@ func (c *clientProxy) DeleteAllOf(ctx context.Context, obj client.Object, opts .
 		return nil, c.Client.DeleteAllOf(ctx, obj, opts...)
 	})
 }
-func (c *clientProxy) Apply(context.Context, runtime.ApplyConfiguration, ...client.ApplyOption) error {
-	return unsupported("Apply")
+
+// Apply records a direct apply keyed by the apply configuration's name and
+// namespace. It records the field manager, which apply requires, and force.
+// The snapshots are the configuration before and after the call.
+func (c *clientProxy) Apply(ctx context.Context, configuration runtime.ApplyConfiguration, opts ...client.ApplyOption) error {
+	options := &client.ApplyOptions{}
+	options.ApplyOptions(opts)
+	recorded, err := writeOptions("Apply", true, options.DryRun, options.FieldManager, options.Force, !reflect.DeepEqual(*options, client.ApplyOptions{DryRun: options.DryRun, FieldManager: options.FieldManager, Force: options.Force}))
+	if err != nil {
+		return err
+	}
+	if options.FieldManager == "" {
+		return unsupported("Apply without a field manager")
+	}
+	if configuration == nil || reflect.ValueOf(configuration).IsNil() {
+		return unsupported("Apply of a nil configuration")
+	}
+	submitted, err := applyContent(configuration)
+	if err != nil {
+		return err
+	}
+	u := &unstructured.Unstructured{Object: submitted}
+	gvk := u.GroupVersionKind()
+	if gvk.Version == "" || gvk.Kind == "" || u.GetName() == "" {
+		return fmt.Errorf("apply observation requires apiVersion, kind and name in the configuration")
+	}
+	return c.o.observe(ctx, gvk, "apply", "direct", client.ObjectKey{Namespace: u.GetNamespace(), Name: u.GetName()}, submitted, recorded, func() (map[string]any, error) {
+		if err := c.Client.Apply(ctx, configuration, opts...); err != nil {
+			return nil, err
+		}
+		return applyContent(configuration)
+	})
+}
+
+// applyContent detaches an apply configuration through its JSON form, as the
+// client serializes it.
+func applyContent(configuration runtime.ApplyConfiguration) (map[string]any, error) {
+	data, err := json.Marshal(configuration)
+	if err != nil {
+		return nil, err
+	}
+	content := map[string]any{}
+	if err := json.Unmarshal(data, &content); err != nil {
+		return nil, err
+	}
+	return content, nil
 }
 func (c *clientProxy) Status() client.SubResourceWriter { return c.SubResource("status") }
 func (c *clientProxy) SubResource(name string) client.SubResourceClient {
@@ -285,11 +373,21 @@ type subresource struct {
 	name   string
 }
 
+// Update records status.update. A field owner is recorded as fieldManager.
+// Other subresources fail closed.
 func (s *subresource) Update(ctx context.Context, obj client.Object, opts ...client.SubResourceUpdateOption) error {
-	if s.name != "status" || len(opts) > 0 {
-		return unsupported(s.name + ".Update/options")
+	if s.name != "status" {
+		return unsupported(s.name + ".Update")
 	}
-	return s.parent.o.invoke(ctx, "status.update", "direct", client.ObjectKeyFromObject(obj), obj, nil, func() error { return s.parent.Client.Status().Update(ctx, obj) })
+	options := &client.SubResourceUpdateOptions{}
+	options.ApplyOptions(opts)
+	update := options.UpdateOptions
+	other := options.SubResourceBody != nil || !reflect.DeepEqual(update, client.UpdateOptions{DryRun: update.DryRun, FieldManager: update.FieldManager})
+	recorded, err := writeOptions("status.Update", false, update.DryRun, update.FieldManager, nil, other)
+	if err != nil {
+		return err
+	}
+	return s.parent.o.invoke(ctx, "status.update", "direct", client.ObjectKeyFromObject(obj), obj, recorded, func() error { return s.parent.Client.Status().Update(ctx, obj, opts...) })
 }
 func (s *subresource) Get(context.Context, client.Object, client.Object, ...client.SubResourceGetOption) error {
 	return unsupported(s.name + ".Get")
@@ -306,17 +404,13 @@ func (s *subresource) Patch(ctx context.Context, obj client.Object, patch client
 	}
 	options := &client.SubResourcePatchOptions{}
 	options.ApplyOptions(opts)
-	if err := rejectDryRun("status.Patch", options.DryRun); err != nil {
-		return err
-	}
-	if len(opts) > 0 {
-		return unsupported("status.Patch options")
-	}
-	operation, recorded, err := patchCall(s.name, obj, patch)
+	p := options.PatchOptions
+	other := options.SubResourceBody != nil || !reflect.DeepEqual(p, client.PatchOptions{DryRun: p.DryRun, FieldManager: p.FieldManager, Force: p.Force})
+	operation, recorded, err := patchCall("status.Patch", s.name, obj, patch, p.DryRun, p.FieldManager, p.Force, other)
 	if err != nil {
 		return err
 	}
-	return s.parent.o.invoke(ctx, operation, "direct", client.ObjectKeyFromObject(obj), obj, recorded, func() error { return s.parent.Client.Status().Patch(ctx, obj, patch) })
+	return s.parent.o.invoke(ctx, operation, "direct", client.ObjectKeyFromObject(obj), obj, recorded, func() error { return s.parent.Client.Status().Patch(ctx, obj, patch, opts...) })
 }
 func (s *subresource) Apply(context.Context, runtime.ApplyConfiguration, ...client.SubResourceApplyOption) error {
 	return unsupported(s.name + ".Apply")
