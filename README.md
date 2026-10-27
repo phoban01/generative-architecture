@@ -90,6 +90,26 @@ Without `KUBEBUILDER_ASSETS` these tests skip. With `ENVTEST_REQUIRED=1` they fa
 
 `make envtest` does both steps. It reads the versions from `go.mod` and fails when the assets cannot be installed, a test skips or no test runs. The `envtest` job in `.github/workflows/ci.yml` runs it on each supported Go release after the build job. `hack/ci` parses the workflows and checks these jobs in `go test`.
 
+### Architecture pipeline
+
+`.github/workflows/arch.yml` is a reusable workflow for adopters. It installs `arch`, Quint and LikeC4, then runs `arch extract`, `generate`, `check`, `replay`, `render` and `diff` on one project document. It uploads the output directory as the `architecture` artifact: generated models and diagrams, the rendered site, the reports with their receipts, the sampled traces and the IR diff.
+
+The job fails on a constraint violation or Quint finding, on a replay finding, on evidence whose inputs changed, and on any tool failure. A changed IR against the base branch is reported, not failed. Replay runs in inventory mode by default, because `arch` has no replay adapter yet. Sampling is bounded, so a pass is not exhaustive verification.
+
+```yaml
+jobs:
+  architecture:
+    uses: <owner>/<repo>/.github/workflows/arch.yml@<ref>
+    with:
+      project: project.yaml
+      arch-package: <module>/cmd/arch@<version>
+      tools-dir: hack/tools   # a package.json and lockfile that pin Quint and LikeC4
+```
+
+Without `tools-dir`, the workflow installs the Quint and LikeC4 versions in its `quint-version` and `likec4-version` inputs. The other inputs set the sampling bounds, the seed, steering (`steer-weight`, `steer-except`) and strict mode.
+
+The `architecture` job in `ci.yml` runs the workflow on ConfigMirror with tools from `hack/tools`, so CI uses the versions the receipts record. `make arch-pipeline` runs the same script steps locally into a temporary directory. Set `ARCH_PIPELINE_BASE` to a branch to include the IR diff.
+
 ## Diagrams and binaries
 
 ```sh

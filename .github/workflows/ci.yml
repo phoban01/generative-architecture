@@ -48,3 +48,19 @@ jobs:
       # installed, a test skips or no test runs.
       - name: Envtest
         run: make envtest
+
+  # The adopter pipeline in arch.yml, run on ConfigMirror. The project
+  # document under cmd/arch/testdata declares the controller that
+  # examples/configmirror keeps in Go. Quint and LikeC4 come from
+  # hack/tools, so CI runs the versions the receipts record.
+  architecture:
+    name: Architecture pipeline (ConfigMirror)
+    needs: go
+    uses: ./.github/workflows/arch.yml
+    with:
+      project: cmd/arch/testdata/configmirror/project.yaml
+      arch-package: ./cmd/arch
+      tools-dir: hack/tools
+      seed: 20261013
+      steer-weight: 8
+      steer-except: error

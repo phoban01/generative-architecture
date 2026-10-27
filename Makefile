@@ -1,4 +1,4 @@
-.PHONY: api-generate walkthrough library-demo general-demo consumer-test test check verify render serve build clean envtest
+.PHONY: api-generate walkthrough library-demo general-demo consumer-test test check verify render serve build clean envtest arch-pipeline
 
 # Standard controller-gen handles Kubernetes deepcopy methods for the example APIs
 # and the CRD manifests of the reference system.
@@ -46,6 +46,13 @@ envtest:
 	grep -E -e '--- (PASS|SKIP|FAIL): .*Envtest' "$$log"; \
 	if grep -q -e '--- SKIP' "$$log"; then echo "an envtest test skipped" >&2; exit 1; fi; \
 	grep -q -e '--- PASS: .*Envtest' "$$log" || { echo "no envtest test ran" >&2; exit 1; }
+
+# Run the script steps of the adopter pipeline (.github/workflows/arch.yml)
+# on ConfigMirror, as CI's architecture job does, into a temporary
+# directory. Requires Quint and LikeC4 (QUINT_BIN, LIKEC4_BIN). Set
+# ARCH_PIPELINE_BASE=main to diff the IR against a branch.
+arch-pipeline:
+	ARCH_PIPELINE=1 go test -count=1 -v -run TestArchPipeline ./hack/ci
 
 # Native Go only: replay checked-in, hash-verified evidence.
 check: test walkthrough
