@@ -7,13 +7,9 @@ import (
 	cr "generative-architecture/pkg/controllerruntime"
 	"generative-architecture/pkg/dynamicgen"
 	"generative-architecture/pkg/effect"
-	"generative-architecture/pkg/expr"
 	"generative-architecture/pkg/goflow"
-	"generative-architecture/pkg/krm"
 	"generative-architecture/pkg/model"
-	"generative-architecture/pkg/process"
 	"generative-architecture/pkg/watchgen"
-	"go/ast"
 	"k8s.io/apimachinery/pkg/api/meta"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	"os"
@@ -29,6 +25,10 @@ type Example struct {
 	Watches     watchgen.Result
 	Program     goflow.Program
 	Spec        model.Spec
+	Environment []EnvironmentAction
+	// Observed lists the variables replay compares: the watch summary's
+	// state and every abstraction variable.
+	Observed    []string
 	Model       *model.Compiled
 	Constrained *model.Compiled
 }
@@ -48,107 +48,6 @@ func LoadSource(root string, source []byte) (Example, error) {
 		return Example{}, err
 	}
 	return LoadSources(root, source, wiring)
-}
-func LoadSources(root string, source, wiring []byte) (Example, error) {
-	watches, err := extractWatches(wiring)
-	if err != nil {
-		return Example{}, err
-	}
-	var base model.Spec
-	var config process.Config
-	if _, err := krm.Read(filepath.Join(root, "model.yaml"), "TransitionModel", &base); err != nil {
-		return Example{}, err
-	}
-	if _, err := krm.Read(filepath.Join(root, "process.yaml"), "ProcessSemantics", &config); err != nil {
-		return Example{}, err
-	}
-	var catalog dynamicgen.Catalog
-	if _, err := krm.Read(filepath.Join(root, "resources.yaml"), "KubernetesResourceCatalog", &catalog); err != nil {
-		return Example{}, err
-	}
-	dynamicSource, err := os.ReadFile(filepath.Join(root, "dynamic_store.go"))
-	if err != nil {
-		return Example{}, err
-	}
-	accesses, err := dynamicgen.Extract(dynamicSource, "DynamicStore", "s.Client", map[string]string{"DatabaseExists": "readDatabase", "DatabaseInstance": "readInstance", "CreateDatabaseInstance": "createInstance", "UpdateDatabaseStatus": "publish"}, catalog)
-	if err != nil {
-		return Example{}, err
-	}
-	if err = accesses.CheckEffects(base.Effects); err != nil {
-		return Example{}, err
-	}
-	registry, err := effect.NewRegistry(base.Effects)
-	if err != nil {
-		return Example{}, err
-	}
-	for _, rule := range watches.Rules {
-		if _, err = registry.Lookup(rule.Resource, "get", "direct"); err != nil {
-			return Example{}, fmt.Errorf("watch identity does not match this slice's API resources: %w", err)
-		}
-	}
-	example, err := Extract(source, base, config, watches)
-	if err != nil {
-		return Example{}, err
-	}
-	example.Dynamic = accesses
-	example.Resources = catalog
-	var requirements struct {
-		Properties []model.Property `yaml:"properties"`
-	}
-	if _, err := krm.Read(filepath.Join(root, "constraints.yaml"), "ModelConstraints", &requirements); err != nil {
-		return Example{}, err
-	}
-	spec := example.Spec
-	spec.Properties = requirements.Properties
-	example.Constrained, err = model.Compile(spec)
-	return example, err
-}
-func Extract(source []byte, base model.Spec, config process.Config, watches watchgen.Result) (Example, error) {
-	scope := map[string]expr.Symbol{}
-	for name, v := range base.State {
-		scope[name] = expr.Symbol{Type: v.Type, Quint: name}
-	}
-	opts := goflow.Options{File: "controller.go", Method: "Reconcile", Scope: scope, Returns: []goflow.Return{{Type: "string"}}}
-	opts.Statement = func(s ast.Stmt, convert func(ast.Expr, string) (expr.Expression, error)) (goflow.Node, bool, error) {
-		operations := map[string]string{
-			"found := store.DatabaseExists()":                     "readDatabase",
-			"compatible := store.SatisfiesProvisioningContract()": "checkContract",
-			"instanceFound, endpoint := store.DatabaseInstance()": "readInstance",
-			"store.CreateDatabaseInstance()":                      "createInstance",
-		}
-		if kind, ok := operations[goflow.Code(s)]; ok {
-			return goflow.Node{Kind: kind}, true, nil
-		}
-		if statement, ok := s.(*ast.ExprStmt); ok {
-			if call, ok := statement.X.(*ast.CallExpr); ok && goflow.Code(call.Fun) == "store.UpdateDatabaseStatus" && len(call.Args) == 1 {
-				value, err := convert(call.Args[0], "string")
-				return goflow.Node{Kind: "publish", Expression: value}, true, err
-			}
-		}
-		return goflow.Node{}, false, nil
-	}
-	p, err := goflow.Extract(source, opts)
-	if err != nil {
-		return Example{}, err
-	}
-	spec, err := process.Expand(base, *p, config)
-	if err != nil {
-		return Example{}, err
-	}
-	// Reusable invocation mechanics: the process starts on a reconcile event and
-	// returns to the scheduler on every Go return, including a waiting outcome.
-	spec.State[config.PC] = model.Variable{Type: "int", Initial: "-1"}
-	spec.State[config.Finished] = model.Variable{Type: "bool", Initial: "true"}
-	spec.Actions = append(spec.Actions, model.Action{Name: "reconcile", Guard: expr.Expression(config.Finished + " && invocations < 4"), Updates: map[string]expr.Expression{
-		config.PC: expr.Expression(strconv.Itoa(p.Entry)), config.Finished: "false", "invocations": "invocations + 1",
-		"found": "false", "compatible": "false", "instanceFound": "false", "endpoint": `""`, "outcome": `""`,
-	}})
-	spec, err = addWatchModel(spec, watches)
-	if err != nil {
-		return Example{}, err
-	}
-	compiled, err := model.Compile(spec)
-	return Example{Watches: watches, Program: *p, Spec: spec, Model: compiled}, err
 }
 
 // Schedule follows the extracted branches. Only environment changes and the
@@ -187,15 +86,23 @@ func (e Example) Schedule(name string) (conformance.Trace, error) {
 		}
 		return nil
 	}
+	contract := "true"
 	switch name {
 	case "absent", "pending", "provisioned", "repeated":
-		err = advance("discoverCompatible")
 	case "unsupported":
-		err = advance("discoverUnsupported")
+		contract = "false"
 	default:
 		return conformance.Trace{}, fmt.Errorf("unknown scenario %s", name)
 	}
+	discover, err := e.EnvironmentEvent(contractVariable, contract)
 	if err != nil {
+		return conformance.Trace{}, err
+	}
+	provision, err := e.EnvironmentEvent(instanceEndpointVariable, `"db-1.internal"`)
+	if err != nil {
+		return conformance.Trace{}, err
+	}
+	if err = advance(discover.Name); err != nil {
 		return conformance.Trace{}, err
 	}
 	if name == "absent" {
@@ -218,7 +125,7 @@ func (e Example) Schedule(name string) (conformance.Trace, error) {
 		}
 	}
 	if name == "provisioned" || name == "repeated" {
-		if err = advance("provisionInstance"); err != nil {
+		if err = advance(provision.Name); err != nil {
 			return conformance.Trace{}, err
 		}
 		if err = advance("deliverInstance"); err != nil {
@@ -242,32 +149,36 @@ func (e Example) Schedule(name string) (conformance.Trace, error) {
 // Adapter holds actual fixture contents and observations. It receives events,
 // never expected states or branch outcomes. Its Store represents one Database.
 type Adapter struct {
-	dynamicStore                                      *DynamicStore
-	mapper                                            meta.RESTMapper
-	api                                               *dynamicfake.FakeDynamicClient
-	watches                                           watchgen.Result
-	queue                                             *eventQueue
-	databaseEvent, instanceEvent                      string
-	instanceUpdatePending                             bool
-	ctx                                               context.Context
-	cancel                                            context.CancelFunc
-	gate                                              *effect.Gate
-	worker                                            *cr.Worker
-	initErr                                           error
-	databaseExists, contractSatisfied, instanceExists bool
-	instanceEndpoint, statusEndpoint                  string
-	instanceCreates, invocations                      int64
-	found, compatible, instanceFound                  bool
-	endpoint, outcome                                 string
-	running                                           bool
-	result                                            chan string
-	nodes                                             []goflow.Node
-	mutant                                            bool
+	dynamicStore                     *DynamicStore
+	mapper                           meta.RESTMapper
+	api                              *dynamicfake.FakeDynamicClient
+	watches                          watchgen.Result
+	queue                            *eventQueue
+	databaseEvent, instanceEvent     string
+	instanceUpdatePending            bool
+	ctx                              context.Context
+	cancel                           context.CancelFunc
+	gate                             *effect.Gate
+	worker                           *cr.Worker
+	initErr                          error
+	environment                      map[string]EnvironmentAction
+	instanceExists                   bool
+	instanceEndpoint, statusEndpoint string
+	instanceCreates, invocations     int64
+	found, compatible, instanceFound bool
+	endpoint, outcome                string
+	running                          bool
+	result                           chan string
+	nodes                            []goflow.Node
+	mutant                           bool
 }
 
 func New(ctx context.Context, e Example, mutant bool) *Adapter {
 	ctx, cancel := context.WithCancel(ctx)
-	a := &Adapter{watches: e.Watches, ctx: ctx, cancel: cancel, gate: effect.NewGate(), result: make(chan string, 1), nodes: e.Program.Nodes, mutant: mutant}
+	a := &Adapter{watches: e.Watches, ctx: ctx, cancel: cancel, gate: effect.NewGate(), result: make(chan string, 1), nodes: e.Program.Nodes, mutant: mutant, environment: map[string]EnvironmentAction{}}
+	for _, env := range e.Environment {
+		a.environment[env.Name] = env
+	}
 	if err := a.initDynamic(e); err != nil {
 		a.initErr = err
 		return a
@@ -348,33 +259,15 @@ func (a *Adapter) Apply(ctx context.Context, event string) error {
 	if a.initErr != nil {
 		return a.initErr
 	}
+	if env, ok := a.environment[event]; ok {
+		return a.applyEnvironment(env)
+	}
 	switch event {
-	case "discoverCompatible", "discoverUnsupported":
-		a.databaseExists = true
-		a.contractSatisfied = event == "discoverCompatible"
-		a.databaseEvent = "create"
-		return a.discoverDynamic()
-	case "provisionInstance":
-		if !a.instanceExists {
-			return fmt.Errorf("no instance to provision")
-		}
-		if err := a.provisionDynamic(); err != nil {
-			return err
-		}
-		a.instanceEndpoint = "db-1.internal"
-		if a.instanceEvent == "create" {
-			a.instanceUpdatePending = true
-		} else {
-			a.instanceEvent = "update"
-		}
-		return nil
 	case "deliverDatabase":
 		return a.deliver("Database")
 	case "deliverInstance":
 		return a.deliver("DatabaseInstance")
 	case "removeDatabaseBeforeRead":
-		a.databaseExists = false
-		a.contractSatisfied = false
 		a.databaseEvent = "delete"
 		return a.removeDynamic()
 	case "idle":
@@ -462,16 +355,54 @@ func (a *Adapter) Project(context.Context) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return map[string]any{
+	// API state comes from the generated projection under the abstraction's
+	// names; the rest is the adapter's observation of the queue and of Go.
+	state := map[string]any{
 		"queued": a.queue.queued, "wrongKey": a.queue.err != nil, "databaseEvent": a.databaseEvent, "instanceEvent": a.instanceEvent, "instanceUpdatePending": a.instanceUpdatePending,
-		"databaseExists": apiState["databaseExists"], "contractSatisfied": apiState["contractSatisfied"], "instanceExists": apiState["instanceExists"],
-		"instanceEndpoint": apiState["instanceEndpoint"], "statusEndpoint": apiState["statusEndpoint"], "instanceCreates": a.instanceCreates,
-		"found": a.found, "compatible": a.compatible, "instanceFound": a.instanceFound, "endpoint": a.endpoint,
+		"instanceCreates": a.instanceCreates, "found": a.found, "compatible": a.compatible, "instanceFound": a.instanceFound, "endpoint": a.endpoint,
 		"outcome": a.outcome, "invocations": a.invocations,
-	}, nil
+	}
+	for name, v := range apiState {
+		if _, dup := state[name]; dup {
+			return nil, fmt.Errorf("projected %s collides with an observed local", name)
+		}
+		state[name] = v
+	}
+	return state, nil
 }
 
-var Observed = []string{"queued", "wrongKey", "databaseEvent", "instanceEvent", "instanceUpdatePending", "databaseExists", "contractSatisfied", "instanceExists", "instanceEndpoint", "statusEndpoint", "instanceCreates", "found", "compatible", "instanceFound", "endpoint", "outcome", "invocations"}
+// watchVariables are the state of the reviewed one-key FIFO summary.
+var watchVariables = []string{"queued", "wrongKey", "databaseEvent", "instanceEvent", "instanceUpdatePending"}
+
+// applyEnvironment performs a generated environment action on the fake API:
+// it creates the Database with its contract annotation, or provisions the
+// instance's endpoint.
+func (a *Adapter) applyEnvironment(env EnvironmentAction) error {
+	switch {
+	case env.Operation == EnvCreate && env.Variable == contractVariable:
+		a.databaseEvent = "create"
+		return a.discoverDynamic(env.Value == "true")
+	case env.Operation == EnvUpdate && env.Variable == instanceEndpointVariable:
+		if !a.instanceExists {
+			return fmt.Errorf("no instance to provision")
+		}
+		endpoint, err := strconv.Unquote(env.Value)
+		if err != nil {
+			return err
+		}
+		if err := a.provisionDynamic(endpoint); err != nil {
+			return err
+		}
+		a.instanceEndpoint = endpoint
+		if a.instanceEvent == "create" {
+			a.instanceUpdatePending = true
+		} else {
+			a.instanceEvent = "update"
+		}
+		return nil
+	}
+	return fmt.Errorf("environment action %s has no fixture operation", env.Name)
+}
 
 func (e Example) CheckConstraints(trace conformance.Trace) error {
 	for i, s := range trace.States {

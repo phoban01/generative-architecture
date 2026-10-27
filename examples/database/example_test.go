@@ -34,7 +34,7 @@ func TestFullProvisioningFlow(t *testing.T) {
 			}
 			a := New(ctx, e, false)
 			defer a.Close()
-			report, err := conformance.ReplayObserved(ctx, e.Model, trace, a, Observed)
+			report, err := conformance.ReplayObserved(ctx, e.Model, trace, a, e.Observed)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -42,7 +42,7 @@ func TestFullProvisioningFlow(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if state["outcome"] != tc.outcome || state["instanceCreates"] != tc.creates || state["statusEndpoint"] != tc.id {
+			if state["outcome"] != tc.outcome || state["instanceCreates"] != tc.creates || state["Database_db1_status_endpoint"] != tc.id {
 				t.Fatalf("unexpected Go result: %v", state)
 			}
 			if tc.name == "absent" || tc.name == "unsupported" {
@@ -104,7 +104,7 @@ func TestReplayDetectsWrongStatusWrite(t *testing.T) {
 	defer cancel()
 	a := New(ctx, e, true)
 	defer a.Close()
-	if _, err = conformance.ReplayObserved(ctx, e.Model, trace, a, Observed); err == nil || !strings.Contains(err.Error(), "mismatch") {
+	if _, err = conformance.ReplayObserved(ctx, e.Model, trace, a, e.Observed); err == nil || !strings.Contains(err.Error(), "mismatch") {
 		t.Fatalf("missed corrupt status write: %v", err)
 	}
 }
@@ -165,7 +165,7 @@ func TestRecordedQuintSchedules(t *testing.T) {
 			defer cancel()
 			a := New(ctx, e, false)
 			defer a.Close()
-			if _, err = conformance.ReplayObserved(ctx, e.Model, trace, a, Observed); err != nil {
+			if _, err = conformance.ReplayObserved(ctx, e.Model, trace, a, e.Observed); err != nil {
 				t.Fatalf("%s: %v", path, err)
 			}
 		}()

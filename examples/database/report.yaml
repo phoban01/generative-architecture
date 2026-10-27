@@ -4,81 +4,81 @@ metadata:
   name: database-provisioning
 status:
   coverage:
-    deliverDatabase: 110
-    deliverInstance: 30
-    discoverCompatible: 36
-    discoverUnsupported: 49
-    idle: 1342
-    node0_return: 43
-    node1_publish: 44
-    node3_branch: 44
-    node4_return: 15
-    node5_createInstance: 15
-    node6_branch: 60
-    node7_readInstance: 60
-    node8_return: 19
-    node9_branch: 79
-    node10_checkContract: 79
-    node11_return: 17
-    node12_branch: 96
-    node13_readDatabase: 96
-    provisionInstance: 15
-    reconcile: 96
+    changeInst1_1: 8
+    createDb1_false: 41
+    createDb1_true: 40
+    deliverDatabase: 91
+    deliverInstance: 16
+    idle: 1627
+    node0_return: 22
+    node1_publish: 23
+    node3_branch: 23
+    node4_return: 8
+    node5_createInstance: 8
+    node6_branch: 32
+    node7_readInstance: 32
+    node8_return: 21
+    node9_branch: 53
+    node10_checkContract: 53
+    node11_return: 22
+    node12_branch: 75
+    node13_readDatabase: 75
+    reconcile: 75
     removeDatabaseBeforeRead: 55
   inputHashes:
     abstraction.yaml: 87671a19d2057cd29972443d8e6bd600106856f22b35e5384e833c242336610d
-    constraints.yaml: e5dfae6d7921e6c502d5da8bf4dc7459caef0684d869bd98fb65c94eff358bcf
+    constraints.yaml: b5e555eac8c2071757170e0bc212a4ca9185625fe02d9983dc12061a5c5083ba
     controller.go: 501992ebf2133324aa347def107af60d33b7a4d813b8872d125be53fb32c251f
     dynamic_store.go: 7db856a9052735afc12869671313b1f17e2ed4b837bdac555320e79338379dc8
+    generate.go: c3b6e8efcf5b984f08e0df0c7d3ee684cf6e4250639d0c11d41c840600979e7f
     generated/projection_generated.go: 5f3f8af469e97d0e7a75b66bf2cfef06fee6f68eb5c62f66413ae5c35cd8f692
-    model.yaml: 56376bd883a6366f27ebbe84cf71922ef110f41dd1c6d5245132f73163454d41
-    process.yaml: f0a91012bff7bf7e357665613f85e04a35c5f4f1f6b48b0118120e60d5f4e0f5
+    process.yaml: 538a807b1222fa814cbd1d5c3048a31d644150daa1519d41c7e35c2f2e5b3922
     project.yaml: 6aff1031c9e19374731f4348e055244b60213309bae766cefe7ae1efac32ac49
     resources.yaml: 164911658028c86c67d5288d3c6fbc68d45fee0eb6d6851e634c8c0f05d094b9
     wiring.go: 0e4e54b649f30aa7eeb224b026909b36bf24c95e486d00baa6cf678fcca0777a
-  modelSha256: d1d535d1d92de6e99f9f340bd91a0bb57ee3fd16b5756a66838746c75a570297
+  modelSha256: 3668ffb736f69a2c7cba447ab6aa5b1a3ab2a34fd75740c5a79e66c57c1db8ea
   result: passed
   scope: source-derived Database controller reconcile; one Database/instance; up to four invocations; source-extracted watches/mapping and dynamic GVR operations; unstructured Database; observed dynamic client with fake API; native event handlers and FIFO; controlled/coalesced event delivery; summarized contract/store effects; no Kubernetes API errors, cache or revocation
   traceHashes:
-    trace-000.itf.json: 2348ff0e52e48b70a65178bfb8354e642a9f6b31e4fb9d9430241d0b975559e3
-    trace-001.itf.json: 532b60357eaea31e3e79939f385137a00a2f727f0e0d66cc477613663574cefc
-    trace-002.itf.json: e893a67460ebb3df8b0d5dd98f2e6d34b83acccaeceb66ae746ffeb13298ed79
-    trace-003.itf.json: 2996cda95f083e1ab46b0ce1b76ff13b3f3b4af921735ed7c207c8c89b1e69ea
-    trace-004.itf.json: f7aab93d24e267e558fbcf88855836feb9b79e1cb585588ac0118e5b82931339
-    trace-005.itf.json: 34629ddd48dba9763f75d5a31ddf0315b92780ea2c916375bc16372f7de1d178
-    trace-006.itf.json: bdba9366bc53dfab1c3355ecb0a6164b65268079190453c6d8505667d756a8d1
-    trace-007.itf.json: 7fce838cb4b0e2f7d3da4f98cdf70ce34cbb515a2881982b07c3e1003fac0c57
-    trace-008.itf.json: a855db496b77e69e2cb3c07ac2216f71b2a81db21d6e59e2c2cf6c0917fd1d2d
-    trace-009.itf.json: 4970c8873d36b876d34cbe4104e1364adc2b7bbe9aeba7bbe2b6d7e2cd768130
-    trace-010.itf.json: f78a7dd2d10690b664a9adafd4e96da64b73888bf6dc2e8f401be4bd1e9e4ae2
-    trace-011.itf.json: f072f222c5e6daf426d8adfb72d4943f2b5a1db4cc17efe8c227c214e5ed9e5a
-    trace-012.itf.json: 8cab9332d0a599f9858f01e5ad1f187f8ec7bdf89de49d4dcc7c6b48ff7b688f
-    trace-013.itf.json: 1c1d2593188e1b97a551337e99c9a96fc3d5bdd7eb899a29928de3b37a535643
-    trace-014.itf.json: 9260fc38db2ff873a18967142608a980828e749c49b03db5e3c0ce8e9a9324d0
-    trace-015.itf.json: a323a8571a4cf75a8ebe1bac68a7de58348dc3449c8fac4e656677307adb2a3c
-    trace-016.itf.json: 38123c762cbde81353f6bf105d88f3564f74770691358750a2e9413c18622d91
-    trace-017.itf.json: 765b0ef888dde1b7180600b8adb40cdfbed374ec3a9acc7b6f68a366f81d00df
-    trace-018.itf.json: 70957db50f69ad57044e0f4cd03497847f8c7375e9b41bc494ec21db6afc3134
-    trace-019.itf.json: d8761e8f75b7cf5ff3d437a3f8f98c567a0c112e4b3ab4c38a60e915c7916312
-    trace-020.itf.json: a7a5b1a8508b4ca0a4ece1946fd599c34d591004baa21f171fe50d660a5cbcc5
-    trace-021.itf.json: 10821de6431e6c042d6acb67c59050ea17d34e02db103984c941a7dba1a07650
-    trace-022.itf.json: 2bc6d202baf04d46602147e5844edb99a96fc5800dea1c7ab3d89d99d522b5ea
-    trace-023.itf.json: f88a6f644a63e69797c3a1eaf233e09cb130864a480dc4514fe24bf4efa4e46e
-    trace-024.itf.json: 08eb81672a366616bbbcf1b214db4c35dbe47239dbaa5fa426316c052a4158e5
-    trace-025.itf.json: f09e065e7b46731185a527ef165be1dc97a7d7f80be9b54e79ee160afee37e23
-    trace-026.itf.json: 9f2eb718a37e49832d197f87d61d1532e0af05227383f97decac81d5285d7c94
-    trace-027.itf.json: 65116957ed949f79ac4132bbfe2015ad5990df0ace286e35ed259418ee090a35
-    trace-028.itf.json: 272fceb111ac22e585330446b4e1672e49e05c70ac82d5b068396db24555647a
-    trace-029.itf.json: bd929f2b8f8006cb4d5db08c1484e4f05580fcb3dea5db84655f1461009d567b
-    trace-030.itf.json: 3bc82fe6d2fdaffe2b42f728e460c8ce41d63843231ca62e789f7ea2f08cab15
-    trace-031.itf.json: e132946c9a35890e33a138414b2ba5671b5b6399912ebdfe1cbc7c1dbc3eb8cd
-    trace-032.itf.json: e18fb708918137760a27997520819a83911923edde32e8a7cda28f09195dda2d
-    trace-033.itf.json: e2b48347b3785da83e6da7dbdb227638b7f9d4a95daca1e8f0ddf364dc5328ee
-    trace-034.itf.json: b545ddb86ef6713476a9a15c0db2f04da48cd62e8fd02f86e0af71cd4a357f8f
-    trace-035.itf.json: 74595245ea69e721eab1b18860fe05e7bb3a2fc76ea13cc277b7fead7e540ef1
-    trace-036.itf.json: 2377f4bfb3ab3b2e1026f118794cfc7bd837d592b3e5fed8f5c769421a3e9155
-    trace-037.itf.json: b153c162b5e5c40db37204011895d1b66109355b6182a364958cf96451334436
-    trace-038.itf.json: 48257f4ce4fb9c13bc14fc0bcced9035c8eb0ff536812d678c0db2edb7e8466c
-    trace-039.itf.json: e96804761053f30b644cb4acbb8beb80efc658d567c7af91033f0c6d7d9bff74
+    trace-000.itf.json: 91d04155bf2d3406b32a2ddb1daa9da47ae0d5a76578afd4bcc92295681f1bf2
+    trace-001.itf.json: 5bd27829bec4034f6fca28b12ceabda6b20d232522ab572064db981f0a8cc6a2
+    trace-002.itf.json: c163ee31e711ead63bf15149087e5b7216b243d4bd9f062c71d21ea0328c1f5e
+    trace-003.itf.json: 5f2a9cd8c21b0e935d742a00b826edb60297e97b382e015830c4ceecc207479c
+    trace-004.itf.json: 2ac2cdd0da3c022ba9027ce8493584ef0eba1c76abcd02056d48ee4c7d88445e
+    trace-005.itf.json: 5ac7debcfacd8e5dfe00743538f1339e7092c8f5e285622fb9ea6db2d085355b
+    trace-006.itf.json: 9145d0b206f9b064cb597b5c91b15e50cb105fccc29f9abcfeab457fd32e9a20
+    trace-007.itf.json: 433c3f4c8a8dbbff3e32af86d3f18676fa8602547e6b39f06d4d5c6fa2ebc71f
+    trace-008.itf.json: 7a3a512a43a82112051da0d4700fdf1f09631c193e32b10058f4a349d0b369b2
+    trace-009.itf.json: 7473043b576bdecec4703477f778a971c9a87105272b718781b39bc2351eb4b3
+    trace-010.itf.json: a64779fd160e44d8cf161493c98ac7d9218e74b2e1db51a924df42f5bb9497ff
+    trace-011.itf.json: ad04a23aebad3446c14f5760a4b51828065f7ca580a9d6b5b6f3de7b4f224505
+    trace-012.itf.json: a5b6415793c14abd40aefa64345c7adfafe7fc40ed6e125fe76122eb346c55e8
+    trace-013.itf.json: 19dfb55007504d3749ad51f310508152353f30574b85f0d488f756977e384913
+    trace-014.itf.json: d244b48c06b6727b0da09fce02bb07e70016ad36fafc9978b795dad08d4283d7
+    trace-015.itf.json: 3042d33ca3b8de5a35d6307a0124089281aaab1a95b712d2aae3a48326be9aa3
+    trace-016.itf.json: 95d4a367a409e844f0eb36080b81e8a9167cf7e94f75df2d1e56786bae21ccdb
+    trace-017.itf.json: 7b47af9edbb3b6434980e4cc92c3e6e718c0a92032c9c886ac79201502158a15
+    trace-018.itf.json: 9decbe244f817f9e776a2927b8b8f13af2f980f4ee4644faf6a07261dabfac5b
+    trace-019.itf.json: 965921d266bb8025074c54ce7abba6f1e06b95b2bffb270a9b1b20dd2f6f73db
+    trace-020.itf.json: e32a2aa4b2d3f5d6a5a492698fe2bdc645d849ca27793fc93b64910b1f6aca64
+    trace-021.itf.json: ef3f51836991557f69159d09f2ddeb81f7ad769f344cf5e1a380457932ecffc2
+    trace-022.itf.json: 8db689036b8a41cb30631249c2b5bd13fd4ef5bc45d4ef972534d4025d38aa9f
+    trace-023.itf.json: dbfe07e613570f40e2f1d14ef8b468efe4cd5fdc7786244cd65106956fd67ac8
+    trace-024.itf.json: 3a220878683aa95bc4a17823b8ee0075202281d6b10cf5e136f373cc3a1b4b52
+    trace-025.itf.json: bb906b5c2de70f686afb21d4bb041436a371df099861ebc683f7a980ba4769c4
+    trace-026.itf.json: b8edaa0c815976dc6287da77f8b7e89f170c26dffa1e77f8132e2292a5b5effb
+    trace-027.itf.json: c9c0a6c11a578bbb49e41e808d2cd8f9cbc4abb560c1b397eac08dd5f5f1ef9f
+    trace-028.itf.json: 9df2fea4653987266dbb88dd35128fccacfbce72ad811d1279318c196a9253bd
+    trace-029.itf.json: 4a2c1e8b6e99fdfb58eb5ef9535c788848590751476c9f2366a3ab7f9a645e23
+    trace-030.itf.json: d89f091d1cb5786f03abffbc1f421a1ab11af2fc61afbf0014d1f624da0ae77e
+    trace-031.itf.json: 6b20f7acab8ab1057e4a81060188943e888a6345c41a988b11d91efaa2042002
+    trace-032.itf.json: 2e3dc1352a9c1f95e657f82d77455366b5296530afbcfb82f3bda20114e7d5c6
+    trace-033.itf.json: ba9fa25dd0f7f3ab61b23a4b13980ce1e8ac3b731d7a30b145b7e308fb276278
+    trace-034.itf.json: 41d061779d9c4e4d16252d745346b9902e25d9d6ec6787a1ddcb0ec0e4728355
+    trace-035.itf.json: 5d206813d00da1a51ebdb0379fdcf4600636b40973866669f8e73f39204ae11c
+    trace-036.itf.json: 514314e11ddd9db6f3de619088509882114a87b3a47e1416d3dccb2510eb0c84
+    trace-037.itf.json: 1a9fbbf889141e53445344e803d4b919cb9d9799f2a97d1da81ba0184a941fe7
+    trace-038.itf.json: 3897a29b64b8723ccd59af68a38c3bde177dac80af8b86ed3427f4a8e01ac367
+    trace-039.itf.json: 9733183cdb4001e5464890ec12c1cdb73e97fbe7110f289790f0f5d2576b8e30
   traces: 40
   transitions: 2400

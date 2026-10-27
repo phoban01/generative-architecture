@@ -37,6 +37,12 @@ func run(refresh bool) error {
 			return err
 		}
 	}
+	// The TransitionModel generated from controller.go, wiring.go,
+	// dynamic_store.go, abstraction.yaml and process.yaml. No handwritten
+	// model exists.
+	if err = krm.Write(filepath.Join(dir, "model.yaml"), "TransitionModel", "database", e.Spec); err != nil {
+		return err
+	}
 	if err = krm.WriteResult(filepath.Join(dir, "process.yaml"), "ExtractedProcess", "database-provisioning", e.Program); err != nil {
 		return err
 	}
@@ -61,7 +67,7 @@ func run(refresh bool) error {
 		if err != nil {
 			return err
 		}
-		fmt.Printf("\n%s: %s; instances created=%v; Database.status.endpoint=%q\n", name, state["outcome"], state["instanceCreates"], state["statusEndpoint"])
+		fmt.Printf("\n%s: %s; instances created=%v; Database.status.endpoint=%q\n", name, state["outcome"], state["instanceCreates"], state["Database_db1_status_endpoint"])
 	}
 	fmt.Println("\nAll five schedules match Go and satisfy the independent constraints.")
 	if !refresh {
@@ -110,7 +116,7 @@ func run(refresh bool) error {
 	inputs := map[string]string{}
 	// The abstraction and the projection generated from it decide what replay
 	// observes, so they invalidate evidence like any other input (ADR-0005).
-	for _, name := range []string{"controller.go", "wiring.go", "dynamic_store.go", "resources.yaml", "model.yaml", "process.yaml", "constraints.yaml", "abstraction.yaml", "project.yaml", "generated/projection_generated.go"} {
+	for _, name := range []string{"controller.go", "wiring.go", "dynamic_store.go", "resources.yaml", "generate.go", "process.yaml", "constraints.yaml", "abstraction.yaml", "project.yaml", "generated/projection_generated.go"} {
 		b, err := os.ReadFile(filepath.Join(root, name))
 		if err != nil {
 			return err
@@ -129,7 +135,7 @@ func replay(e database.Example, trace conformance.Trace) (conformance.Report, ma
 	defer cancel()
 	a := database.New(ctx, e, false)
 	defer a.Close()
-	report, err := conformance.ReplayObserved(ctx, e.Model, trace, a, database.Observed)
+	report, err := conformance.ReplayObserved(ctx, e.Model, trace, a, e.Observed)
 	if err != nil {
 		return report, nil, err
 	}
