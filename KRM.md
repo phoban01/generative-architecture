@@ -38,7 +38,7 @@ spec:
 | An external effects document (`pkg/goflow/testdata/external/effects.yaml`) | ExternalEffects | spec | `pkg/goflow`: declared outcomes of calls outside the API, keyed by callee symbol; typed extraction lowers a matching call to an `effect` node and `pkg/process` expands the outcomes (ARCH-13) |
 | A generated IR document | ArchitectureIR | status | `pkg/ir.Document`: controllers, watches, effects (kind `api`, or `external` with a callee target and declared outcomes), processes, contracts and constraints with evidence and provenance |
 | `examples/runtimegroup/profile.yaml` | RuntimeGroup | spec | `pkg/controllerruntime.BuildGroupModel` |
-| A system composition document | SystemComposition | spec | `pkg/composition.Load` |
+| A system composition document | SystemComposition | spec | `pkg/composition.Load`: each component names a TransitionModel with declared ports, or a BoundaryModel whose ports, watches and effects enter the composition with `assumed` evidence |
 | A protocol contract named by a composition link | ProtocolContract | spec | `pkg/protocol`: roles, states, permitted writes to the bound state and properties; `pkg/composition` generates a conformance monitor and the properties into the composed model (CON-10) |
 | A boundary model of an upstream project | BoundaryModel | spec | `pkg/boundary`: pinned upstream version and optional image digest, owned and watched resources, effects, ports, contracts and assumptions; each assumption is `declared` or `assumed` and names a conformance hook (`envtest`, `documentation` or `none`) (EXT-1) |
 | An interaction contract document | InteractionContract | spec | `pkg/contracts` (`+arch:implements` checks) |

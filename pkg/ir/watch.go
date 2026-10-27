@@ -72,9 +72,12 @@ func (m KeyMapping) Validate() error {
 
 // Watch is one event source registered by a controller.
 type Watch struct {
-	ID         string      `yaml:"id"`
-	Controller string      `yaml:"controller"`
-	Resource   GVK         `yaml:"resource"`
+	ID         string `yaml:"id"`
+	Controller string `yaml:"controller"`
+	Resource   GVK    `yaml:"resource"`
+	// Cluster is the cluster of the watched objects. Empty is the implicit
+	// cluster of a one-cluster system.
+	Cluster    ClusterID   `yaml:"cluster,omitempty"`
 	Primary    bool        `yaml:"primary,omitempty"`
 	Predicates []Predicate `yaml:"predicates,omitempty"`
 	Mapping    KeyMapping  `yaml:"mapping"`
@@ -85,7 +88,11 @@ type Watch struct {
 // StableID derives an identifier from the controller, resource and mapping,
 // independent of predicate order, source position and slice position.
 func (w Watch) StableID() string {
-	return stableID("watch", w.Controller, w.Resource.String(), w.Mapping.Kind, strings.Join(w.Mapping.FieldPath, "."))
+	parts := []string{"watch", w.Controller, w.Resource.String(), w.Mapping.Kind, strings.Join(w.Mapping.FieldPath, ".")}
+	if w.Cluster != "" {
+		parts = append(parts, "cluster="+string(w.Cluster))
+	}
+	return stableID(parts...)
 }
 
 // Validate checks the resource, mapping and evidence of the watch.

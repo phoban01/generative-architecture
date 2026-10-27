@@ -77,3 +77,27 @@ func TestSchemaConversions(t *testing.T) {
 		t.Fatal("GVR round trip")
 	}
 }
+
+func TestStableIDSeparatesClusters(t *testing.T) {
+	effect := Effect{Actor: "a", Resource: GVK{Version: "v1", Kind: "ConfigMap"}, Operation: OpGet, Consistency: ConsistencyCached}
+	watch := Watch{Controller: "a", Resource: GVK{Version: "v1", Kind: "ConfigMap"}, Mapping: KeyMapping{Kind: MappingSelf}}
+	inEffect := func(c ClusterID) string { e := effect; e.Cluster = c; return e.StableID() }
+	inWatch := func(c ClusterID) string { w := watch; w.Cluster = c; return w.StableID() }
+	for _, tc := range []struct {
+		name  string
+		a, b  string
+		equal bool
+	}{
+		{name: "effect in the implicit cluster keeps its id", a: inEffect(""), b: stableID("effect", "a", "v1/ConfigMap", OpGet, ""), equal: true},
+		{name: "effect in another cluster", a: inEffect(""), b: inEffect("workload")},
+		{name: "effects in two named clusters", a: inEffect("management"), b: inEffect("workload")},
+		{name: "watch in the implicit cluster keeps its id", a: inWatch(""), b: stableID("watch", "a", "v1/ConfigMap", MappingSelf, ""), equal: true},
+		{name: "watch in another cluster", a: inWatch(""), b: inWatch("workload")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if (tc.a == tc.b) != tc.equal {
+				t.Fatalf("ids %s and %s: equal is %v, want %v", tc.a, tc.b, tc.a == tc.b, tc.equal)
+			}
+		})
+	}
+}

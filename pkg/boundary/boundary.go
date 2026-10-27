@@ -345,14 +345,36 @@ func (s Spec) validatePort(name string, p Port) error {
 // IR converts the effect to an IR api effect of actor. Its evidence is
 // assumed: the upstream code is never extracted.
 func (e Effect) IR(actor string, p ir.Provenance) ir.Effect {
-	return ir.Effect{ID: e.ID, Kind: ir.KindAPI, Actor: actor, Resource: e.Resource, Operation: e.Operation, Consistency: e.Consistency, Subresource: e.Subresource, Options: e.Options, Evidence: ir.Assumed, Provenance: p}
+	return ir.Effect{ID: e.ID, Kind: ir.KindAPI, Actor: actor, Cluster: e.Cluster, Resource: e.Resource, Operation: e.Operation, Consistency: e.Consistency, Subresource: e.Subresource, Options: e.Options, Evidence: ir.Assumed, Provenance: p}
 }
 
 // IR converts the watch to an IR watch of controller. Its evidence is
 // assumed and its key mapping is custom: the upstream mapper is not
 // summarized.
 func (w Watch) IR(controller string, p ir.Provenance) ir.Watch {
-	return ir.Watch{ID: w.ID, Controller: controller, Resource: w.Resource, Mapping: ir.KeyMapping{Kind: ir.MappingCustom}, Evidence: ir.Assumed, Provenance: p}
+	return ir.Watch{ID: w.ID, Controller: controller, Cluster: w.Cluster, Resource: w.Resource, Mapping: ir.KeyMapping{Kind: ir.MappingCustom}, Evidence: ir.Assumed, Provenance: p}
+}
+
+// Facts returns the boundary's watches and effects as IR facts of actor, all
+// with assumed evidence and the boundary's provenance. A fact without a
+// cluster gets the boundary's cluster.
+func (b Boundary) Facts(actor string) ([]ir.Watch, []ir.Effect) {
+	p := b.Provenance()
+	var watches []ir.Watch
+	for _, w := range b.Spec.Watches {
+		if w.Cluster == "" {
+			w.Cluster = b.Spec.Cluster
+		}
+		watches = append(watches, w.IR(actor, p))
+	}
+	var effects []ir.Effect
+	for _, e := range b.Spec.Effects {
+		if e.Cluster == "" {
+			e.Cluster = b.Spec.Cluster
+		}
+		effects = append(effects, e.IR(actor, p))
+	}
+	return watches, effects
 }
 
 // Provenance is the provenance of every fact taken from the boundary: the
