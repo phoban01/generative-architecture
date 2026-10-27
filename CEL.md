@@ -59,6 +59,31 @@ properties:
 
 CEL has int64 semantics while Quint has mathematical integers. Models keep integer state within small declared bounds and are checked using exact int64 values in CEL. The compiler does **not** prove absence of overflow or missing-key errors for arbitrary new models. CEL's error-aware boolean semantics are not modelled as separate Quint values. New expressions must stay within the declared, total finite domains; simulation and differential checks provide evidence for exercised states, not a universal proof of equivalence.
 
+## Temporal properties
+
+Properties hold on every state. A `ModelConstraints` document can also declare liveness properties under `temporal:`, with the fairness they assume under `fairness:`. Each property sets exactly one of `eventually` (a CEL state predicate) and `leadsTo` (a `from` and a `to` predicate). Predicates use the same CEL subset and names as properties. Fairness lists action names: a `weak` action that stays enabled is eventually taken, and a `strong` action that is enabled infinitely often is eventually taken.
+
+```yaml
+temporal:
+  - name: queueDrains
+    leadsTo: {from: 'ready', to: '!ready'}
+  - name: copyCatchesUp
+    eventually: 'ConfigMap_copy_data_value == snapshot'
+fairness:
+  weak: [begin, finish]
+```
+
+`model.Compiled.TemporalModule` adds each property to the model as a Quint `temporal` definition: `(weakFair(a, vars) and strongFair(b, vars)) implies eventually(p)`, or `implies always(from implies eventually(to))` for `leadsTo`. `vars` is the tuple of every state variable and `event`. An unknown or repeated fair action, a name clash or a predicate outside the subset fails with the file and the line and column of the predicate.
+
+`arch check` gives each temporal property a status in the report's `temporal:` section:
+
+- `verified` or `violated`: only with `--verify`, after `quint verify --backend tlc` completed under the declared fairness. Each entry records the fairness, the Quint version, the backend and the bound. A violation is also a `safety` finding with the start of the counterexample.
+- `unchecked`: in every other case, with a reason, and as an `unsupported` finding. This covers a run without `--verify`, a document without fairness, a stale model and a checker that could not finish.
+
+Sampling never checks a temporal property, so a report never claims liveness from simulation. The checker is TLC because Quint 0.33 marks temporal support in Apalache as experimental. TLC needs a Java 21 runtime. It has no depth bound: it searches the complete reachable state space, so it completes only on a finite and small state space. Each run has a time limit of five minutes and a Java heap cap of 2 GiB (`quint.VerifyHeap`). A run that hits either limit leaves the property unchecked. On ConfigMirror with the example above, TLC finds a counterexample for `queueDrains` in under three minutes: the environment actions are not fair, so the model may stutter while `ready` holds. `copyCatchesUp` reaches the time limit and stays unchecked. A violation finding lists the events of the counterexample and its last state, at most 1500 characters.
+
+The tests in `pkg/quint/verify_test.go` and `cmd/arch/temporal_test.go` run TLC on a small counter model, with a property that holds and one that is violated. They skip when `QUINT_BIN` is unset or `java` is not on `PATH`.
+
 ## Checking the translation
 
 `go run ./cmd/walkthrough --refresh` performs three independent comparisons on the sample controller:

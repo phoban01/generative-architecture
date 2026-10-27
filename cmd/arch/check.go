@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"generative-architecture/pkg/conformance"
+	"generative-architecture/pkg/krm"
+	"generative-architecture/pkg/model"
 	"generative-architecture/pkg/mutation"
 	"generative-architecture/pkg/quint"
 	"generative-architecture/pkg/report"
@@ -27,6 +29,8 @@ const checkTimeout = 10 * time.Minute
 // VerificationReport to <out>/report.yaml. The traces go to <out>/traces
 // for arch replay. A mutation suite given with --mutations is listed, each
 // mutation as unsupported: arch has no replay adapter to detect it with.
+// Temporal properties of the constraints are unchecked unless --verify
+// model-checks them with quint verify (see checkTemporal).
 func runCheck(g globals, args []string) error {
 	fs := flag.NewFlagSet("check", flag.ContinueOnError)
 	fs.SetOutput(g.stderr)
@@ -36,6 +40,7 @@ func runCheck(g globals, args []string) error {
 	mutations := fs.String("mutations", "", "MutationSuite document to list in the report")
 	steerWeight := fs.Int("steer-weight", 0, "weight of internal process steps and effect outcomes against other actions (0: uniform sampling)")
 	steerExcept := fs.String("steer-except", "", "comma-separated effect outcomes that keep weight 1 under --steer-weight, for example error")
+	verify := fs.Bool("verify", false, "model-check the temporal properties with quint verify (TLC, needs Java 21) under the declared fairness")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -58,6 +63,12 @@ func runCheck(g globals, args []string) error {
 	}
 	ev, findings, err := loadEvidence(g)
 	if err != nil {
+		return fmt.Errorf("arch check: %w", err)
+	}
+	// Inputs that drifted since arch generate make the model stale.
+	stale := len(findings) > 0
+	liveness, err := loadTemporal(ev)
+	if err != nil && !stale {
 		return fmt.Errorf("arch check: %w", err)
 	}
 	sampling := report.Sampling{Samples: *samples, Steps: *steps, Seed: *seed}
@@ -93,7 +104,97 @@ func runCheck(g globals, args []string) error {
 			v.Findings = append(v.Findings, report.Finding{Category: report.CategoryUnsupported, Message: fmt.Sprintf("mutation %s: no adapter; arch cannot replay a mutated controller", m.Name)})
 		}
 	}
-	return conclude(g, v, filepath.Join(g.out, checkReport), "check")
+	if len(liveness.Temporal) > 0 {
+		reason := ""
+		switch {
+		case !*verify:
+			reason = "not model-checked: arch check runs quint verify only with --verify; sampling never checks liveness"
+		case stale:
+			reason = "not model-checked: the generated model is stale; run arch generate again"
+		}
+		var temporal []report.Finding
+		v.Temporal, temporal = checkTemporal(ev, liveness, reason, quint.Options{})
+		v.Findings = append(v.Findings, temporal...)
+		v.Scope += "; temporal properties are listed with their own status, never checked by sampling"
+	}
+	err = conclude(g, v, filepath.Join(g.out, checkReport), "check")
+	v.WriteTemporal(g.stdout)
+	return err
+}
+
+// verifyTimeout bounds one quint verify run of one temporal property.
+const verifyTimeout = 5 * time.Minute
+
+// loadTemporal reads the temporal properties and the fairness of every
+// constraints document and validates each property against the model. An
+// invalid definition is an error. A valid one without fairness is not: it
+// is reported as unchecked.
+func loadTemporal(ev evidence) (model.Constraints, error) {
+	var out model.Constraints
+	var paths []string
+	for _, rel := range ev.project.Spec.Constraints {
+		var doc model.Constraints
+		path := filepath.Join(ev.project.Dir, rel)
+		if _, err := krm.Read(path, constraintsKind, &doc); err != nil {
+			return out, err
+		}
+		out.Temporal = append(out.Temporal, doc.Temporal...)
+		for range doc.Temporal {
+			paths = append(paths, path)
+		}
+		out.Fairness.Weak = append(out.Fairness.Weak, doc.Fairness.Weak...)
+		out.Fairness.Strong = append(out.Fairness.Strong, doc.Fairness.Strong...)
+	}
+	names := map[string]bool{}
+	for i, t := range out.Temporal {
+		if names[t.Name] {
+			return out, fmt.Errorf("%s: temporal %s: declared twice", paths[i], t.Name)
+		}
+		names[t.Name] = true
+		if _, err := ev.model.TemporalModule(t, out.Fairness); err != nil && !errors.Is(err, model.ErrNoFairness) {
+			return out, fmt.Errorf("%s: %w", paths[i], err)
+		}
+	}
+	return out, nil
+}
+
+// checkTemporal gives every temporal property a status. A non-empty
+// reason marks them all unchecked. Otherwise each property with fairness
+// runs under quint verify: a completed run makes it verified or violated,
+// and any other result leaves it unchecked with the checker's error. A
+// violation is a safety finding and an unchecked property an unsupported
+// finding, so the report never passes with an unchecked property.
+func checkTemporal(ev evidence, c model.Constraints, reason string, opts quint.Options) ([]report.TemporalResult, []report.Finding) {
+	if reason == "" && c.Fairness.Empty() {
+		reason = model.ErrNoFairness.Error()
+	}
+	var results []report.TemporalResult
+	var findings []report.Finding
+	for _, t := range c.Temporal {
+		r := report.TemporalResult{Name: t.Name, Weak: c.Fairness.Weak, Strong: c.Fairness.Strong, Reason: reason}
+		if r.Reason == "" {
+			ctx, cancel := context.WithTimeout(context.Background(), verifyTimeout)
+			verdict, err := quint.Verify(ctx, ev.model, t, c.Fairness, opts)
+			cancel()
+			if err != nil {
+				r.Reason = "quint verify did not complete: " + firstLines(err.Error(), 4)
+			} else {
+				r.Backend = fmt.Sprintf("quint %s verify --backend %s", verdict.Version, quint.VerifyBackend)
+				r.Bound = fmt.Sprintf("%s; time limit %s; Java heap %s", quint.VerifyBound, verifyTimeout, quint.VerifyHeap)
+				r.Status = report.TemporalVerified
+				if verdict.Outcome == quint.Violated {
+					r.Status = report.TemporalViolated
+					findings = append(findings, report.Finding{Category: report.CategorySafety, Property: t.Name, Message: fmt.Sprintf("temporal property %s violated under fairness %s: %s", t.Name, c.Fairness, verdict.Detail)})
+				}
+			}
+		}
+		if r.Reason != "" {
+			r.Status = report.TemporalUnchecked
+			findings = append(findings, report.Finding{Category: report.CategoryUnsupported, Property: t.Name, Message: fmt.Sprintf("temporal property %s unchecked: %s", t.Name, r.Reason)})
+		}
+		results = append(results, r)
+	}
+	return results, findings
 }
 
 // sample runs Quint and stores the traces under <out>/traces, replacing
