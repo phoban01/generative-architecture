@@ -3,7 +3,6 @@ package database
 import (
 	"fmt"
 	"strconv"
-	"strings"
 
 	apiv1 "generative-architecture/examples/database/api/v1alpha1"
 	cr "generative-architecture/pkg/controllerruntime"
@@ -234,21 +233,4 @@ func (o *watchedObject) objects(rule watchgen.Rule) (client.Object, client.Objec
 	}
 	old, err := build(o.generationSeen, o.resourceVersionSeen, o.referenceSeen)
 	return obj, old, err
-}
-
-// WatchLikeC4 draws the extracted watches feeding the controller's queue.
-func (e Example) WatchLikeC4() string {
-	var b strings.Builder
-	fmt.Fprintln(&b, "specification { element databaseWatchPart }\nmodel {")
-	fmt.Fprintln(&b, ` db_watch_queue = databaseWatchPart "Database controller workqueue"
- db_watch_reconcile = databaseWatchPart "Database controller reconcile"
- db_watch_queue -> db_watch_reconcile "dequeue Database key"`)
-	names := []string{"db_watch_queue", "db_watch_reconcile"}
-	for i, r := range e.Watches.Rules {
-		name := fmt.Sprintf("db_watch_source%d", i)
-		names = append(names, name)
-		fmt.Fprintf(&b, " %s = databaseWatchPart %q\n %s -> db_watch_queue %q\n", name, r.Resource.Kind+" events", name, r.Mapping+" "+strings.Join(r.Predicates, ", "))
-	}
-	fmt.Fprintf(&b, "}\nviews { view database_watches { title %q\n include %s\n } }\n", "Database controller: watches extracted from Go setup", strings.Join(names, ", "))
-	return b.String()
 }

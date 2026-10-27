@@ -33,11 +33,11 @@ func run(refresh bool) error {
 	if err = os.MkdirAll(dir, 0755); err != nil {
 		return err
 	}
-	flow, err := e.FlowLikeC4()
+	diagram, err := e.LikeC4()
 	if err != nil {
 		return err
 	}
-	for name, contents := range map[string]string{"Model.qnt": e.Constrained.Quint(), "architecture.c4": e.Model.LikeC4(), "process.c4": flow, "watches.c4": e.WatchLikeC4(), "dynamic-client.c4": e.Dynamic.LikeC4()} {
+	for name, contents := range map[string]string{"Model.qnt": e.Constrained.Quint(), "architecture.c4": diagram} {
 		if err = os.WriteFile(filepath.Join(dir, name), []byte(contents), 0644); err != nil {
 			return err
 		}

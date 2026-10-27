@@ -66,7 +66,11 @@ func run(root string, refresh, generateOnly bool) error {
 	if err = krm.Write(filepath.Join(root, configmirror.SpecFile), "TransitionModel", "config-mirror", spec); err != nil {
 		return err
 	}
-	for file, contents := range map[string]string{configmirror.ModelFile: m.Quint(), configmirror.DiagramFile: m.LikeC4()} {
+	diagram, err := configmirror.Diagram(spec)
+	if err != nil {
+		return err
+	}
+	for file, contents := range map[string]string{configmirror.ModelFile: m.Quint(), configmirror.DiagramFile: diagram} {
 		if err = os.WriteFile(filepath.Join(root, file), []byte(contents), 0644); err != nil {
 			return err
 		}

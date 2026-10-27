@@ -2,6 +2,7 @@ package dynamicgen_test
 
 import (
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -43,8 +44,17 @@ func TestExtractDynamicResourceDependenciesAndRejectDrift(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if changed.LikeC4() == result.LikeC4() {
-		t.Fatal("source change did not change diagram")
+	effects := result.IR("database", "dynamic_store.go")
+	for _, e := range effects {
+		if err := e.Validate(); err != nil {
+			t.Fatal(err)
+		}
+		if e.ID == "publish" && (e.Subresource != "status" || e.Operation != "update" || e.Provenance.Source.Line == 0) {
+			t.Fatalf("publish effect %+v", e)
+		}
+	}
+	if reflect.DeepEqual(changed.IR("database", "dynamic_store.go"), effects) {
+		t.Fatal("source change did not change the IR effects")
 	}
 	if err = changed.CheckEffects(spec.Effects); err == nil {
 		t.Fatal("changed API verb retained old effect summary")

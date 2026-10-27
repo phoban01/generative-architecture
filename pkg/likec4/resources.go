@@ -17,7 +17,8 @@ var readOperations = map[string]bool{ir.OpGet: true, ir.OpList: true}
 // GVK, a "watches" relation from each watched resource to its controller
 // (with the mapping and predicates) and a "reads" or "writes" relation from
 // each controller to each resource it operates on (with the operation and
-// consistency). An external effect is a "calls" relation to a boundary
+// consistency). A schema-only effect reads no object at run time and is a
+// "uses schema of" relation. An external effect is a "calls" relation to a boundary
 // element for its target. Watches and effects must name a declared
 // controller.
 func ResourceView(name string, d ir.Document) ([]Element, []Relation, View, error) {
@@ -78,7 +79,10 @@ func ResourceView(name string, d ir.Document) ([]Element, []Relation, View, erro
 			continue
 		}
 		label := "writes"
-		if readOperations[e.Operation] {
+		switch {
+		case e.Consistency == ir.ConsistencySchema:
+			label = "uses schema of"
+		case readOperations[e.Operation]:
 			label = "reads"
 		}
 		operation := e.Operation
