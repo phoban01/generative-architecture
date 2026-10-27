@@ -526,40 +526,20 @@ func renameEffectActions(spec *model.Spec, program goflow.Program) {
 // a single key the queue order variables carry no information and are
 // dropped; the abstraction's invocation bound limits consecutive retries.
 func runtimeActions(abs abstraction.Abstraction, program goflow.Program, reset map[string]expr.Expression) (model.Spec, error) {
-	var key abstraction.Object
-	for _, r := range abs.Spec.Resources {
-		for _, o := range r.Objects {
-			if o.ID == keyObjects["sigs.k8s.io/controller-runtime/pkg/reconcile.Request.NamespacedName"] {
-				key = o
-			}
-		}
-	}
-	if key.ID == "" {
-		return model.Spec{}, fmt.Errorf("the reconcile key addresses no abstracted object")
-	}
-	g, err := cr.BuildGroupModel(cr.GroupProfile{Name: "ConfigMirror", MaxTicks: runtimeMaxTicks, Controllers: []cr.ModelController{{
-		Name: runtimeController, Workers: runtimeWorkers, RetryTicks: runtimeRetryTicks, AfterTicks: runtimeRetryTicks,
-		Keys: []cr.ModelKey{{ID: key.ID, Namespace: key.Namespace, Name: key.Name}},
-	}}})
+	g, binding, err := RuntimeModel(abs)
 	if err != nil {
 		return model.Spec{}, err
 	}
-	prefix := runtimeController + "_" + key.ID + "_"
-	dropped := map[string]bool{runtimeController + "_next": true, prefix + "order": true}
+	prefix := runtimeController + "_" + g.Profile.Controllers[0].Keys[0].ID + "_"
 	names := map[string]expr.Expression{}
 	out := model.Spec{State: map[string]model.Variable{}}
-	for name, v := range g.Spec.State {
-		if dropped[name] {
-			continue
-		}
-		short := strings.TrimPrefix(name, prefix)
+	for name, short := range binding.Variables {
 		names[name] = expr.Expression(short)
-		out.State[short] = v
+		out.State[short] = g.Spec.State[name]
 	}
 	rename := func(e expr.Expression) (expr.Expression, error) { return expr.Rewrite(e, names) }
-	actionNames := map[string]string{"advance": EventAdvance, prefix + "enqueue": EventEnqueue, prefix + "start": EventBegin, prefix + "fire": EventFire, prefix + "success": EventFinish, prefix + "error": EventFinishError}
 	for _, a := range g.Spec.Actions {
-		name, ok := actionNames[a.Name]
+		name, ok := binding.Events[a.Name]
 		if !ok {
 			continue
 		}
@@ -569,7 +549,7 @@ func runtimeActions(abs abstraction.Abstraction, program goflow.Program, reset m
 		}
 		updates := map[string]expr.Expression{}
 		for target, value := range a.Updates {
-			if dropped[target] {
+			if _, kept := binding.Variables[target]; !kept {
 				continue
 			}
 			if updates[string(names[target])], err = rename(value); err != nil {
@@ -601,6 +581,45 @@ func runtimeActions(abs abstraction.Abstraction, program goflow.Program, reset m
 		out.Properties = append(out.Properties, model.Property{Name: strings.TrimPrefix(strings.TrimPrefix(p.Name, prefix), runtimeController+"_"), Expression: e})
 	}
 	return out, nil
+}
+
+// RuntimeModel instantiates controllerruntime.BuildGroupModel for the
+// runtime profile and the one key the reconcile request addresses, and
+// binds it to the composed model: the runtime events keep the names above,
+// and every state variable but the queue order loses the controller and key
+// prefix. The adapter's worker routing and projection are generated from
+// both (see gen_test.go).
+func RuntimeModel(abs abstraction.Abstraction) (cr.GroupModel, adaptergen.RuntimeBinding, error) {
+	var key abstraction.Object
+	for _, r := range abs.Spec.Resources {
+		for _, o := range r.Objects {
+			if o.ID == keyObjects["sigs.k8s.io/controller-runtime/pkg/reconcile.Request.NamespacedName"] {
+				key = o
+			}
+		}
+	}
+	if key.ID == "" {
+		return cr.GroupModel{}, adaptergen.RuntimeBinding{}, fmt.Errorf("the reconcile key addresses no abstracted object")
+	}
+	g, err := cr.BuildGroupModel(cr.GroupProfile{Name: "ConfigMirror", MaxTicks: runtimeMaxTicks, Controllers: []cr.ModelController{{
+		Name: runtimeController, Workers: runtimeWorkers, RetryTicks: runtimeRetryTicks, AfterTicks: runtimeRetryTicks,
+		Keys: []cr.ModelKey{{ID: key.ID, Namespace: key.Namespace, Name: key.Name}},
+	}}})
+	if err != nil {
+		return cr.GroupModel{}, adaptergen.RuntimeBinding{}, err
+	}
+	prefix := runtimeController + "_" + key.ID + "_"
+	dropped := map[string]bool{runtimeController + "_next": true, prefix + "order": true}
+	b := adaptergen.RuntimeBinding{
+		Events:    map[string]string{"advance": EventAdvance, prefix + "enqueue": EventEnqueue, prefix + "start": EventBegin, prefix + "fire": EventFire, prefix + "success": EventFinish, prefix + "error": EventFinishError},
+		Variables: map[string]string{},
+	}
+	for name := range g.Spec.State {
+		if !dropped[name] {
+			b.Variables[name] = strings.TrimPrefix(name, prefix)
+		}
+	}
+	return g, b, nil
 }
 
 // environmentActions lets the environment set an object the controller

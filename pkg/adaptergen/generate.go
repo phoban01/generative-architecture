@@ -1,8 +1,10 @@
 // Package adaptergen generates replay adapter code from the IR and the
 // abstraction document: projections that read implementation state through
 // API clients, environment actions that drive the API between steps, and
-// boundary gating for process nodes. Generated code takes only API clients
-// and gates as inputs; it never consults expected model state (ADR-0005).
+// boundary gating for process nodes, gating proxies for Go interfaces whose
+// methods are effects, reference checks, and the routing of runtime events
+// to a controller-runtime worker. Generated code takes only API clients, gates
+// and workers as inputs; it never consults expected model state (ADR-0005).
 //
 // Every generator returns formatted Go source for a self-contained file.
 // Helpers in each file carry a distinct prefix so the files of one package

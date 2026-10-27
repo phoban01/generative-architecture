@@ -2,10 +2,63 @@ package adaptergen
 
 import (
 	"fmt"
+	"slices"
 	"sort"
+	"strconv"
 
+	"generative-architecture/pkg/abstraction"
 	"generative-architecture/pkg/ir"
 )
+
+// FieldAction is the environment action name that applies operation
+// (ActionCreate or ActionUpdate) to object objectID of spec and sets the
+// field whose state variable is variable to literal, a model literal of its
+// domain. An update of a field under status becomes ActionStatus. A string
+// field is set to the unquoted literal. A predicate field (equals) set to
+// true is set to the string it compares to; set to false on a create it is
+// left unset. Other fields and an update of a predicate to false are not
+// supported.
+func FieldAction(spec abstraction.Spec, name, operation, objectID, variable, literal string) (EnvAction, error) {
+	if operation != ActionCreate && operation != ActionUpdate {
+		return EnvAction{}, fmt.Errorf("environment action %s: operation %q; expected create or update", name, operation)
+	}
+	r, key, err := lookupObject(spec, objectID)
+	if err != nil {
+		return EnvAction{}, fmt.Errorf("environment action %s: %w", name, err)
+	}
+	a := EnvAction{Name: name, Operation: operation, Resource: r.GVK, Key: key}
+	for _, f := range r.Fields {
+		if abstraction.FieldVariable(r.GVK.Kind, objectID, f) != variable {
+			continue
+		}
+		if operation == ActionUpdate && f.Path[0] == "status" {
+			a.Operation = ActionStatus
+		}
+		switch {
+		case f.Equals != "":
+			compared, ok := f.Compared()
+			switch {
+			case !ok:
+				return EnvAction{}, fmt.Errorf("environment action %s: field %s compares to %s, which is not a string literal", name, f.Key(), f.Equals)
+			case literal == "true":
+				a.Values = []FieldValue{{Path: append([]string(nil), f.Path...), Value: compared}}
+			case literal == "false" && operation == ActionCreate:
+			default:
+				return EnvAction{}, fmt.Errorf("environment action %s: cannot %s predicate %s to %s", name, operation, f.Key(), literal)
+			}
+		case f.Type == abstraction.TypeString:
+			v, err := strconv.Unquote(literal)
+			if err != nil {
+				return EnvAction{}, fmt.Errorf("environment action %s: value %s is not a string literal", name, literal)
+			}
+			a.Values = []FieldValue{{Path: append([]string(nil), f.Path...), Value: v}}
+		default:
+			return EnvAction{}, fmt.Errorf("environment action %s: field %s has type %s; only string and predicate fields are supported", name, f.Key(), f.Type)
+		}
+		return a, nil
+	}
+	return EnvAction{}, fmt.Errorf("environment action %s: object %s declares no field with variable %s", name, objectID, variable)
+}
 
 // Operations an environment action may perform. Status updates the status
 // subresource of an existing object.
@@ -29,6 +82,16 @@ type EnvAction struct {
 	Resource  ir.GVK
 	Key       ir.ObjectRef
 	Fields    map[string]string
+	// Values set literal string values at paths given element by element,
+	// so an element may contain dots, as an annotation key does. They are
+	// set after Fields.
+	Values []FieldValue
+}
+
+// FieldValue is a literal string an environment action sets at Path.
+type FieldValue struct {
+	Path  []string
+	Value string
 }
 
 type envField struct {
@@ -64,7 +127,7 @@ func environmentCases(actions []EnvAction) ([]envCase, error) {
 		if err != nil {
 			return nil, fmt.Errorf("environment action %s: %w", a.Name, err)
 		}
-		if a.Operation == ActionDelete && len(a.Fields) > 0 {
+		if a.Operation == ActionDelete && len(a.Fields)+len(a.Values) > 0 {
 			return nil, fmt.Errorf("environment action %s: delete sets no fields", a.Name)
 		}
 		keys := make([]string, 0, len(a.Fields))
@@ -79,6 +142,12 @@ func environmentCases(actions []EnvAction) ([]envCase, error) {
 				return nil, fmt.Errorf("environment action %s: %w", a.Name, err)
 			}
 			c.Fields = append(c.Fields, envField{Path: path, Value: a.Fields[k]})
+		}
+		for _, v := range a.Values {
+			if len(v.Path) == 0 || slices.Contains(v.Path, "") {
+				return nil, fmt.Errorf("environment action %s: value path %q has an empty element", a.Name, v.Path)
+			}
+			c.Fields = append(c.Fields, envField{Path: append([]string(nil), v.Path...), Value: v.Value})
 		}
 		cases = append(cases, c)
 	}

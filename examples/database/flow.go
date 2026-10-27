@@ -13,7 +13,21 @@ import (
 // operations become effect nodes named by their effect; node n has the IR
 // id "step<n>", and each node keeps its Go source and line.
 func (e Example) Process() (ir.Process, error) {
-	id := func(n int) string { return "step" + strconv.Itoa(n) }
+	return e.process(func(n int) string { return "step" + strconv.Itoa(n) })
+}
+
+// eventProcess is Process with each node named by the model's process
+// event, node<n>_<kind>, as the generated gating addresses it.
+func (e Example) eventProcess() (ir.Process, error) {
+	return e.process(func(n int) string {
+		if n < 0 || n >= len(e.Program.Nodes) {
+			return ""
+		}
+		return fmt.Sprintf("node%d_%s", n, e.Program.Nodes[n].Kind)
+	})
+}
+
+func (e Example) process(id func(n int) string) (ir.Process, error) {
 	out := ir.Process{ID: "db", Controller: "DatabaseReconciler", Method: "Reconcile", Entry: id(e.Program.Entry)}
 	effects := map[string]bool{}
 	for _, d := range e.Spec.Effects {

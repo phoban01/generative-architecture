@@ -460,11 +460,26 @@ func adapterGating() ([]byte, error) {
 	return adaptergen.GenerateBoundaryGating(generatedPackage, facts.Process, events, targets)
 }
 
+// adapterRuntime generates the worker routing and projection from the
+// runtime group model the composition instantiates, under its names.
+func adapterRuntime() ([]byte, error) {
+	a, err := abstraction.Load("abstraction.yaml")
+	if err != nil {
+		return nil, err
+	}
+	g, binding, err := RuntimeModel(a)
+	if err != nil {
+		return nil, err
+	}
+	return adaptergen.GenerateRuntime(generatedPackage, g, binding)
+}
+
 func TestAdapterGeneratedFilesUpToDate(t *testing.T) {
 	for file, generate := range map[string]func() ([]byte, error){
 		"projection_generated.go":  adapterProjection,
 		"environment_generated.go": adapterEnvironment,
 		"gating_generated.go":      adapterGating,
+		"runtime_generated.go":     adapterRuntime,
 	} {
 		t.Run(file, func(t *testing.T) {
 			src, err := generate()
