@@ -57,6 +57,8 @@ type Finding struct {
 	Trace    string `yaml:"trace,omitempty"`
 	Step     int    `yaml:"step,omitempty"`
 	Event    string `yaml:"event,omitempty"`
+	// Property names the violated property of a safety finding, when known.
+	Property string `yaml:"property,omitempty"`
 	Message  string `yaml:"message"`
 }
 
@@ -90,6 +92,12 @@ type Verification struct {
 	Coverage    map[string]int    `yaml:"coverage,omitempty"`
 	TraceHashes map[string]string `yaml:"traceHashes,omitempty"`
 	Findings    []Finding         `yaml:"findings"`
+	// Bindings lists how the inputs of a composed model were bound.
+	// Protocols lists the conformance of bound links to their protocol
+	// contracts. They are separate sections: a binding is never evidence
+	// of protocol conformance (CON-10).
+	Bindings  []BindingResult  `yaml:"bindings,omitempty"`
+	Protocols []ProtocolResult `yaml:"protocols,omitempty"`
 	// Receipt is the input closure of the run. A run without one may
 	// record its inputs in InputHashes instead.
 	Receipt receipt.Receipt `yaml:"receipt,omitempty"`
@@ -106,11 +114,13 @@ type Verification struct {
 	Mutations map[string]map[string]bool `yaml:"mutations,omitempty"`
 }
 
-// Conclude sets Failures and Result from the findings and returns the
-// result. The result does not depend on the mode; Blocking does.
+// Conclude sets Failures, Result and the protocol statuses from the
+// findings and returns the result. The result does not depend on the
+// mode; Blocking does.
 func (v *Verification) Conclude() string {
 	v.Failures = countFailures(v.Findings)
 	v.Result = resultOf(v.Findings)
+	v.concludeProtocols()
 	return v.Result
 }
 
@@ -177,6 +187,9 @@ func (v Verification) Validate() error {
 	}
 	if want := resultOf(v.Findings); v.Result != want {
 		return fmt.Errorf("verification report: result %s does not match the findings, which give %s", v.Result, want)
+	}
+	if err := v.validateComposition(); err != nil {
+		return err
 	}
 	if reflect.ValueOf(v.Receipt).IsZero() {
 		return nil

@@ -90,7 +90,7 @@ func TestReplayReportsSafetyViolation(t *testing.T) {
 			safety = append(safety, f)
 		}
 	}
-	if v.Result != report.Failed || len(safety) == 0 || safety[0].Trace == "" || safety[0].Step == 0 || !strings.Contains(safety[0].Message, "boundedRetries") {
+	if v.Result != report.Failed || len(safety) == 0 || safety[0].Trace == "" || safety[0].Step == 0 || safety[0].Property != "boundedRetries" || !strings.Contains(safety[0].Message, "boundedRetries") {
 		t.Fatalf("report %s, safety findings %+v", v.Result, safety)
 	}
 }

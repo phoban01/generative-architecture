@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strings"
 
 	"generative-architecture/pkg/conformance"
 	"generative-architecture/pkg/ir"
@@ -132,7 +133,9 @@ func replayModel(m *model.Compiled, name string, t conformance.Trace, coverage m
 			return transitions, finding(report.CategoryConformance, i, s.Event, fmt.Errorf("trace and model disagree on %v", diff))
 		}
 		if err := m.Check(state, s.Event); err != nil {
-			return transitions, finding(report.CategorySafety, i, s.Event, err)
+			f := finding(report.CategorySafety, i, s.Event, err)
+			f.Property = violatedProperty(err)
+			return transitions, f
 		}
 	}
 	return transitions, nil
@@ -186,4 +189,19 @@ func summary(w io.Writer, command string, v report.Verification) {
 		}
 	}
 	fmt.Fprintln(w)
+	v.WriteSections(w)
+}
+
+// violatedProperty returns the property a model check error names, or ""
+// when the error is not a property violation.
+func violatedProperty(err error) string {
+	rest, ok := strings.CutPrefix(err.Error(), "property ")
+	if !ok {
+		return ""
+	}
+	name, ok := strings.CutSuffix(rest, " violated")
+	if !ok || strings.ContainsAny(name, " \t\n") {
+		return ""
+	}
+	return name
 }
