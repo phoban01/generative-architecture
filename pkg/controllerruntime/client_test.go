@@ -309,6 +309,61 @@ func TestTypedPatchIsObserved(t *testing.T) {
 	}
 }
 
+func TestTypedListIsObserved(t *testing.T) {
+	ctx := context.Background()
+	scheme := coreScheme(t)
+	selected := map[string]string{"app": "mirror"}
+	base := fake.NewClientBuilder().WithScheme(scheme).WithObjects(
+		configMap("test", "one", selected), configMap("test", "two", selected),
+		configMap("test", "three", map[string]string{"app": "other"}), configMap("other", "four", selected),
+	).Build()
+	rec := &recorder{}
+	o := cr.Observer{Scheme: scheme, Registry: configMapRegistry(t, [2]string{"list", "cached"}), Hook: rec.hook}
+	list := &corev1.ConfigMapList{}
+	if err := o.Reader(base, "cached").List(ctx, list, client.InNamespace("test"), client.MatchingLabels(selected)); err != nil {
+		t.Fatal(err)
+	}
+	if len(list.Items) != 2 {
+		t.Fatalf("expected two ConfigMaps, got %d", len(list.Items))
+	}
+	if len(rec.calls) != 1 {
+		t.Fatalf("expected one observed call, got %d", len(rec.calls))
+	}
+	call := rec.calls[0]
+	if call.Descriptor.ID != "list/cached" || call.Descriptor.Resource != (effect.Resource{Version: "v1", Kind: "ConfigMap"}) || call.Key != (effect.Key{Namespace: "test"}) || call.Submitted != nil {
+		t.Fatalf("wrong call: %+v", call)
+	}
+	if call.Options["labelSelector"] != "app=mirror" {
+		t.Fatalf("wrong list options: %+v", call.Options)
+	}
+	items := rec.results[0].Snapshot["items"].([]any)
+	if len(items) != 2 {
+		t.Fatalf("snapshot is not the listed objects: %+v", rec.results[0].Snapshot)
+	}
+	list.Items[0].Data["value"] = "mutated"
+	if items[0].(map[string]any)["data"].(map[string]any)["value"] == "mutated" {
+		t.Fatal("snapshot aliases the live list")
+	}
+
+	unstructuredList := &unstructured.UnstructuredList{}
+	unstructuredList.SetAPIVersion("v1")
+	unstructuredList.SetKind("ConfigMapList")
+	wrapped := o.Client(base, "cached")
+	if err := wrapped.List(ctx, unstructuredList, client.InNamespace("test"), client.MatchingLabels(selected)); err != nil || len(unstructuredList.Items) != 2 {
+		t.Fatalf("unstructured list: %v, %d items", err, len(unstructuredList.Items))
+	}
+	if len(rec.calls) != 2 || rec.calls[1].Descriptor.ID != "list/cached" {
+		t.Fatalf("unstructured list not observed: %+v", rec.calls)
+	}
+
+	expectRejected(t, wrapped.List(ctx, list, client.MatchingFields{"metadata.name": "one"}), "List options other than the namespace and label selector")
+	expectRejected(t, wrapped.List(ctx, list, client.Limit(1)), "List options other than the namespace and label selector")
+	expectRejected(t, wrapped.List(ctx, list, client.HasLabels{"app"}), "only equality requirements are modelled")
+	if len(rec.calls) != 2 {
+		t.Fatal("rejected list reached the hook")
+	}
+}
+
 func TestTypedStatusPatchIsObserved(t *testing.T) {
 	ctx := context.Background()
 	obj := &unstructured.Unstructured{}

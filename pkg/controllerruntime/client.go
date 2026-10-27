@@ -7,10 +7,13 @@ import (
 	"fmt"
 	"generative-architecture/pkg/effect"
 	"reflect"
+	"strings"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
@@ -29,6 +32,13 @@ type Observer struct {
 // explicit GVK. A typed object needs the scheme.
 func (o Observer) gvkFor(obj runtime.Object) (schema.GroupVersionKind, error) {
 	if u, ok := obj.(*unstructured.Unstructured); ok && u != nil {
+		gvk := u.GroupVersionKind()
+		if gvk.Version == "" || gvk.Kind == "" {
+			return gvk, fmt.Errorf("unstructured observation requires explicit GVK")
+		}
+		return gvk, nil
+	}
+	if u, ok := obj.(*unstructured.UnstructuredList); ok && u != nil {
 		gvk := u.GroupVersionKind()
 		if gvk.Version == "" || gvk.Kind == "" {
 			return gvk, fmt.Errorf("unstructured observation requires explicit GVK")
@@ -115,8 +125,54 @@ func (r *readerProxy) Get(ctx context.Context, key client.ObjectKey, obj client.
 	}
 	return r.o.invoke(ctx, "get", r.consistency, key, obj, nil, func() error { return r.base.Get(ctx, key, obj) })
 }
-func (r *readerProxy) List(context.Context, client.ObjectList, ...client.ListOption) error {
-	return unsupported("List")
+
+// List records a list of the item kind at the reader's consistency. The key
+// carries the namespace option and no name. An equality label selector is
+// recorded as the labelSelector option. Other list options fail closed.
+func (r *readerProxy) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+	options := &client.ListOptions{}
+	options.ApplyOptions(opts)
+	if !reflect.DeepEqual(*options, client.ListOptions{Namespace: options.Namespace, LabelSelector: options.LabelSelector}) {
+		return unsupported("List options other than the namespace and label selector")
+	}
+	var recorded map[string]string
+	if options.LabelSelector != nil {
+		selector, err := equalitySelector(options.LabelSelector)
+		if err != nil {
+			return err
+		}
+		recorded = map[string]string{"labelSelector": selector}
+	}
+	gvk, err := r.o.gvkFor(list)
+	if err != nil {
+		return err
+	}
+	item, ok := strings.CutSuffix(gvk.Kind, "List")
+	if !ok || item == "" {
+		return fmt.Errorf("list observation requires a list kind, got %s", gvk.Kind)
+	}
+	gvk.Kind = item
+	return r.o.observe(ctx, gvk, "list", r.consistency, client.ObjectKey{Namespace: options.Namespace}, nil, recorded, func() (map[string]any, error) {
+		if err := r.base.List(ctx, list, opts...); err != nil {
+			return nil, err
+		}
+		return detach(list)
+	})
+}
+
+// equalitySelector accepts the label selectors the list summary models:
+// equality requirements only.
+func equalitySelector(selector labels.Selector) (string, error) {
+	requirements, selectable := selector.Requirements()
+	if !selectable {
+		return "", unsupported("List label selector that selects nothing")
+	}
+	for _, r := range requirements {
+		if r.Operator() != selection.Equals && r.Operator() != selection.DoubleEquals {
+			return "", unsupported(fmt.Sprintf("List label selector %q: only equality requirements are modelled", selector.String()))
+		}
+	}
+	return selector.String(), nil
 }
 
 type clientProxy struct {
@@ -128,8 +184,8 @@ type clientProxy struct {
 func (c *clientProxy) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 	return (&readerProxy{base: c.Client, o: c.o, consistency: c.consistency}).Get(ctx, key, obj, opts...)
 }
-func (c *clientProxy) List(context.Context, client.ObjectList, ...client.ListOption) error {
-	return unsupported("List")
+func (c *clientProxy) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+	return (&readerProxy{base: c.Client, o: c.o, consistency: c.consistency}).List(ctx, list, opts...)
 }
 func (c *clientProxy) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
 	if len(opts) > 0 {
