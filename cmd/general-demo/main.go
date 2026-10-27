@@ -9,6 +9,7 @@ import (
 	"generative-architecture/pkg/krm"
 	"generative-architecture/pkg/model"
 	"generative-architecture/pkg/quint"
+	"generative-architecture/pkg/report"
 	"os"
 	"path/filepath"
 	"time"
@@ -43,7 +44,8 @@ func run() error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	samples, err := quint.Sample(ctx, m, quint.Options{Samples: 40, Steps: 60, Seed: 20261013})
+	options := quint.Options{Samples: 40, Steps: 60, Seed: 20261013}
+	samples, err := quint.Sample(ctx, m, options)
 	if err != nil {
 		return err
 	}
@@ -61,8 +63,20 @@ func run() error {
 	}
 	// Native targeted tests guarantee overlapping invocations and dirty keys;
 	// sampled schedules broaden coverage without claiming exhaustiveness.
-	report := map[string]any{"result": "passed", "traces": len(samples.Traces), "transitions": steps, "coverage": coverage, "scope": "bounded runtime simulation; real FIFO workers; scripted reconcile outcomes"}
-	if err = krm.WriteResult(filepath.Join(root, "report.yaml"), "VerificationReport", "multiple-controllers", report); err != nil {
+	v := report.Verification{
+		Name:        "multiple-controllers",
+		Mode:        report.ModeStrict,
+		Scope:       "bounded runtime simulation; real FIFO workers; scripted reconcile outcomes",
+		Sampling:    &report.Sampling{Samples: options.Samples, Steps: options.Steps, Seed: options.Seed},
+		Traces:      len(samples.Traces),
+		Transitions: steps,
+		Coverage:    coverage,
+	}
+	v.Conclude()
+	if blocking := v.Blocking(); len(blocking) > 0 {
+		return fmt.Errorf("%s finding: %s", blocking[0].Category, blocking[0].Message)
+	}
+	if err = v.Write(filepath.Join(root, "report.yaml")); err != nil {
 		return err
 	}
 	fmt.Printf("PASS reusable runtime: %d traces, %d transitions\n", len(samples.Traces), steps)

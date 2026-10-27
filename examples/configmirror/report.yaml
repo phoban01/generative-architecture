@@ -3,9 +3,22 @@ kind: VerificationReport
 metadata:
   name: config-mirror
 status:
-  bounds:
-    maxObjectsPerResource: 2
-    maxInvocations: 3
+  result: passed
+  mode: strict
+  failures:
+    conformance: 0
+    safety: 0
+    tool: 0
+    unsupported: 0
+  scope: bounded simulation of the model generated from Reconcile, abstraction.yaml and the built-in client summaries; real worker/FIFO; fake API; controlled cache; observed object, cache and queue state
+  model: generated/Model.qnt
+  modelSha256: 3cb75f102a61fd40aed4c32ce5a779518615b79fc9b5433c5373fa6c3e695c98
+  sampling:
+    samples: 40
+    steps: 60
+    seed: 20261013
+  traces: 40
+  transitions: 2400
   coverage:
     advance: 394
     begin: 80
@@ -29,38 +42,6 @@ status:
     readTarget_found: 15
     writeTarget_error: 9
     writeTarget_ok: 3
-  excludes:
-    - delete
-    - list
-  model: generated/Model.qnt
-  modelSha256: 3cb75f102a61fd40aed4c32ce5a779518615b79fc9b5433c5373fa6c3e695c98
-  mutations:
-    direct-source:
-      ConfigMap_copy_data_value: true
-    wrong-write:
-      ConfigMap_copy_data_value: true
-  observed:
-    - ConfigMap_copy_data_value
-    - ConfigMap_copy_exists
-    - ConfigMap_source_data_value
-    - ConfigMap_source_exists
-    - cached_ConfigMap_source_data_value
-    - dirty
-    - due
-    - now
-    - processing
-    - ready
-    - retries
-  receipt: receipt.yaml
-  result: passed
-  sampling:
-    samples: 40
-    seed: 20261013
-    steps: 60
-  scope: bounded simulation of the model generated from Reconcile, abstraction.yaml and the built-in client summaries; real worker/FIFO; fake API; controlled cache; observed object, cache and queue state
-  tools:
-    go: go1.26.8
-    quint: 0.33.0
   traceHashes:
     trace-000.itf.json: 8590dc5ba11ec13b706eb532fd64764552ac4d1a9479ea682d7b87062bb9b554
     trace-001.itf.json: 4d3401caa2d11821f36be311ce51acd84a4595ada10cfa99e2c4110cdd88a629
@@ -102,5 +83,198 @@ status:
     trace-037.itf.json: 531d5a3ddd08a25d44a71b10582206aeb2de43d20ae26dc19d56a3b3af2db528
     trace-038.itf.json: ab9e8976d7c771d36c27d70e90de532b8a6d051bf836c46a81122a6a5fb4d518
     trace-039.itf.json: 00b0d93c30a902e4d8ab7c91630debb52728402f290d5b4c6b8d7b93fc6b37b7
-  traces: 40
-  transitions: 2400
+  findings: []
+  receipt:
+    module: generative-architecture
+    packages:
+      - ./examples/configmirror/...
+      - ./cmd/library-demo
+    extra:
+      - examples/configmirror/project.yaml
+      - examples/configmirror/abstraction.yaml
+      - examples/configmirror/constraints.yaml
+      - examples/configmirror/discovery.json
+      - examples/configmirror/mutations.yaml
+    files:
+      - path: cmd/library-demo/main.go
+        sha256: 3e2613e5c0d94979b71dacb5066cfc82890b9f026982948ead9c37a2667ad433
+      - path: examples/configmirror/abstraction.yaml
+        sha256: 9fd09656ab1bb62067055e744881d76281cdb91ced376d7d4ac6ffd504973700
+      - path: examples/configmirror/adapter.go
+        sha256: 5ca3c8e0cb984a52d148fe01144d4a7f33ab620c01b7f3abf5968bf9636a4527
+      - path: examples/configmirror/constraints.yaml
+        sha256: 4d1c339882b208857ba95a5bc74236afb30e9a493540cd44dc68ed2270749b73
+      - path: examples/configmirror/controller.go
+        sha256: 3eecedae4994ce1bd21e2af01b394d212097ddbb4c849ab9267afecad1912252
+      - path: examples/configmirror/detect/main.go
+        sha256: cb2a7be05ffa42ce34ffa3ed834dd49e96115c7d31cf8dfdf67d03f956e0c1f0
+      - path: examples/configmirror/discovery.json
+        sha256: b66d7a43715c90ca8fb2d495d6aa8026a09a156e16e889733b5cfd919a8b3379
+      - path: examples/configmirror/evidence.go
+        sha256: 670213725f88f670f6ece4fe62e154539c9f4e5a18756bc5750ddd6a7972ed34
+      - path: examples/configmirror/generate.go
+        sha256: 782bf32a2e00f10f7e05abad1df55e6055313e064d9893c7ffe98f2495985019
+      - path: examples/configmirror/generated/environment_generated.go
+        sha256: 89c807e758ae5c150fbf7351455ce4ffe06c8f008ad31bb2540d34e17ab6519f
+      - path: examples/configmirror/generated/gating_generated.go
+        sha256: 843b2c5b2c63de665126dc1c9ce46309b2a3234fd18781dc80adeb37c5396227
+      - path: examples/configmirror/generated/projection_generated.go
+        sha256: c10998d9a47abfc3555c57c1a323301ca9086fb10f3c0cf05f5545f00c0a506a
+      - path: examples/configmirror/mutations.yaml
+        sha256: 9f45b51e30b1d63b1b99e3b2e65d72e1154e79d67121d87557271a1711edeeed
+      - path: examples/configmirror/project.yaml
+        sha256: 916fdf901775cef3c96da96fe36ddd607afbe799944aa7ac3c61bcfce048bf0b
+      - path: go.mod
+        sha256: ec88daa221d582edafddb331cf4c9ee49798311c3396fba5e91cda0b402f1cac
+      - path: go.sum
+        sha256: e8531c7210f8b9a53c6e17b31d25ffeafb85acb188a97bb21d9b42047be35ef2
+      - path: pkg/abstraction/abstraction.go
+        sha256: 9e986d7296d4bfb92acb162aee7049745613e9b3a09fbbbea8a1ab195cdf7596
+      - path: pkg/adaptergen/abstraction.go
+        sha256: 9ebb5b6f55de81d98d847f73a51b76544799e30c06e60e6c0f2036e6f4a85f48
+      - path: pkg/adaptergen/environment.go
+        sha256: 08e6e80f3094a2a5fe0702aa8b1f88355e6f8baa8cec150eabf2b85dde9c31ed
+      - path: pkg/adaptergen/gating.go
+        sha256: 895674a8dc3e486583b0ac3fc4bf9b4fced2da309818b21bb1692b5dd9d02220
+      - path: pkg/adaptergen/generate.go
+        sha256: 23545792725b101317d3951f8c4d1704e670715f5fe833eadd7b4dcc15bb5ad1
+      - path: pkg/adaptergen/projection.go
+        sha256: ee2222c37f2f0369a51ed68e47cc3c56f15134260e6a796369e9d3f4b4645a23
+      - path: pkg/conformance/failure.go
+        sha256: ff66f5f0881840f913e194489de5716b686f024dbc544eb610e57e4d7b212580
+      - path: pkg/conformance/minimize.go
+        sha256: 19381cbae05075a8a97bbcc54b595b4c59217b494b515f410d10bef835dc9bd1
+      - path: pkg/conformance/replay.go
+        sha256: 827b1e18e91a7d6f9488a79f5c2e70e8af3766f2a20ab865b2f0447d09b60c50
+      - path: pkg/controllerruntime/client.go
+        sha256: e14ed8c8dea0c4482ae5bc049102c2e3f43884c31d91aed6cf913603f3f3ffe1
+      - path: pkg/controllerruntime/dynamic.go
+        sha256: e7f8274019f8e46b103bff690da1c13528c67d78379b810c2120c7887c1adefb
+      - path: pkg/controllerruntime/group.go
+        sha256: 4e20baaa16af5a62545798f9a23685794084e74498f128bc114ef780cd63c16e
+      - path: pkg/controllerruntime/group_replay.go
+        sha256: 0686979ade77e6ab9100bceb4ab9f03a2c0d91c73417a5014b725d96e164cd74
+      - path: pkg/controllerruntime/group_replay_priority.go
+        sha256: 8136bac5e504bf58f521231bec9f164408eb5d10afd68fccbe99f5fe4761caab
+      - path: pkg/controllerruntime/lifecycle.go
+        sha256: cab457349295770bd69814d50c69ebfb7321489d719a3451a61d154980c44828
+      - path: pkg/controllerruntime/lifecycle_model.go
+        sha256: 06159d15c273a6691ab17801cb3d24cdf03fe408a1335e6ee0c2e188d487fdcf
+      - path: pkg/controllerruntime/model.go
+        sha256: 7042d22e1c013f29482aaae70e621ea722fb6a0179500b48e94ae8e85139212c
+      - path: pkg/controllerruntime/priority_gate.go
+        sha256: 93fb513a4cf8437047305335ce3bc34f20fa997a365ab9a71b216bfcdd7b44ae
+      - path: pkg/controllerruntime/priority_model.go
+        sha256: 8f191b8fccb7b1530a5697262f6625074f33168b7c15c2e1a161c86b6e840560
+      - path: pkg/controllerruntime/queue_model.go
+        sha256: dbbb77f6b18152bd8d5d1efe0927d4a6a84f70b58afe6057b3d9a7ada078ac18
+      - path: pkg/controllerruntime/watch.go
+        sha256: d2cd3734cecf9194d5c0e4c9389895feefcaf733eca3b6a1636d1f2c23683add
+      - path: pkg/controllerruntime/worker.go
+        sha256: 5b2ac9b8ce9e8d177893997d18ede656a7fd8c3c284cd7890e0f3cedfb1d3f2b
+      - path: pkg/effect/effect.go
+        sha256: a40cc2aa1c0f3e199312605af3b6acb00eb5f07bb366bb50a6b0cef995fa5bed
+      - path: pkg/expr/cel.go
+        sha256: 01fde732219bcadaf77fe73858b96f4d6f4e1bd774ccff31f8ac6b0701de5859
+      - path: pkg/expr/rewrite.go
+        sha256: 3bcb1cf7e5ce057cc7f1adf05f4b7c36ff76b1d8c39757d73fd04605ecb3ec9a
+      - path: pkg/goflow/diagnostic.go
+        sha256: 5576af0b856013500479d3ce6578b5ef7e9a79d5957cbcc74451abdcc6acbe95
+      - path: pkg/goflow/external.go
+        sha256: bf5e70416683db5f51a0a2bf852c2562c4fd5ff2077640202f51961864188769
+      - path: pkg/goflow/extract.go
+        sha256: 96cfa1e379dd13f924eabfd07df681313f1e7937582c831fd54bdf27f6e87540
+      - path: pkg/goflow/idioms.go
+        sha256: eda01c2587609e2b7d43d3accaf44f26f4f54e6c6ac96d2cf877af37aa61a4a9
+      - path: pkg/goflow/objects.go
+        sha256: 93c2c620cefeae97c07bbc20756e78e902aaeb1677a5bbcebc28be8ed7856d3f
+      - path: pkg/goflow/select.go
+        sha256: bf1a0e74e38c4d822d19809d4eea1809ba1f4b5d8f49051afe33c46aba86fd12
+      - path: pkg/goflow/typed.go
+        sha256: c6d6f0a25c54b73f381223acd7c2c81cebdc3151cf16d566aae974f5fd1e79d0
+      - path: pkg/ir/diff.go
+        sha256: a8cd5151f427cba2221a9c0662c513dc5d6d316fb28f7d94c89efb74120401f6
+      - path: pkg/ir/document.go
+        sha256: 47586311b1694b6cca95f3828e32b45f77ab64b81b69ee9a37f4a394d2672cf9
+      - path: pkg/ir/effect.go
+        sha256: 81e50a8c2d78782605c05351d827b2ee85867b12c3fd002cefb35c4a538a2768
+      - path: pkg/ir/evidence.go
+        sha256: ffdb5c42374aae0904dcf0c35a78a79112f1b1b1473c82a2730a7d0ed9284192
+      - path: pkg/ir/identity.go
+        sha256: fda5486ccd4a7b2f4bd26c2dea2cd7554c90bfe48d66e57bcec1c7eee16fdee9
+      - path: pkg/ir/process.go
+        sha256: 0e4817bf669fc5148944689f0627249f3bafa65652f35aa929958fc7b8d4a4a6
+      - path: pkg/ir/provenance.go
+        sha256: d2658539018a61b65406523126fae8e86efe0b46a50bdb41f9919fcdb33bd7d0
+      - path: pkg/ir/watch.go
+        sha256: 772189135d397906cfd7e20648a715db270f1bce459d478c197772f187630c96
+      - path: pkg/krm/resource.go
+        sha256: a64f1bd06a34616da543d595e4f54cfd55e1bab55caf6f149665cfaa5bdb4410
+      - path: pkg/krm/yaml.go
+        sha256: 68e9696744947e397e93c05b1c13824767f934b307a684380a15030b6d5e97c7
+      - path: pkg/model/diagram.go
+        sha256: b2ee9a44c871d7c002e47bcbb68dc571024e04b7be2099cfa20c5613fd3afe7e
+      - path: pkg/model/model.go
+        sha256: f66fb46e30d60dcbf4b5a7ea2c03afc4c3bc08edeca605414da980574bec818d
+      - path: pkg/mutation/mutation.go
+        sha256: 5ff0d9fd459a5dc43b71eb34ffa7d05da17df700870ba28dc4d5dea1dfea20f1
+      - path: pkg/process/inline.go
+        sha256: fdfcbd52644a896a1ff94632e05a89ab8758b95256a5f9d564d341cf17a80ce5
+      - path: pkg/process/model.go
+        sha256: c1e8bf5c69c1f238ae0541ba2477617e50c5d7f51b62d521008378946411cee0
+      - path: pkg/process/summaries.go
+        sha256: 9c4c79eb95ef673eb4971c47124c23c93c4e4db035318507a9c673821a349dc1
+      - path: pkg/quint/differential.go
+        sha256: 0b52579ecc4ecafa2796c2ea071bbfa4d8bf071da938fba2e80a859524e37d94
+      - path: pkg/quint/run.go
+        sha256: 1e76ea9ea2202e9a696485d81c695ca9239574da756c788c34814cf4621d7178
+      - path: pkg/receipt/receipt.go
+        sha256: 1e4dc7f7718532e91afe0634b2cb641c3d8d4eab9514af1ba10e9f1804008bba
+      - path: pkg/report/support.go
+        sha256: e1b23cc37e61b6508bb9bcb88c67a76f792de2186426042c4338ae9e31769384
+      - path: pkg/report/verification.go
+        sha256: c03b91daf94574ccc915c67e5ea216de9a313b0faf81d8ec0b7b2fcbeae87b9f
+      - path: pkg/summaries/data/README.md
+        sha256: fc57e5bad24314a54f7a79eb19fb1c650953072510e2fb1883f1b17270c74d18
+      - path: pkg/summaries/data/create.yaml
+        sha256: dc575d00ce4a10e8687f5e38f58bb071a1b3415dfe85f186f49cf7c1ffd940fc
+      - path: pkg/summaries/data/delete.yaml
+        sha256: 66ec49c6ebd1a407c50ee1e3902d5f585983ee6298b1736af82ccd45bd9b8f6c
+      - path: pkg/summaries/data/get.yaml
+        sha256: 783a03875e36151bfe187ec6918ecb829ff94a1b6820e5f4a5165ccae84871bc
+      - path: pkg/summaries/data/list.yaml
+        sha256: ef65458650b02c882923478b0e79c335f9f49af7439f9e6936e222d69f2b38f0
+      - path: pkg/summaries/data/patch.yaml
+        sha256: 654340736a4678d3c07e7bb217ce02c9ae2046efaf674c2f605514399d7a2e34
+      - path: pkg/summaries/data/update.yaml
+        sha256: 3a56f847db322c69511939aac2d830a8c05bc48f33b33ceb30af1d85ec347ddc
+      - path: pkg/summaries/registry.go
+        sha256: e24d98005a2177fd83e6612e2487b3c804508c5de8270e36abb6e10ac6d02696
+      - path: pkg/summaries/summary.go
+        sha256: 5c91374dedccdf4208a131dd14d9ea76fdf11dc1892abfc8a379210a88f058c6
+    tools:
+      go: go1.26.8
+      quint: 0.33.0
+    bounds:
+      maxInvocations: 3
+      maxObjectsPerResource: 2
+    excludes:
+      - delete
+      - list
+  observed:
+    - ConfigMap_copy_data_value
+    - ConfigMap_copy_exists
+    - ConfigMap_source_data_value
+    - ConfigMap_source_exists
+    - cached_ConfigMap_source_data_value
+    - dirty
+    - due
+    - now
+    - processing
+    - ready
+    - retries
+  mutations:
+    direct-source:
+      ConfigMap_copy_data_value: true
+    wrong-write:
+      ConfigMap_copy_data_value: true

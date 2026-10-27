@@ -159,27 +159,31 @@ func differing(want, got map[string]any) []string {
 // a failure is an error; an incomplete result is an error in verification
 // mode and a note on stderr in inventory mode.
 func conclude(g globals, v report.Verification, path, command string) error {
-	result := v.Conclude()
+	v.Mode = report.ModeOf(g.strict)
+	v.Conclude()
 	if err := v.Write(path); err != nil {
 		return err
 	}
-	switch result {
-	case report.Failed:
-		for _, f := range v.Findings {
-			if f.Category != report.CategoryUnsupported {
-				return fmt.Errorf("arch %s: %s finding: %s (see %s)", command, f.Category, f.Message, path)
-			}
+	if blocking := v.Blocking(); len(blocking) > 0 {
+		f := blocking[0]
+		if f.Category == report.CategoryUnsupported {
+			return fmt.Errorf("arch %s: %w: %s (see %s)", command, errStrict, f.Message, path)
 		}
-	case report.Incomplete:
-		if g.strict {
-			return fmt.Errorf("arch %s: %w: %s (see %s)", command, errStrict, v.Findings[0].Message, path)
-		}
-		fmt.Fprintf(g.stderr, "inventory mode: %d unsupported findings in %s; --strict fails on them\n", len(v.Findings), path)
+		return fmt.Errorf("arch %s: %s finding: %s (see %s)", command, f.Category, f.Message, path)
+	}
+	if n := v.Failures[report.CategoryUnsupported]; n > 0 {
+		fmt.Fprintf(g.stderr, "inventory mode: %d unsupported findings in %s; --strict fails on them\n", n, path)
 	}
 	summary(g.stdout, command, v)
 	return nil
 }
 
 func summary(w io.Writer, command string, v report.Verification) {
-	fmt.Fprintf(w, "%s %s: %d traces, %d transitions, %d findings\n", command, v.Result, v.Traces, v.Transitions, len(v.Findings))
+	fmt.Fprintf(w, "%s %s (%s mode): %d traces, %d transitions, %d findings", command, v.Result, v.Mode, v.Traces, v.Transitions, len(v.Findings))
+	for _, c := range report.Categories {
+		if n := v.Failures[c]; n > 0 {
+			fmt.Fprintf(w, ", %d %s", n, c)
+		}
+	}
+	fmt.Fprintln(w)
 }

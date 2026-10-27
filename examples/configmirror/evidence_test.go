@@ -10,46 +10,28 @@ import (
 	"testing"
 
 	"generative-architecture/pkg/abstraction"
-	"generative-architecture/pkg/krm"
 	"generative-architecture/pkg/model"
 	"generative-architecture/pkg/mutation"
 	"generative-architecture/pkg/receipt"
+	"generative-architecture/pkg/report"
 )
 
-// report is report.yaml as cmd/library-demo writes it.
-type report struct {
-	Result      string                     `yaml:"result"`
-	Model       string                     `yaml:"model"`
-	ModelSHA256 string                     `yaml:"modelSha256"`
-	Sampling    map[string]int             `yaml:"sampling"`
-	Scope       string                     `yaml:"scope"`
-	Traces      int                        `yaml:"traces"`
-	Transitions int                        `yaml:"transitions"`
-	Coverage    map[string]int             `yaml:"coverage"`
-	TraceHashes map[string]string          `yaml:"traceHashes"`
-	Observed    []string                   `yaml:"observed"`
-	Bounds      abstraction.Bounds         `yaml:"bounds"`
-	Excludes    []string                   `yaml:"excludes"`
-	Mutations   map[string]map[string]bool `yaml:"mutations"`
-	Tools       map[string]string          `yaml:"tools"`
-	Receipt     string                     `yaml:"receipt"`
-}
-
-func readReport(t *testing.T) report {
+func readReport(t *testing.T) report.Verification {
 	t.Helper()
-	var r report
-	if err := krm.ReadResult(ReportFile, "VerificationReport", &r); err != nil {
+	r, err := report.ReadVerification(ReportFile)
+	if err != nil {
 		t.Fatal(err)
 	}
 	return r
 }
 
-// The report is about the generated model and the traces on disk, repeats
-// the abstraction's bounds and excludes verbatim and shows every mutation
-// of the suite detected as expected.
+// The report is about the generated model and the traces on disk. It runs
+// in strict mode with no finding, embeds the abstraction's bounds and
+// excludes in its receipt and shows every mutation of the suite detected
+// as expected.
 func TestEvidenceReport(t *testing.T) {
 	r := readReport(t)
-	if r.Result != "passed" || r.Model != ModelFile || r.Receipt != ReceiptFile {
+	if r.Result != report.Passed || r.Mode != report.ModeStrict || r.Model != ModelFile || len(r.Blocking()) != 0 || len(r.Failures) != len(report.Categories) {
 		t.Fatalf("report %+v", r)
 	}
 	spec, err := Generate(".")
@@ -90,8 +72,9 @@ func TestEvidenceReport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.Bounds != abs.Spec.Bounds || !reflect.DeepEqual(r.Excludes, abs.Spec.Excludes) {
-		t.Fatalf("report bounds %+v excludes %v, abstraction %+v %v", r.Bounds, r.Excludes, abs.Spec.Bounds, abs.Spec.Excludes)
+	wantBounds := map[string]int{"maxObjectsPerResource": abs.Spec.Bounds.MaxObjectsPerResource, "maxInvocations": abs.Spec.Bounds.MaxInvocations}
+	if !reflect.DeepEqual(r.Receipt.Bounds, wantBounds) || !reflect.DeepEqual(r.Receipt.Excludes, abs.Spec.Excludes) {
+		t.Fatalf("report bounds %v excludes %v, abstraction %+v %v", r.Receipt.Bounds, r.Receipt.Excludes, abs.Spec.Bounds, abs.Spec.Excludes)
 	}
 	suite, err := mutation.Load(MutationsFile)
 	if err != nil {
@@ -103,8 +86,8 @@ func TestEvidenceReport(t *testing.T) {
 	if escaped := suite.Escaped(mutation.Matrix(r.Mutations)); len(escaped) != 0 {
 		t.Fatalf("report shows escaped mutations %v", escaped)
 	}
-	if !strings.HasPrefix(r.Tools["quint"], "0.33.") {
-		t.Fatalf("report tools %v", r.Tools)
+	if !strings.HasPrefix(r.Receipt.Tools["quint"], "0.33.") {
+		t.Fatalf("report tools %v", r.Receipt.Tools)
 	}
 }
 
@@ -119,8 +102,10 @@ func TestEvidenceReceipt(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := readReport(t)
-	if !reflect.DeepEqual(rec.Tools, r.Tools) {
-		t.Fatalf("receipt tools %v, report tools %v", rec.Tools, r.Tools)
+	embedded := rec
+	embedded.Root = ""
+	if !reflect.DeepEqual(embedded, r.Receipt) {
+		t.Fatalf("the report embeds a receipt other than %s", ReceiptFile)
 	}
 	abs, err := abstraction.Load("abstraction.yaml")
 	if err != nil {
