@@ -45,16 +45,11 @@ var commands = []command{
 	{"extract", "extract behaviour, effects and watches from Go source", runExtract},
 	{"generate", "generate models and workspaces from the extracted IR", runGenerate},
 	{"render", "build the LikeC4 site for a generated workspace", runRender},
-	{"serve", "serve the LikeC4 workspace for interactive viewing", runServe},
+	{"serve", "serve the rendered LikeC4 site on localhost", runServe},
 	{"check", "sample the generated model with Quint and check its properties", runCheck},
 	{"replay", "replay saved traces against the generated model", runReplay},
 	{"diff", "compare generated artifacts with the committed ones", runDiff},
 	{"support", "report included, summarized and unsupported constructs", runSupport},
-}
-
-// notImplemented is returned by every subcommand until its milestone lands.
-func notImplemented(name string) error {
-	return fmt.Errorf("arch %s: %w: not implemented; tracked in milestone M7", name, errors.ErrUnsupported)
 }
 
 func usage(w io.Writer, fs *flag.FlagSet) {

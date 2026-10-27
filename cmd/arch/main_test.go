@@ -10,9 +10,6 @@ import (
 	"golang.org/x/tools/go/packages"
 )
 
-// implemented lists the subcommands that no longer report not implemented.
-var implemented = map[string]bool{"extract": true, "init": true, "diff": true, "generate": true, "support": true, "check": true, "replay": true}
-
 func TestUnknownCommand(t *testing.T) {
 	var out, errOut bytes.Buffer
 	if err := run([]string{"nope"}, &out, &errOut); err == nil || !strings.Contains(err.Error(), "unknown command") {
@@ -33,15 +30,13 @@ func TestUsageWithoutCommand(t *testing.T) {
 	}
 }
 
-func TestSubcommandsReportNotImplemented(t *testing.T) {
+// Every subcommand is implemented and parses its own flags.
+func TestSubcommandsRejectUnknownFlags(t *testing.T) {
 	for _, c := range commands {
-		if implemented[c.name] {
-			continue
-		}
 		var out, errOut bytes.Buffer
-		err := run([]string{"--project", "p.yaml", "--out", "o", c.name}, &out, &errOut)
-		if !errors.Is(err, errors.ErrUnsupported) || !strings.Contains(err.Error(), "not implemented") {
-			t.Fatalf("%s: expected ErrUnsupported, got %v", c.name, err)
+		err := run([]string{"--project", "p.yaml", "--out", t.TempDir(), c.name, "--no-such-flag"}, &out, &errOut)
+		if err == nil || !strings.Contains(err.Error(), "no-such-flag") {
+			t.Fatalf("%s: expected a flag error, got %v", c.name, err)
 		}
 	}
 }
