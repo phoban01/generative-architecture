@@ -412,32 +412,3 @@ func (e Example) CheckConstraints(trace conformance.Trace) error {
 	}
 	return nil
 }
-
-// FlowLikeC4 draws the extracted control-flow graph rather than a manually
-// maintained copy of the four-step story. Return nodes end a reconcile attempt.
-func (e Example) FlowLikeC4() string {
-	var b strings.Builder
-	fmt.Fprintln(&b, "specification { element provisioningStep }\nmodel {")
-	for _, n := range e.Program.Nodes {
-		fmt.Fprintf(&b, " db_step%d = provisioningStep %q { description %q }\n", n.ID, n.Source, n.Kind)
-	}
-	for _, n := range e.Program.Nodes {
-		if n.Kind == "return" {
-			continue
-		}
-		label := "next"
-		if n.Kind == "branch" {
-			label = "true"
-		}
-		fmt.Fprintf(&b, " db_step%d -> db_step%d %q\n", n.ID, n.Next, label)
-		if n.Kind == "branch" {
-			fmt.Fprintf(&b, " db_step%d -> db_step%d %q\n", n.ID, n.Else, "false")
-		}
-	}
-	names := []string{}
-	for _, n := range e.Program.Nodes {
-		names = append(names, fmt.Sprintf("db_step%d", n.ID))
-	}
-	fmt.Fprintf(&b, "}\nviews { view database_provisioning_flow { title %q\n include %s\n } }\n", "Database controller: extracted reconcile flow", strings.Join(names, ", "))
-	return b.String()
-}

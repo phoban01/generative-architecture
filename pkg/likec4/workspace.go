@@ -204,6 +204,22 @@ func (w Workspace) Files() (map[string][]byte, error) {
 	return out, nil
 }
 
+// Source renders the workspace as one .c4 file: the specification, the
+// model and every view in name order. It serves callers that place the
+// workspace beside other LikeC4 files.
+func (w Workspace) Source() ([]byte, error) {
+	files, err := w.Files()
+	if err != nil {
+		return nil, err
+	}
+	var b bytes.Buffer
+	b.WriteString(header)
+	for _, name := range sortedKeys(files) {
+		b.Write(bytes.TrimPrefix(files[name], []byte(header)))
+	}
+	return b.Bytes(), nil
+}
+
 // Write writes the workspace into dir. Stale view files from an earlier
 // write are removed, so the directory always matches the workspace.
 func (w Workspace) Write(dir string) error {
