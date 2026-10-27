@@ -4,11 +4,48 @@ import (
 	"strings"
 	"testing"
 
+	"generative-architecture/pkg/expr"
 	"generative-architecture/pkg/ir"
+	"generative-architecture/pkg/model"
 	"generative-architecture/pkg/watchmodel"
 )
 
 var key = object(primary, "p")
+
+func TestFieldMapping(t *testing.T) {
+	queued := watchmodel.QueuedVar(key)
+	child := object(secondary, "c")
+	ref := ir.KeyMapping{Kind: ir.MappingField, FieldPath: []string{"Spec", "ParentName"}}
+	field := watchmodel.FieldVar(secondary, ref.FieldPath)
+	for _, tc := range []struct {
+		name    string
+		mapping ir.KeyMapping
+		object  ir.ObjectRef
+		fields  map[string]string
+		actions []string
+		want    map[string]any
+	}{
+		{"declared key", ref, child, map[string]string{"Spec.ParentName": "p"}, []string{"createChild", "deliverChild"}, map[string]any{queued: true, "wrongKey": false, field: "p"}},
+		{"elsewhere", ref, child, map[string]string{"Spec.ParentName": "other"}, []string{"createChild", "deliverChild"}, map[string]any{queued: false, "wrongKey": true}},
+		{"empty value", ref, child, map[string]string{"Spec.ParentName": ""}, []string{"createChild", "deliverChild"}, map[string]any{queued: false, "wrongKey": false}},
+		{"value set by an action", ref, child, map[string]string{"Spec.ParentName": ""}, []string{"pointChild", "createChild", "deliverChild"}, map[string]any{queued: true, "wrongKey": false}},
+		{"unresolved field", ref, child, nil, []string{"createChild", "deliverChild"}, map[string]any{queued: false, "wrongKey": true}},
+		{"own name elsewhere", ir.KeyMapping{Kind: ir.MappingField, FieldPath: []string{"Name"}}, child, nil, []string{"createChild", "deliverChild"}, map[string]any{queued: false, "wrongKey": true}},
+		{"own name at key", ir.KeyMapping{Kind: ir.MappingField, FieldPath: []string{"Name"}}, object(secondary, "p"), nil, []string{"createChild", "deliverChild"}, map[string]any{queued: true, "wrongKey": false}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fields := map[ir.ObjectRef]map[string]string{tc.object: tc.fields}
+			spec, err := watchmodel.Add(baseSpec(t, secondary), []ir.Watch{watch(secondary, tc.mapping)}, []ir.ObjectRef{tc.object}, []ir.ObjectRef{key}, watchmodel.WithFields(fields))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, ok := spec.State[field]; ok {
+				spec.Actions = append(spec.Actions, model.Action{Name: "pointChild", Guard: "true", Updates: map[string]expr.Expression{field: `"p"`}})
+			}
+			check(t, run(t, spec, tc.actions...), tc.want)
+		})
+	}
+}
 
 func TestSelfMapping(t *testing.T) {
 	queued := watchmodel.QueuedVar(key)

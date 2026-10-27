@@ -2,9 +2,12 @@ package watchmodel
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
+	"generative-architecture/pkg/expr"
 	"generative-architecture/pkg/ir"
+	"generative-architecture/pkg/model"
 )
 
 // WrongKeyVar names the state that records a delivery to a key outside the
@@ -68,8 +71,66 @@ func (g *generator) route(r *resource, w ir.Watch) (target, error) {
 	case ir.MappingSelf:
 		g.enqueue(&t, requestOf(r.object), "true")
 		return t, nil
+	case ir.MappingField:
+		return t, g.routeField(&t, r, w)
 	}
 	return t, diagnose(w, "mapping", fmt.Sprintf("%s key mapping is not modelled", w.Mapping.Kind))
+}
+
+// FieldVar names the state that holds the value of a field-mapping path on
+// the object of resource.
+func FieldVar(resource ir.GVK, path []string) string {
+	return lowerFirst(resource.Kind) + "_" + strings.Join(path, "_")
+}
+
+// routeField maps through a field reference. The request takes the object's
+// namespace and the field value as its name; an empty value enqueues
+// nothing, as in the summarized mapper. A field the caller did not supply
+// is unresolved and raises wrongKey. The object's own Name needs no entry.
+func (g *generator) routeField(t *target, r *resource, w ir.Watch) error {
+	for _, part := range w.Mapping.FieldPath {
+		if !identifier(part) {
+			return diagnose(w, "mapping", fmt.Sprintf("field path element %q is not a model identifier", part))
+		}
+	}
+	path := strings.Join(w.Mapping.FieldPath, ".")
+	value, ok := g.fields[r.object][path]
+	if !ok {
+		if path == "Name" {
+			g.enqueue(t, requestOf(r.object), "true")
+		} else {
+			t.foreign = append(t.foreign, "true")
+		}
+		return nil
+	}
+	v := FieldVar(r.gvk, w.Mapping.FieldPath)
+	if !g.declared[v] {
+		if err := g.addState(w, v, model.Variable{Type: "string", Initial: expr.Expression(strconv.Quote(value))}); err != nil {
+			return err
+		}
+		g.declared[v] = true
+	}
+	g.routeValue(t, r.object, v)
+	return nil
+}
+
+// routeValue routes a request named by the string variable v in the
+// namespace of object: to each declared key the value can name, and to
+// wrongKey for any other non-empty value.
+func (g *generator) routeValue(t *target, object ir.ObjectRef, v string) {
+	names := []string{}
+	for _, k := range g.keys {
+		if k.Cluster == object.Cluster && k.Namespace == object.Namespace {
+			match := v + " == " + strconv.Quote(k.Name)
+			t.hit(g.queued[requestOf(k)], match)
+			names = append(names, match)
+		}
+	}
+	foreign := v + ` != ""`
+	if len(names) > 0 {
+		foreign += " && !(" + strings.Join(names, " || ") + ")"
+	}
+	t.foreign = append(t.foreign, foreign)
 }
 
 // declareKeys adds the queued flag of every key and the wrong-key flag.

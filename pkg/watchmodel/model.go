@@ -29,14 +29,29 @@ const (
 // Add returns spec extended with the event state and delivery actions for
 // watches. All watches must belong to one controller. objects lists the
 // objects of the watched resources, one per resource; keys lists the
-// reconcile keys of the controller. Add does not change spec in place.
-// Unsupported input returns a *goflow.Diagnostic located at the watch.
-func Add(spec model.Spec, watches []ir.Watch, objects []ir.ObjectRef, keys []ir.ObjectRef) (model.Spec, error) {
+// reconcile keys of the controller. Options supply the object facts that
+// mappings read. Add does not change spec in place. Unsupported input
+// returns a *goflow.Diagnostic located at the watch.
+func Add(spec model.Spec, watches []ir.Watch, objects []ir.ObjectRef, keys []ir.ObjectRef, opts ...Option) (model.Spec, error) {
 	g, err := newGenerator(spec, watches, objects, keys)
 	if err != nil {
 		return spec, err
 	}
+	for _, opt := range opts {
+		opt(g)
+	}
 	return g.generate()
+}
+
+// Option supplies object facts to Add.
+type Option func(*generator)
+
+// WithFields supplies field values per object, keyed by the dotted Go field
+// path of a field mapping, such as "Spec.Target". Each value becomes the
+// initial value of a string state variable (see FieldVar) that other actions
+// may change.
+func WithFields(fields map[ir.ObjectRef]map[string]string) Option {
+	return func(g *generator) { g.fields = fields }
 }
 
 // EventVar names the state that holds the undelivered event of resource.
@@ -79,6 +94,8 @@ type generator struct {
 	resources []*resource
 	keys      []ir.ObjectRef
 	queued    map[request]string // declared key -> its queued variable
+	fields    map[ir.ObjectRef]map[string]string
+	declared  map[string]bool // state variables Add declared
 }
 
 var boolFalse = model.Variable{Type: "bool", Initial: "false"}
@@ -87,7 +104,7 @@ func newGenerator(spec model.Spec, watches []ir.Watch, objects, keys []ir.Object
 	if len(watches) == 0 {
 		return nil, fmt.Errorf("watchmodel: no watches")
 	}
-	g := &generator{spec: clone(spec), keys: keys}
+	g := &generator{spec: clone(spec), keys: keys, declared: map[string]bool{}}
 	byGVK := map[ir.GVK]*resource{}
 	byKind := map[string]ir.GVK{}
 	for _, w := range watches {
