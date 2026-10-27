@@ -14,17 +14,52 @@ type ModelKey struct {
 	Name      string `yaml:"name"`
 }
 type ModelController struct {
-	Name       string     `yaml:"name"`
+	Name string `yaml:"name"`
+	// Queue overrides the profile's queue kind for this controller.
+	Queue      string     `yaml:"queue,omitempty"`
 	Workers    int        `yaml:"workers"`
 	RetryTicks int        `yaml:"retryTicks"`
 	AfterTicks int        `yaml:"afterTicks"`
 	Keys       []ModelKey `yaml:"keys"`
+	// Startup models the initial list and the cache sync: no key starts
+	// before the controller's caches sync.
+	Startup bool `yaml:"startup,omitempty"`
+	// Deletion models delete events, including tombstones.
+	Deletion bool `yaml:"deletion,omitempty"`
 }
+
+// Queue kinds. QueueFIFO is client-go's rate-limited FIFO work queue;
+// QueuePriority is controller-runtime's priority queue.
+const (
+	QueueFIFO     = "fifo"
+	QueuePriority = "priority"
+)
+
 type GroupProfile struct {
-	Name        string            `yaml:"name"`
-	MaxTicks    int               `yaml:"maxTicks"`
+	Name     string `yaml:"name"`
+	MaxTicks int    `yaml:"maxTicks"`
+	// Queue selects the queue kind of every controller: fifo (the default)
+	// or priority. A controller's own Queue field overrides it.
+	Queue       string            `yaml:"queue,omitempty"`
 	Controllers []ModelController `yaml:"controllers"`
 }
+
+// QueueOf resolves the queue kind of c: its own field, then the profile's,
+// then fifo. It rejects unknown kinds.
+func (p GroupProfile) QueueOf(c ModelController) (string, error) {
+	q := c.Queue
+	if q == "" {
+		q = p.Queue
+	}
+	if q == "" {
+		q = QueueFIFO
+	}
+	if q != QueueFIFO && q != QueuePriority {
+		return "", fmt.Errorf("controller %s: unknown queue %q (want fifo or priority)", c.Name, q)
+	}
+	return q, nil
+}
+
 type RuntimeEvent struct{ Controller, Key, Kind, Outcome string }
 type GroupModel struct {
 	Spec    model.Spec
@@ -50,6 +85,16 @@ func BuildGroupModel(p GroupProfile) (GroupModel, error) {
 			return out, fmt.Errorf("invalid controller model profile")
 		}
 		controllers[c.Name] = true
+		queue, err := p.QueueOf(c)
+		if err != nil {
+			return out, err
+		}
+		if queue == QueuePriority {
+			if err := addPriorityController(add, &out.Spec, c); err != nil {
+				return out, err
+			}
+			continue
+		}
 		next := c.Name + "_next"
 		out.Spec.State[next] = model.Variable{Type: "int", Initial: "0"}
 		keys := map[string]bool{}
@@ -111,6 +156,9 @@ func BuildGroupModel(p GroupProfile) (GroupModel, error) {
 			out.Spec.Properties = append(out.Spec.Properties, model.Property{Name: prefix + "_exclusive", Expression: expr.Expression("!(" + ready + " && " + processing + ") && (!" + ready + " || " + dirty + ")")})
 		}
 		out.Spec.Properties = append(out.Spec.Properties, model.Property{Name: c.Name + "_capacity", Expression: expr.Expression("(" + strings.Join(active, " + ") + ") <= " + strconv.Itoa(c.Workers))})
+	}
+	for _, c := range p.Controllers {
+		addLifecycle(add, &out.Spec, c)
 	}
 	_, err := model.Compile(out.Spec)
 	return out, err

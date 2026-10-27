@@ -21,14 +21,26 @@ type runtimeAdapter struct {
 	dirty   map[string]bool
 	order   map[string]int64
 	next    map[string]int64
+	// Priority queue bookkeeping: the queue kind per controller, and per key
+	// the item's priority and the priority its invocation was taken with.
+	queue    map[string]string
+	priority map[string]int64
+	taken    map[string]int64
+	deleted  map[string]bool
 }
 
 func request(k ModelKey) reconcile.Request {
 	return reconcile.Request{NamespacedName: client.ObjectKey{Namespace: k.Namespace, Name: k.Name}}
 }
 func newRuntimeAdapter(ctx context.Context, m GroupModel) (*runtimeAdapter, error) {
-	a := &runtimeAdapter{m: m, g: NewGroup(ctx), c: map[string]*Controller{}, inv: map[string]*Invocation{}, replies: map[string]chan string{}, dirty: map[string]bool{}, order: map[string]int64{}, next: map[string]int64{}}
+	a := &runtimeAdapter{m: m, g: NewGroup(ctx), c: map[string]*Controller{}, inv: map[string]*Invocation{}, replies: map[string]chan string{}, dirty: map[string]bool{}, order: map[string]int64{}, next: map[string]int64{}, queue: map[string]string{}, priority: map[string]int64{}, taken: map[string]int64{}, deleted: map[string]bool{}}
 	for _, cfg := range m.Profile.Controllers {
+		queue, err := m.Profile.QueueOf(cfg)
+		if err != nil {
+			a.g.Close()
+			return nil, err
+		}
+		a.queue[cfg.Name] = queue
 		keys := []reconcile.Request{}
 		lookup := map[reconcile.Request]string{}
 		for _, k := range cfg.Keys {
@@ -36,7 +48,7 @@ func newRuntimeAdapter(ctx context.Context, m GroupModel) (*runtimeAdapter, erro
 			lookup[request(k)] = k.ID
 			a.replies[cfg.Name+"_"+k.ID] = make(chan string)
 		}
-		c, err := a.g.Add(ControllerOptions{Name: cfg.Name, Workers: cfg.Workers, Keys: keys, RetryTicks: cfg.RetryTicks, Reconciler: reconcile.Func(func(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
+		c, err := a.g.Add(ControllerOptions{Name: cfg.Name, Queue: queue, Startup: cfg.Startup, Workers: cfg.Workers, Keys: keys, RetryTicks: cfg.RetryTicks, Reconciler: reconcile.Func(func(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
 			var outcome string
 			select {
 			case outcome = <-a.replies[cfg.Name+"_"+lookup[req]]:
@@ -93,12 +105,26 @@ func (a *runtimeAdapter) Apply(ctx context.Context, name string) error {
 		a.g.Advance()
 		return nil
 	}
-	prefix := e.Controller + "_" + e.Key
 	c := a.c[e.Controller]
+	if e.Kind == "sync" {
+		return c.Sync()
+	}
+	prefix := e.Controller + "_" + e.Key
 	key := request(a.key(e.Controller, e.Key))
+	if e.Kind == "tombstone" {
+		a.deleted[prefix] = true
+	}
+	if a.queue[e.Controller] == QueuePriority {
+		return a.applyPriority(ctx, e, prefix, c, key)
+	}
 	switch e.Kind {
-	case "enqueue":
+	case "enqueue", "tombstone":
 		if err := c.Enqueue(key); err != nil {
+			return err
+		}
+		a.queued(prefix, e.Controller)
+	case "list":
+		if err := c.EnqueueLow(key); err != nil {
 			return err
 		}
 		a.queued(prefix, e.Controller)
@@ -139,6 +165,20 @@ func (a *runtimeAdapter) Project(context.Context) (map[string]any, error) {
 	out := map[string]any{"now": a.g.Now()}
 	for _, c := range a.m.Profile.Controllers {
 		out[c.Name+"_next"] = a.next[c.Name]
+		if c.Startup {
+			out[c.Name+"_synced"] = a.c[c.Name].Synced()
+		}
+		if c.Deletion {
+			for _, k := range c.Keys {
+				out[c.Name+"_"+k.ID+"_deleted"] = a.deleted[c.Name+"_"+k.ID]
+			}
+		}
+		if a.queue[c.Name] == QueuePriority {
+			if err := a.projectPriority(c, out); err != nil {
+				return nil, err
+			}
+			continue
+		}
 		ready := 0
 		for _, k := range c.Keys {
 			prefix := c.Name + "_" + k.ID

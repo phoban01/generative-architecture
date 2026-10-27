@@ -7,13 +7,14 @@ import (
 	"github.com/go-logr/logr"
 	"k8s.io/client-go/util/workqueue"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/controller/priorityqueue"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sync"
 	"sync/atomic"
 	"time"
 )
 
-// Group coordinates real controllers with independent native FIFO queues and a
+// Group coordinates real controllers with independent native queues and a
 // shared logical clock. Each key has its own timer, retry count and invocation.
 // Scheduling methods are called by one driver; reconcilers run concurrently.
 type Group struct {
@@ -23,7 +24,13 @@ type Group struct {
 	controllers map[string]*Controller
 }
 type ControllerOptions struct {
-	Name       string
+	Name string
+	// Queue selects the native queue: QueueFIFO (the default) runs client-go's
+	// rate-limited FIFO queue, QueuePriority controller-runtime's priority queue.
+	Queue string
+	// Startup gives the controller a source that syncs only on Sync, so
+	// controller-runtime starts no worker before then.
+	Startup    bool
 	Workers    int
 	Keys       []reconcile.Request
 	RetryTicks int
@@ -34,8 +41,11 @@ type Controller struct {
 	name    string
 	workers int
 	keys    map[reconcile.Request]bool
-	queue   *multiGate
-	delay   *keyDelays
+	queue   workqueue.TypedRateLimitingInterface[reconcile.Request]
+	permits chan struct{}
+	delay   *keyDelays    // FIFO timers
+	pq      *priorityGate // priority queue, nil for FIFO
+	sync    *syncSource   // nil without Startup
 	entered chan *Invocation
 	stopped chan error
 	mu      sync.Mutex
@@ -46,12 +56,15 @@ type Invocation struct {
 	ID         string
 	Controller string
 	Key        reconcile.Request
-	Gate       *effect.Gate
-	ctx        context.Context
-	result     chan workerResult
-	release    chan struct{}
-	done       chan struct{}
-	finished   bool
+	// Priority is the priority the native priority queue handed the key out
+	// with. It is zero for a FIFO queue.
+	Priority int
+	Gate     *effect.Gate
+	ctx      context.Context
+	result   chan workerResult
+	release  chan struct{}
+	done     chan struct{}
+	finished bool
 }
 type workerResult struct {
 	Result reconcile.Result
@@ -88,13 +101,24 @@ func (g *Group) Add(o ControllerOptions) (*Controller, error) {
 		}
 		c.keys[key] = true
 	}
-	d := &keyDelays{TypedInterface: workqueue.NewTyped[reconcile.Request](), group: g, due: map[reconcile.Request]int64{}}
-	c.delay = d
-	native := workqueue.NewTypedRateLimitingQueueWithConfig(workqueue.NewTypedItemExponentialFailureRateLimiter[reconcile.Request](time.Duration(o.RetryTicks)*time.Second, time.Duration(o.RetryTicks)*time.Second), workqueue.TypedRateLimitingQueueConfig[reconcile.Request]{DelayingQueue: d})
-	c.queue = &multiGate{TypedRateLimitingInterface: native, owner: c, permits: make(chan struct{})}
-	yes, no := true, false
+	c.permits = make(chan struct{})
+	usePriority := false
+	switch o.Queue {
+	case "", QueueFIFO:
+		d := &keyDelays{TypedInterface: workqueue.NewTyped[reconcile.Request](), group: g, due: map[reconcile.Request]int64{}}
+		c.delay = d
+		native := workqueue.NewTypedRateLimitingQueueWithConfig(workqueue.NewTypedItemExponentialFailureRateLimiter[reconcile.Request](time.Duration(o.RetryTicks)*time.Second, time.Duration(o.RetryTicks)*time.Second), workqueue.TypedRateLimitingQueueConfig[reconcile.Request]{DelayingQueue: d})
+		c.queue = &multiGate{TypedRateLimitingInterface: native, owner: c}
+	case QueuePriority:
+		usePriority = true
+		c.pq = newPriorityGate(c, o.RetryTicks)
+		c.queue = c.pq
+	default:
+		return nil, fmt.Errorf("unknown queue %q", o.Queue)
+	}
+	yes := true
 	ready := make(chan struct{})
-	ctrl, err := controller.NewUnmanaged(o.Name, controller.Options{SkipNameValidation: &yes, UsePriorityQueue: &no, MaxConcurrentReconciles: o.Workers, Logger: logr.Discard(),
+	ctrl, err := controller.NewUnmanaged(o.Name, controller.Options{SkipNameValidation: &yes, UsePriorityQueue: &usePriority, MaxConcurrentReconciles: o.Workers, Logger: logr.Discard(),
 		NewQueue: func(string, workqueue.TypedRateLimiter[reconcile.Request]) workqueue.TypedRateLimitingInterface[reconcile.Request] {
 			close(ready)
 			return c.queue
@@ -103,6 +127,9 @@ func (g *Group) Add(o ControllerOptions) (*Controller, error) {
 			c.mu.Lock()
 			c.serial++
 			inv := &Invocation{ID: fmt.Sprintf("%s/%d", c.name, c.serial), Controller: c.name, Key: key, Gate: effect.NewGate(), ctx: ctx, result: make(chan workerResult, 1), release: make(chan struct{}), done: make(chan struct{})}
+			if c.pq != nil {
+				inv.Priority = c.pq.taken(key)
+			}
 			c.active[key] = inv
 			c.mu.Unlock()
 			ctx = context.WithValue(ctx, invocationKey{}, inv)
@@ -121,8 +148,12 @@ func (g *Group) Add(o ControllerOptions) (*Controller, error) {
 			}
 		}),
 	})
+	if err == nil && o.Startup {
+		c.sync = &syncSource{group: g, synced: make(chan struct{})}
+		err = ctrl.Watch(c.sync)
+	}
 	if err != nil {
-		native.ShutDown()
+		c.queue.ShutDown()
 		return nil, err
 	}
 	g.controllers[o.Name] = c
@@ -135,26 +166,32 @@ func (g *Group) Add(o ControllerOptions) (*Controller, error) {
 	}
 }
 
+// multiGate holds a FIFO queue's Get until the driver grants a permit.
 type multiGate struct {
 	workqueue.TypedRateLimitingInterface[reconcile.Request]
-	owner   *Controller
-	permits chan struct{}
+	owner *Controller
 }
 
 func (q *multiGate) Get() (reconcile.Request, bool) {
 	select {
 	case <-q.owner.group.ctx.Done():
 		return reconcile.Request{}, true
-	case <-q.permits:
+	case <-q.owner.permits:
 		return q.TypedRateLimitingInterface.Get()
 	}
 }
 func (q *multiGate) Done(key reconcile.Request) {
 	q.TypedRateLimitingInterface.Done(key)
-	q.owner.mu.Lock()
-	inv := q.owner.active[key]
-	delete(q.owner.active, key)
-	q.owner.mu.Unlock()
+	q.owner.finished(key)
+}
+
+// finished releases the driver waiting for the invocation of key after the
+// native queue's Done.
+func (c *Controller) finished(key reconcile.Request) {
+	c.mu.Lock()
+	inv := c.active[key]
+	delete(c.active, key)
+	c.mu.Unlock()
 	if inv != nil {
 		close(inv.done)
 	}
@@ -190,9 +227,37 @@ func (c *Controller) Enqueue(key reconcile.Request) error {
 	c.queue.Add(key)
 	return nil
 }
+
+// EnqueueLow adds key as an initial-list event does. A priority queue gets
+// it at LowPriority; a FIFO queue gets a plain Add, like controller-runtime's
+// handlers do for a queue that is not a priority queue.
+func (c *Controller) EnqueueLow(key reconcile.Request) error {
+	if !c.keys[key] {
+		return fmt.Errorf("key outside declared domain: %v", key)
+	}
+	if c.pq == nil {
+		c.queue.Add(key)
+		return nil
+	}
+	low := LowPriority
+	c.pq.AddWithOpts(priorityqueue.AddOpts{Priority: &low}, key)
+	return nil
+}
+
+// Ready is the native queue's length. A priority queue also counts ready
+// items whose key is still in progress.
 func (c *Controller) Ready() int                          { return c.queue.Len() }
 func (c *Controller) Retries(key reconcile.Request) int64 { return int64(c.queue.NumRequeues(key)) }
+
+// Queued reports whether key has a ready item in a priority queue. It is
+// false for a FIFO queue.
+func (c *Controller) Queued(key reconcile.Request) bool {
+	return c.pq != nil && c.pq.queued(key)
+}
 func (c *Controller) Due(key reconcile.Request) int64 {
+	if c.pq != nil {
+		return c.pq.due(key)
+	}
 	c.delay.mu.Lock()
 	defer c.delay.mu.Unlock()
 	v, ok := c.delay.due[key]
@@ -203,13 +268,21 @@ func (c *Controller) Due(key reconcile.Request) int64 {
 }
 func (c *Controller) Active() int { c.mu.Lock(); defer c.mu.Unlock(); return len(c.active) }
 
-// Start takes the actual next FIFO key; it never reorders the queue to fit a trace.
+// Start takes the key the native queue hands out next; it never reorders the
+// queue to fit a trace.
 func (c *Controller) Start() (*Invocation, error) {
-	if c.Ready() == 0 || c.Active() >= c.workers {
+	startable := c.Ready() > 0
+	if c.pq != nil {
+		startable = c.pq.startable()
+	}
+	if !c.Synced() {
+		return nil, fmt.Errorf("caches not synced")
+	}
+	if !startable || c.Active() >= c.workers {
 		return nil, fmt.Errorf("no ready key or all workers busy")
 	}
 	select {
-	case c.queue.permits <- struct{}{}:
+	case c.permits <- struct{}{}:
 	case <-c.group.ctx.Done():
 		return nil, c.group.ctx.Err()
 	}
@@ -246,6 +319,9 @@ func (inv *Invocation) Finish() (reconcile.Result, error, error) {
 func (g *Group) Now() int64 { return g.now.Load() }
 func (g *Group) Advance()   { g.now.Add(1) }
 func (c *Controller) Fire(key reconcile.Request) error {
+	if c.pq != nil {
+		return c.pq.fire(key)
+	}
 	c.delay.mu.Lock()
 	defer c.delay.mu.Unlock()
 	due, ok := c.delay.due[key]
