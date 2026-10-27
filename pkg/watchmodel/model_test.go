@@ -39,18 +39,22 @@ func object(resource ir.GVK, name string) ir.ObjectRef {
 }
 
 // baseSpec has one emitting action per resource and event kind, named
-// <event><Kind>, for example createChild.
+// <event><Kind>, for example createChild. updateChild changes status only;
+// specChild is an update that moves the generation.
 func baseSpec(t *testing.T, resources ...ir.GVK) model.Spec {
 	t.Helper()
 	spec := model.Spec{Name: "Watches", State: map[string]model.Variable{"steps": {Type: "int", Initial: "0"}}}
 	for _, r := range resources {
-		for _, ev := range []string{watchmodel.Create, watchmodel.Update, watchmodel.Delete} {
-			u, err := watchmodel.Emit(r, ev)
+		for _, a := range []struct {
+			name, event string
+			generation  bool
+		}{{"create", watchmodel.Create, false}, {"update", watchmodel.Update, false}, {"spec", watchmodel.Update, true}, {"delete", watchmodel.Delete, false}} {
+			u, err := watchmodel.Emit(r, a.event, a.generation)
 			if err != nil {
 				t.Fatal(err)
 			}
 			u["steps"] = "steps + 1"
-			spec.Actions = append(spec.Actions, model.Action{Name: ev + r.Kind, Guard: "true", Updates: u})
+			spec.Actions = append(spec.Actions, model.Action{Name: a.name + r.Kind, Guard: "true", Updates: u})
 		}
 	}
 	return spec
@@ -118,7 +122,7 @@ func TestAddEventStateAndDelivery(t *testing.T) {
 			check(t, run(t, spec, tc.actions...), tc.want)
 		})
 	}
-	if _, err := m.Next(map[string]any{"steps": int64(0), "parentEvent": "", "parentEventPending": false, "childEvent": "", "childEventPending": false}, "deliverParent"); err == nil {
+	if _, err := m.Next(run(t, spec), "deliverParent"); err == nil {
 		t.Error("delivery enabled without an event")
 	}
 }
@@ -158,7 +162,7 @@ func TestAddFailsClosed(t *testing.T) {
 }
 
 func TestEmitRejectsUnknownEvent(t *testing.T) {
-	if _, err := watchmodel.Emit(primary, "generic"); err == nil {
+	if _, err := watchmodel.Emit(primary, "generic", false); err == nil {
 		t.Fatal("accepted unknown event kind")
 	}
 }

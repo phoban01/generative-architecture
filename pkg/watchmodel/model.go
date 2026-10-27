@@ -68,18 +68,31 @@ func DeliverAction(resource ir.GVK) string { return "deliver" + resource.Kind }
 // object of resource. Callers merge them into the action that changes the
 // object. An update behind an undelivered create stays pending; an update
 // behind an undelivered update or delete coalesces with it.
-func Emit(resource ir.GVK, event string) (map[string]expr.Expression, error) {
+//
+// Every event moves the resource version. A create starts a new
+// generation; an update moves the generation only when generation is true,
+// as a spec change does and a status change does not.
+func Emit(resource ir.GVK, event string, generation bool) (map[string]expr.Expression, error) {
 	ev, pending := EventVar(resource), PendingVar(resource)
+	gen, rv := GenerationVar(resource), ResourceVersionVar(resource)
+	u := map[string]expr.Expression{rv: expr.Expression(rv + " + 1")}
 	switch event {
-	case Create, Delete:
-		return map[string]expr.Expression{ev: expr.Expression(fmt.Sprintf("%q", event)), pending: "false"}, nil
+	case Create:
+		u[ev], u[pending] = `"create"`, "false"
+		u[gen] = expr.Expression(gen + " + 1")
+		u[seen(gen)], u[seen(rv)] = u[gen], u[rv]
+	case Delete:
+		u[ev], u[pending] = `"delete"`, "false"
 	case Update:
-		return map[string]expr.Expression{
-			ev:      expr.Expression(fmt.Sprintf(`%s == "" ? "update" : %s`, ev, ev)),
-			pending: expr.Expression(fmt.Sprintf(`%s || %s == "create"`, pending, ev)),
-		}, nil
+		u[ev] = expr.Expression(fmt.Sprintf(`%s == "" ? "update" : %s`, ev, ev))
+		u[pending] = expr.Expression(fmt.Sprintf(`%s || %s == "create"`, pending, ev))
+		if generation {
+			u[gen] = expr.Expression(gen + " + 1")
+		}
+	default:
+		return nil, fmt.Errorf("unknown event kind %q; expected create, update or delete", event)
 	}
-	return nil, fmt.Errorf("unknown event kind %q; expected create, update or delete", event)
+	return u, nil
 }
 
 // resource is one watched resource with its object and rules.
@@ -156,6 +169,13 @@ func (g *generator) generate() (model.Spec, error) {
 		if err := g.addState(r.rules[0], PendingVar(r.gvk), boolFalse); err != nil {
 			return g.spec, err
 		}
+		for _, v := range []string{GenerationVar(r.gvk), ResourceVersionVar(r.gvk)} {
+			for _, name := range []string{v, seen(v)} {
+				if err := g.addState(r.rules[0], name, model.Variable{Type: "int", Initial: "0"}); err != nil {
+					return g.spec, err
+				}
+			}
+		}
 	}
 	for _, r := range g.resources {
 		action, err := g.deliver(r)
@@ -189,17 +209,28 @@ func (g *generator) deliver(r *resource) (model.Action, error) {
 		if w.Mapping.Kind == ir.MappingCustom {
 			return model.Action{}, diagnose(w, "mapping", "custom key mapping has no summary")
 		}
-		if len(w.Predicates) > 0 {
-			return model.Action{}, diagnose(w, "predicate", "predicates are not modelled yet")
+		pass, err := passes(r, w)
+		if err != nil {
+			return model.Action{}, err
 		}
 		t, err := g.route(r, w)
 		if err != nil {
 			return model.Action{}, err
 		}
 		for v, conditions := range t.hits {
-			hits[v] = append(hits[v], conditions...)
+			for _, c := range conditions {
+				hits[v] = append(hits[v], both(pass, c))
+			}
 		}
-		foreign = append(foreign, t.foreign...)
+		for _, c := range t.foreign {
+			foreign = append(foreign, both(pass, c))
+		}
+	}
+	// The delivered object becomes the ObjectOld of the next update. A
+	// create leaves the copy that Emit took at creation, so that an update
+	// pending behind it compares against the created object.
+	for _, v := range []string{GenerationVar(r.gvk), ResourceVersionVar(r.gvk)} {
+		updates[seen(v)] = expr.Expression(fmt.Sprintf(`%s == "create" ? %s : %s`, ev, seen(v), v))
 	}
 	for v, conditions := range hits {
 		updates[v] = raise(v, conditions)
@@ -208,6 +239,17 @@ func (g *generator) deliver(r *resource) (model.Action, error) {
 		updates[WrongKeyVar] = raise(WrongKeyVar, foreign)
 	}
 	return model.Action{Name: DeliverAction(r.gvk), Guard: expr.Expression(ev + ` != ""`), Updates: updates}, nil
+}
+
+// both conjoins two conditions, dropping a literal true.
+func both(a, b string) string {
+	switch {
+	case a == "true":
+		return b
+	case b == "true":
+		return a
+	}
+	return "(" + a + ") && (" + b + ")"
 }
 
 // raise sets flag when any condition holds and keeps it set otherwise.
