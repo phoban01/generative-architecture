@@ -15,8 +15,12 @@ import (
 type globals struct {
 	project string
 	out     string
-	stdout  io.Writer
-	stderr  io.Writer
+	// strict selects verification mode: unsupported constructs and
+	// unresolved facts in the selected packages fail the run. Without it
+	// arch runs in inventory mode and reports them (EVID-3).
+	strict bool
+	stdout io.Writer
+	stderr io.Writer
 }
 
 // exitError ends arch with a given status. A nonzero status other than 1
@@ -41,20 +45,15 @@ var commands = []command{
 	{"extract", "extract behaviour, effects and watches from Go source", runExtract},
 	{"generate", "generate models and workspaces from the extracted IR", runGenerate},
 	{"render", "build the LikeC4 site for a generated workspace", runRender},
-	{"serve", "serve the LikeC4 workspace for interactive viewing", runServe},
-	{"check", "replay hash-checked evidence without external tools", runCheck},
-	{"replay", "replay recorded traces against the implementation", runReplay},
+	{"serve", "serve the rendered LikeC4 site on localhost", runServe},
+	{"check", "sample the generated model with Quint and check its properties", runCheck},
+	{"replay", "replay saved traces against the generated model", runReplay},
 	{"diff", "compare generated artifacts with the committed ones", runDiff},
 	{"support", "report included, summarized and unsupported constructs", runSupport},
 }
 
-// notImplemented is returned by every subcommand until its milestone lands.
-func notImplemented(name string) error {
-	return fmt.Errorf("arch %s: %w: not implemented; tracked in milestone M7", name, errors.ErrUnsupported)
-}
-
 func usage(w io.Writer, fs *flag.FlagSet) {
-	fmt.Fprintln(w, "usage: arch [--project <path>] [--out <dir>] <command> [args]")
+	fmt.Fprintln(w, "usage: arch [--project <path>] [--out <dir>] [--strict] <command> [args]")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "commands:")
 	names := make([]command, len(commands))
@@ -77,6 +76,7 @@ func run(args []string, stdout, stderr io.Writer) error {
 	g := globals{stdout: stdout, stderr: stderr}
 	fs.StringVar(&g.project, "project", "project.yaml", "project document to operate on")
 	fs.StringVar(&g.out, "out", "generated", "directory for generated artifacts")
+	fs.BoolVar(&g.strict, "strict", false, "verification mode: fail on unsupported constructs and unresolved facts in the selected packages (extract, generate, check, support)")
 	fs.Usage = func() { usage(stderr, fs) }
 	if err := fs.Parse(args); err != nil {
 		return err

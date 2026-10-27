@@ -50,6 +50,7 @@ func runExtract(g globals, args []string) error {
 	if err != nil {
 		return fmt.Errorf("arch extract: %w", err)
 	}
+	support.Unresolved = append(support.Unresolved, unresolvedFacts(doc)...)
 	if err := os.MkdirAll(g.out, 0o755); err != nil {
 		return err
 	}
@@ -63,7 +64,13 @@ func runExtract(g globals, args []string) error {
 		}
 		return fmt.Errorf("arch extract: %w: %d found, listed in %s", errUnsupported, n, filepath.Join(g.out, supportFile))
 	}
-	return doc.Write(irPath, p.Name)
+	if err := doc.Write(irPath, p.Name); err != nil {
+		return err
+	}
+	if err := enforce(g, p, *support); err != nil {
+		return fmt.Errorf("arch extract: %w", err)
+	}
+	return nil
 }
 
 // extract assembles the IR and the support report of a loaded project.

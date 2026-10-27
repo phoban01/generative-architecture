@@ -29,13 +29,31 @@ type Item struct {
 	Location  Location `yaml:"location"`
 }
 
-// Support classifies the constructs of a project into three buckets.
+// Support classifies the constructs of a project into three buckets and
+// lists the facts whose evidence is unresolved (EVID-3). Inventory mode
+// reports unsupported and unresolved items; verification mode fails on
+// them.
 type Support struct {
 	// Name is the document's metadata.name; empty means "support".
 	Name        string `yaml:"-"`
 	Included    []Item `yaml:"included"`
 	Summarized  []Item `yaml:"summarized"`
 	Unsupported []Item `yaml:"unsupported"`
+	Unresolved  []Item `yaml:"unresolved,omitempty"`
+}
+
+// Blocking lists the unsupported and unresolved items that inScope
+// accepts: what verification mode fails on.
+func (s Support) Blocking(inScope func(Location) bool) []Item {
+	var out []Item
+	for _, items := range [][]Item{s.Unsupported, s.Unresolved} {
+		for _, it := range items {
+			if inScope(it.Location) {
+				out = append(out, it)
+			}
+		}
+	}
+	return out
 }
 
 // Buckets are the accepted values of the kind argument to Add.
@@ -43,6 +61,7 @@ const (
 	Included    = "included"
 	Summarized  = "summarized"
 	Unsupported = "unsupported"
+	Unresolved  = "unresolved"
 )
 
 // Add places item in the named bucket.
@@ -54,8 +73,10 @@ func (s *Support) Add(kind string, item Item) error {
 		s.Summarized = append(s.Summarized, item)
 	case Unsupported:
 		s.Unsupported = append(s.Unsupported, item)
+	case Unresolved:
+		s.Unresolved = append(s.Unresolved, item)
 	default:
-		return fmt.Errorf("unknown support bucket %q; expected included, summarized or unsupported", kind)
+		return fmt.Errorf("unknown support bucket %q; expected included, summarized, unsupported or unresolved", kind)
 	}
 	return nil
 }
@@ -63,7 +84,7 @@ func (s *Support) Add(kind string, item Item) error {
 // Sort orders every bucket by file, line and construct so the written
 // document is deterministic regardless of extraction order.
 func (s *Support) Sort() {
-	for _, items := range [][]Item{s.Included, s.Summarized, s.Unsupported} {
+	for _, items := range [][]Item{s.Included, s.Summarized, s.Unsupported, s.Unresolved} {
 		sort.SliceStable(items, func(i, j int) bool {
 			a, b := items[i], items[j]
 			if a.Location.File != b.Location.File {
