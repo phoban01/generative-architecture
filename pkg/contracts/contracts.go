@@ -7,6 +7,7 @@ import (
 	"generative-architecture/pkg/goflow"
 	"generative-architecture/pkg/krm"
 	"go/ast"
+	"go/token"
 	"go/types"
 	"golang.org/x/tools/go/packages"
 	"os"
@@ -120,15 +121,25 @@ func Inspect(root string, definitions []Definition, patterns []string, external 
 	if len(all) == 0 {
 		return nil, fmt.Errorf("packages or external selectors required")
 	}
-	pkgs, err := packages.Load(&packages.Config{Dir: root, Mode: packages.NeedName | packages.NeedFiles | packages.NeedSyntax | packages.NeedTypes | packages.NeedTypesInfo | packages.NeedImports | packages.NeedDeps | packages.NeedModule}, all...)
+	// GOPROXY=off keeps selectors offline: a module missing from the module
+	// cache fails instead of being fetched (EXT-5).
+	pkgs, err := packages.Load(&packages.Config{Dir: root, Env: append(os.Environ(), "GOPROXY=off"), Mode: packages.NeedName | packages.NeedFiles | packages.NeedSyntax | packages.NeedTypes | packages.NeedTypesInfo | packages.NeedImports | packages.NeedDeps | packages.NeedModule}, all...)
 	if err != nil {
 		return nil, err
 	}
 	byName := map[string]*packages.Package{}
 	implementations := append([]Implementation(nil), external...)
 	origins := map[string]string{}
+	locations := map[string]string{}
+	selected := map[string]bool{}
+	for _, x := range external {
+		selected[x.Package] = true
+	}
 	for _, p := range pkgs {
 		if len(p.Errors) > 0 {
+			if selected[p.PkgPath] && p.Module == nil {
+				return nil, fmt.Errorf("external selector package %s: not resolvable from the module graph or module cache; add its module to go.mod (selectors never fetch): %s", p.PkgPath, p.Errors[0])
+			}
 			return nil, fmt.Errorf("typecheck %s: %s", p.PkgPath, p.Errors[0])
 		}
 		byName[p.PkgPath] = p
@@ -156,6 +167,7 @@ func Inspect(root string, definitions []Definition, patterns []string, external 
 							impl := Implementation{Contract: ref, Package: p.PkgPath, Type: ts.Name.Name}
 							implementations = append(implementations, impl)
 							origins[p.PkgPath+"."+ts.Name.Name+":"+ref] = "marker"
+							locations[p.PkgPath+"."+ts.Name.Name+":"+ref] = relPosition(root, p.Fset.Position(comment.Pos()))
 						}
 					}
 				}
@@ -178,25 +190,30 @@ func Inspect(root string, definitions []Definition, patterns []string, external 
 	}
 	out := []Evidence{}
 	seen := map[string]bool{}
-	for _, impl := range implementations {
+	for i, impl := range implementations {
+		// Diagnostics name the marker position or the external selector.
+		where := fmt.Sprintf("external selector %s.%s for %s", impl.Package, impl.Type, impl.Contract)
+		if i >= len(external) {
+			where = locations[impl.Package+"."+impl.Type+":"+impl.Contract] + ": +arch:implements=" + impl.Contract
+		}
 		d, ok := defs[impl.Contract]
 		if !ok {
-			return nil, fmt.Errorf("unknown contract %s", impl.Contract)
+			return nil, fmt.Errorf("%s: unknown contract %s", where, impl.Contract)
 		}
 		p := byName[impl.Package]
 		if p == nil {
-			return nil, fmt.Errorf("unknown selected package %s", impl.Package)
+			return nil, fmt.Errorf("%s: unknown selected package %s", where, impl.Package)
 		}
 		object := p.Types.Scope().Lookup(impl.Type)
 		if object == nil {
-			return nil, fmt.Errorf("type %s not found", impl.Type)
+			return nil, fmt.Errorf("%s: type %s not found in %s", where, impl.Type, p.PkgPath)
 		}
 		if _, ok := object.(*types.TypeName); !ok {
-			return nil, fmt.Errorf("selector is not a type")
+			return nil, fmt.Errorf("%s: selector is not a type", where)
 		}
 		id := p.PkgPath + "." + impl.Type + ":" + impl.Contract
 		if seen[id] {
-			return nil, fmt.Errorf("duplicate contract implementation %s", id)
+			return nil, fmt.Errorf("%s: duplicate contract implementation %s", where, id)
 		}
 		seen[id] = true
 		evidence := Evidence{Contract: impl.Contract, GoType: p.PkgPath + "." + impl.Type, JSONPaths: map[string]string{}, SourceHashes: map[string]string{}, Origin: origins[id]}
@@ -215,17 +232,17 @@ func Inspect(root string, definitions []Definition, patterns []string, external 
 			}
 			t, jsonPath, err := field(object.Type(), path)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("%s: field %s: %w", where, logical, err)
 			}
 			if got := primitive(t); got != want {
-				return nil, fmt.Errorf("%s field %s: expected %s, got %s", impl.Contract, logical, want, t)
+				return nil, fmt.Errorf("%s: field %s: expected %s, got %s", where, logical, want, t)
 			}
 			evidence.JSONPaths[logical] = jsonPath
 			shapes = append(shapes, logical+":"+jsonPath+":"+types.TypeString(t, nil))
 		}
 		for logical := range impl.Fields {
 			if _, ok := d.Fields[logical]; !ok {
-				return nil, fmt.Errorf("unknown mapped contract field %s", logical)
+				return nil, fmt.Errorf("%s: unknown mapped contract field %s", where, logical)
 			}
 		}
 		// Hash the resolved contract paths, including fields of imported structs.
@@ -236,11 +253,11 @@ func Inspect(root string, definitions []Definition, patterns []string, external 
 			if err != nil {
 				return nil, err
 			}
-			rel, err := filepath.Rel(root, path)
+			key, err := sourceKey(root, p.Module, path)
 			if err != nil {
 				return nil, err
 			}
-			evidence.SourceHashes[filepath.ToSlash(rel)] = goflow.Hash(b)
+			evidence.SourceHashes[key] = goflow.Hash(b)
 		}
 		out = append(out, evidence)
 	}
@@ -255,4 +272,35 @@ func packageNames(xs []Implementation) []string {
 		out = append(out, x.Package)
 	}
 	return out
+}
+
+// relPosition reports a source position relative to root, for diagnostics.
+func relPosition(root string, pos token.Position) string {
+	if rel, err := filepath.Rel(root, pos.Filename); err == nil && !strings.HasPrefix(rel, "..") {
+		pos.Filename = filepath.ToSlash(rel)
+	}
+	return pos.String()
+}
+
+// sourceKey names a hashed source file. A file of a dependency module is
+// named module@version/path, so the key does not depend on the location of
+// the module cache. A file of the main module is named relative to root.
+func sourceKey(root string, m *packages.Module, path string) (string, error) {
+	if m != nil && !m.Main {
+		dir, version := m.Dir, m.Version
+		if m.Replace != nil {
+			dir = m.Replace.Dir
+			if m.Replace.Version != "" {
+				version = m.Replace.Version
+			}
+		}
+		if rel, err := filepath.Rel(dir, path); err == nil && dir != "" && !strings.HasPrefix(rel, "..") {
+			return m.Path + "@" + version + "/" + filepath.ToSlash(rel), nil
+		}
+	}
+	rel, err := filepath.Rel(root, path)
+	if err != nil {
+		return "", err
+	}
+	return filepath.ToSlash(rel), nil
 }
