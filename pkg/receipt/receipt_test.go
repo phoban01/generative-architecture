@@ -187,3 +187,28 @@ func TestCollectRejectsInexactVersionsAndMissingInputs(t *testing.T) {
 		t.Error("verify without root accepted")
 	}
 }
+
+func TestSamplingValidate(t *testing.T) {
+	for name, c := range map[string]struct {
+		s  Sampling
+		ok bool
+	}{
+		"uniform":          {Sampling{Samples: 40, Steps: 60, Seed: 1, Strategy: "uniform"}, true},
+		"weighted":         {Sampling{Samples: 40, Steps: 60, Strategy: "weighted", Weights: map[string]int{"a": 8}}, true},
+		"no strategy":      {Sampling{Samples: 40, Steps: 60}, false},
+		"unknown strategy": {Sampling{Samples: 40, Steps: 60, Strategy: "exhaustive"}, false},
+		"zero samples":     {Sampling{Steps: 60, Strategy: "uniform"}, false},
+		"uniform weights":  {Sampling{Samples: 1, Steps: 1, Strategy: "uniform", Weights: map[string]int{"a": 2}}, false},
+		"weighted no map":  {Sampling{Samples: 1, Steps: 1, Strategy: "weighted"}, false},
+		"weighted zero":    {Sampling{Samples: 1, Steps: 1, Strategy: "weighted", Weights: map[string]int{"a": 0}}, false},
+		"weighted unnamed": {Sampling{Samples: 1, Steps: 1, Strategy: "weighted", Weights: map[string]int{"": 2}}, false},
+	} {
+		if err := c.s.Validate(); (err == nil) != c.ok {
+			t.Errorf("%s: Validate() = %v", name, err)
+		}
+		r := Receipt{Module: "m", Packages: []string{"./..."}, Files: []File{{Path: "a.go", SHA256: strings.Repeat("0", 64)}}, Tools: map[string]string{"go": "go1.26.8"}, Sampling: &c.s}
+		if err := r.Validate(); (err == nil) != c.ok {
+			t.Errorf("%s: receipt Validate() = %v", name, err)
+		}
+	}
+}

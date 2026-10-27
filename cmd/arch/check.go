@@ -34,6 +34,8 @@ func runCheck(g globals, args []string) error {
 	steps := fs.Int("steps", 60, "maximum steps per trace")
 	seed := fs.Int64("seed", 1, "Quint random seed")
 	mutations := fs.String("mutations", "", "MutationSuite document to list in the report")
+	steerWeight := fs.Int("steer-weight", 0, "weight of internal process steps and effect outcomes against other actions (0: uniform sampling)")
+	steerExcept := fs.String("steer-except", "", "comma-separated effect outcomes that keep weight 1 under --steer-weight, for example error")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -42,6 +44,9 @@ func runCheck(g globals, args []string) error {
 	}
 	if *samples <= 0 || *steps <= 0 {
 		return fmt.Errorf("arch check: --samples and --steps must be positive")
+	}
+	if *steerExcept != "" && *steerWeight == 0 {
+		return fmt.Errorf("arch check: --steer-except needs --steer-weight")
 	}
 	var suite *mutation.Suite
 	if *mutations != "" {
@@ -56,17 +61,29 @@ func runCheck(g globals, args []string) error {
 		return fmt.Errorf("arch check: %w", err)
 	}
 	sampling := report.Sampling{Samples: *samples, Steps: *steps, Seed: *seed}
-	scope := fmt.Sprintf("bounded simulation of the generated model with Quint: %d traces of at most %d steps from seed %d, properties checked on every sampled state; not exhaustive verification; no implementation replay", *samples, *steps, *seed)
+	opts := quint.Options{Samples: *samples, Steps: *steps, Seed: *seed}
+	if *steerWeight != 0 && len(findings) == 0 {
+		var except []string
+		if *steerExcept != "" {
+			except = strings.Split(*steerExcept, ",")
+		}
+		if opts.Steering, err = quint.PreferProcess(ev.model, *steerWeight, except...); err != nil {
+			return fmt.Errorf("arch check: --steer-weight: %w", err)
+		}
+	}
+	scope := fmt.Sprintf("bounded simulation of the generated model with Quint: %d traces of at most %d steps from seed %d, %s sampling, properties checked on every sampled state; not exhaustive verification; no implementation replay", *samples, *steps, *seed, opts.Steering.Strategy())
 	tools := map[string]string{"go": runtime.Version()}
 	if len(findings) == 0 {
 		var version string
-		version, findings = sample(g, ev, sampling)
+		version, findings = sample(g, ev, opts)
 		if version != "" {
 			tools["quint"] = version
 		}
 	}
 	v := ev.verification(scope, tools)
 	v.Sampling = &sampling
+	record := opts.Record()
+	v.Receipt.Sampling = &record
 	v.Findings = findings
 	if len(findings) == 0 {
 		v.Findings = check(g, ev, &v)
@@ -84,10 +101,10 @@ func runCheck(g globals, args []string) error {
 // findings: a violated invariant is a safety finding, any other failure
 // (a missing binary, a version outside the supported range) a tool
 // finding.
-func sample(g globals, ev evidence, s report.Sampling) (string, []report.Finding) {
+func sample(g globals, ev evidence, opts quint.Options) (string, []report.Finding) {
 	ctx, cancel := context.WithTimeout(context.Background(), checkTimeout)
 	defer cancel()
-	result, err := quint.Sample(ctx, ev.model, quint.Options{Samples: s.Samples, Steps: s.Steps, Seed: s.Seed})
+	result, err := quint.Sample(ctx, ev.model, opts)
 	if err != nil {
 		category := report.CategoryTool
 		if strings.Contains(err.Error(), "[violation]") {

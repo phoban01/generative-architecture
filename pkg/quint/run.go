@@ -30,6 +30,9 @@ type Options struct {
 	// MinVersion (inclusive) and MaxVersion (exclusive) override the default
 	// supported range. Leave empty to use DefaultMinVersion/DefaultMaxVersion.
 	MinVersion, MaxVersion string
+	// Steering selects how Quint draws the next action. The zero value
+	// samples the model's step relation uniformly.
+	Steering Steering
 }
 
 // Supported reports whether a `quint --version` string lies within the
@@ -75,11 +78,17 @@ type Result struct {
 }
 
 // Sample produces bounded simulation traces. It is not exhaustive verification.
+// A steered strategy changes how often Quint draws each action, not the
+// transition relation: Sample keeps every trace, and each is a trace of m.
 // The caller owns timeouts. Version checks fail closed against the supported CLI.
 func Sample(ctx context.Context, m *model.Compiled, opts Options) (Result, error) {
 	var result Result
 	if opts.Samples <= 0 || opts.Steps <= 0 {
 		return result, fmt.Errorf("positive sample and step bounds required")
+	}
+	src, err := opts.Steering.module(m)
+	if err != nil {
+		return result, err
 	}
 	exe := opts.Executable
 	if exe == "" {
@@ -94,7 +103,7 @@ func Sample(ctx context.Context, m *model.Compiled, opts Options) (Result, error
 	}
 	defer os.RemoveAll(dir)
 	path := filepath.Join(dir, "Model.qnt")
-	if err = os.WriteFile(path, []byte(m.Quint()), 0600); err != nil {
+	if err = os.WriteFile(path, []byte(src), 0600); err != nil {
 		return result, err
 	}
 	run := func(args ...string) ([]byte, error) {
@@ -115,7 +124,7 @@ func Sample(ctx context.Context, m *model.Compiled, opts Options) (Result, error
 	if _, err = run("typecheck", path); err != nil {
 		return result, err
 	}
-	_, err = run("run", path, "--backend", "typescript", "--max-samples", strconv.Itoa(opts.Samples), "--n-traces", strconv.Itoa(opts.Samples), "--max-steps", strconv.Itoa(opts.Steps), "--seed", strconv.FormatInt(opts.Seed, 10), "--invariant", "safety", "--out-itf", filepath.Join(dir, "trace-{seq}.itf.json"), "--verbosity", "1")
+	_, err = run("run", path, "--backend", "typescript", "--max-samples", strconv.Itoa(opts.Samples), "--n-traces", strconv.Itoa(opts.Samples), "--max-steps", strconv.Itoa(opts.Steps), "--step", opts.Steering.stepName(), "--seed", strconv.FormatInt(opts.Seed, 10), "--invariant", "safety", "--out-itf", filepath.Join(dir, "trace-{seq}.itf.json"), "--verbosity", "1")
 	if err != nil {
 		return result, err
 	}

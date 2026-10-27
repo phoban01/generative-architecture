@@ -18,6 +18,8 @@ type Stats struct {
 	Checks int `yaml:"checks"`
 	// Coverage counts transitions per action.
 	Coverage map[string]int `yaml:"coverage"`
+	// Reached counts, per action, the traces that take it at least once.
+	Reached map[string]int `yaml:"reached"`
 }
 
 // Differential replays Quint ITF traces through the original CEL of m: from
@@ -28,7 +30,7 @@ type Stats struct {
 // step and event. It is sampled evidence for any TransitionModel, not a
 // proof of translation equivalence, and fails closed on an empty input.
 func Differential(m *model.Compiled, traces []conformance.Trace) (Stats, error) {
-	stats := Stats{Coverage: map[string]int{}}
+	stats := Stats{Coverage: map[string]int{}, Reached: map[string]int{}}
 	if m == nil {
 		return stats, tool(0, "", fmt.Errorf("compiled model required"))
 	}
@@ -59,6 +61,13 @@ func Differential(m *model.Compiled, traces []conformance.Trace) (Stats, error) 
 				return stats, tool(i, state.Event, fmt.Errorf("trace %d step %d (%s): CEL rejects a state Quint accepted: %w", n, i, state.Event, err))
 			}
 			stats.Checks++
+		}
+		reached := map[string]bool{}
+		for _, state := range trace.States[1:] {
+			reached[state.Event] = true
+		}
+		for event := range reached {
+			stats.Reached[event]++
 		}
 		stats.Traces++
 	}

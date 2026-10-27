@@ -62,6 +62,49 @@ type Receipt struct {
 	// them is itself an input whose hash is compared.
 	Bounds   map[string]int `yaml:"bounds,omitempty"`
 	Excludes []string       `yaml:"excludes,omitempty"`
+	// Sampling records how sampled traces were drawn. Like Bounds it
+	// qualifies the evidence, and Compare ignores it.
+	Sampling *Sampling `yaml:"sampling,omitempty"`
+}
+
+// Sampling records the bounds and strategy of a sampled run: how many
+// traces of at most how many steps, from which seed, and how the next
+// action was drawn. A weighted strategy lists the actions it weighted;
+// every other action has weight 1. Sampled evidence is bounded, never
+// exhaustive.
+type Sampling struct {
+	Samples  int            `yaml:"samples"`
+	Steps    int            `yaml:"steps"`
+	Seed     int64          `yaml:"seed"`
+	Strategy string         `yaml:"strategy"`
+	Weights  map[string]int `yaml:"weights,omitempty"`
+}
+
+// Validate requires positive bounds and a known strategy with consistent
+// parameters: "uniform" has no weights; "weighted" has named, positive
+// weights.
+func (s Sampling) Validate() error {
+	if s.Samples <= 0 || s.Steps <= 0 {
+		return fmt.Errorf("receipt: sampling bounds must be positive, got %d samples of %d steps", s.Samples, s.Steps)
+	}
+	switch s.Strategy {
+	case "uniform":
+		if len(s.Weights) > 0 {
+			return fmt.Errorf("receipt: uniform sampling takes no weights")
+		}
+	case "weighted":
+		if len(s.Weights) == 0 {
+			return fmt.Errorf("receipt: weighted sampling needs weights")
+		}
+		for name, w := range s.Weights {
+			if name == "" || w <= 0 {
+				return fmt.Errorf("receipt: sampling weight %q must be named and positive, got %d", name, w)
+			}
+		}
+	default:
+		return fmt.Errorf("receipt: unknown sampling strategy %q", s.Strategy)
+	}
+	return nil
 }
 
 // Drift is one difference between a receipt and the current inputs.
@@ -320,6 +363,11 @@ func (r Receipt) Validate() error {
 	for name, n := range r.Bounds {
 		if name == "" || n <= 0 {
 			return fmt.Errorf("receipt: bound %q must be named and positive, got %d", name, n)
+		}
+	}
+	if r.Sampling != nil {
+		if err := r.Sampling.Validate(); err != nil {
+			return err
 		}
 	}
 	return checkTools(r.Tools)
