@@ -10,6 +10,7 @@ import (
 	"github.com/phoban01/generative-architecture/pkg/conformance"
 	"github.com/phoban01/generative-architecture/pkg/krm"
 	"github.com/phoban01/generative-architecture/pkg/model"
+	"github.com/phoban01/generative-architecture/pkg/mutation"
 )
 
 // committedModel loads the generated model the evidence was produced from.
@@ -96,18 +97,24 @@ func TestUnmutatedDetectsNothing(t *testing.T) {
 	}
 }
 
-// The mutation suite compiles each mutant with the go command and replays
-// the committed evidence through it: both mutations must be detected by the
-// expected divergence.
+// The mutation suite regenerates the model from each mutant and compiles
+// each mutant with the go command to replay the committed evidence through
+// it. Every expectation must be met, and the test records which detector
+// caught each mutation: the adapter change leaves the model unchanged, so
+// only replay sees it.
 func TestMutationsDetected(t *testing.T) {
 	if testing.Short() {
 		t.Skip("compiles one mutant per mutation")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
-	suite, matrix, err := RunMutations(ctx, filepath.Join("..", ".."), ".")
+	suite, matrix, detections, err := RunMutationDetectors(ctx, filepath.Join("..", ".."), ".")
 	if err != nil {
 		t.Fatal(err)
+	}
+	t.Logf("detections:\n%s", detections)
+	if got, want := suite.CaughtBy(detections), map[string][]string{"direct-source": {"replay"}, "wrong-write": {"model", "replay"}}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("caught by %v, want %v\n%s", got, want, detections)
 	}
 	var names []string
 	for _, m := range suite.Spec.Mutations {
@@ -120,6 +127,26 @@ func TestMutationsDetected(t *testing.T) {
 		t.Fatalf("escaped mutations %v; matrix:\n%s", escaped, matrix)
 	}
 	t.Logf("detection matrix:\n%s", matrix)
+}
+
+// The model detector alone needs no build: the wrong-write mutant,
+// regenerated from overlaid source, violates writesObservedValue, and the
+// adapter change leaves the model and its properties untouched.
+func TestRebuiltModelDetectsWrongWrite(t *testing.T) {
+	suite, err := mutation.Load(MutationsFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, detections, err := mutation.RunDetectors(suite, ModelDetector("."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := detections["wrong-write"]["writesObservedValue"]; !reflect.DeepEqual(got, []string{"model"}) {
+		t.Fatalf("wrong-write detections:\n%s", detections)
+	}
+	if len(detections["direct-source"]) != 0 {
+		t.Fatalf("the adapter change altered the model:\n%s", detections)
+	}
 }
 
 func TestCancelAtEveryBoundary(t *testing.T) {

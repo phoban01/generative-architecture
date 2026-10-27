@@ -6,7 +6,6 @@ import (
 	"go/ast"
 	"go/constant"
 	"go/types"
-	"os"
 	"reflect"
 	"slices"
 	"strconv"
@@ -24,7 +23,7 @@ func ExtractTyped(l Loaded, opts Options) (*Program, error) {
 	if l.Func == nil || l.Func.Body == nil {
 		return nil, fmt.Errorf("ExtractTyped requires a method with a body")
 	}
-	source, err := os.ReadFile(l.Path)
+	source, err := l.source()
 	if err != nil {
 		return nil, err
 	}

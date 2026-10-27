@@ -41,7 +41,7 @@ func FieldAction(spec abstraction.Spec, name, operation, objectID, variable, lit
 			case !ok:
 				return EnvAction{}, fmt.Errorf("environment action %s: field %s compares to %s, which is not a string literal", name, f.Key(), f.Equals)
 			case literal == "true":
-				a.Values = []FieldValue{{Path: append([]string(nil), f.Path...), Value: compared}}
+				a.Values = []FieldValue{{Path: abstraction.JSONPath(f.Path), Value: compared}}
 			case literal == "false" && operation == ActionCreate:
 			default:
 				return EnvAction{}, fmt.Errorf("environment action %s: cannot %s predicate %s to %s", name, operation, f.Key(), literal)
@@ -51,7 +51,7 @@ func FieldAction(spec abstraction.Spec, name, operation, objectID, variable, lit
 			if err != nil {
 				return EnvAction{}, fmt.Errorf("environment action %s: value %s is not a string literal", name, literal)
 			}
-			a.Values = []FieldValue{{Path: append([]string(nil), f.Path...), Value: v}}
+			a.Values = []FieldValue{{Path: abstraction.JSONPath(f.Path), Value: v}}
 		default:
 			return EnvAction{}, fmt.Errorf("environment action %s: field %s has type %s; only string and predicate fields are supported", name, f.Key(), f.Type)
 		}

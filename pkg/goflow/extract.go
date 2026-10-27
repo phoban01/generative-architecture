@@ -82,7 +82,14 @@ type Options struct {
 	External               map[Callee]ir.Effect
 	Call                   func(Callee, *ast.CallExpr, Convert) (Node, bool, error)
 	Field                  func(root string, jsonPath []string) (expr.Expression, bool)
-	Statement              func(ast.Stmt, Convert) (Node, bool, error)
+	// MapKeys names the selected keys of the map field at jsonPath of
+	// root. A map-literal assignment to that field replaces the whole map,
+	// so each selected key it omits takes its absent value. Without
+	// MapKeys the frontend cannot know the other selected keys and updates
+	// only the listed ones; a caller whose abstraction selects several keys
+	// of one map must set it.
+	MapKeys   func(root string, jsonPath []string) []string
+	Statement func(ast.Stmt, Convert) (Node, bool, error)
 }
 
 func Code(n ast.Node) string {

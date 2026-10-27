@@ -6,11 +6,12 @@ spec:
   # mutation_test.go generates the model from each mutated source and runs
   # two detectors. The model detector runs the five schedules of the
   # mutated model and names each constraint in constraints.yaml that a
-  # state violates. The native detector replays the schedules of the
+  # state violates. The replay detector replays the schedules of the
   # unchanged model through the mutated watches and the native
   # controller-runtime handlers. It names each observed model variable
   # that diverges. Replay runs the compiled controller, so only a wiring
-  # change can make it diverge.
+  # change can make it diverge. The test records which detector caught
+  # each mutation.
   mutations:
     # The controller creates an instance for an incompatible Database.
     - name: contract-check

@@ -4,6 +4,7 @@ import (
 	"github.com/phoban01/generative-architecture/pkg/expr"
 	"go/ast"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"sync"
@@ -186,5 +187,54 @@ func TestCallResolvesCalleeBySymbol(t *testing.T) {
 	}
 	if !reflect.DeepEqual(typed, text) {
 		t.Fatalf("typed and text programs differ:\n%+v\n%+v", typed, text)
+	}
+}
+
+// An overlay replaces a file's content for type checking and extraction
+// without writing to disk: the changed branch condition reaches the
+// program, and the file on disk still yields the original one.
+func TestLoadWithOverlayRebuildsProgram(t *testing.T) {
+	const file = "pkg/goflow/testdata/typed/retries.go"
+	selector := Selector{Package: "./pkg/goflow/testdata/typed", Receiver: "Controller", Method: "Retry"}
+	opts := func() Options {
+		return Options{Scope: map[string]expr.Symbol{"attempts": {Type: "int", Quint: "attempts"}}, Returns: []Return{{Type: "bool"}}}
+	}
+	original, err := os.ReadFile(filepath.Join(moduleRoot(t), file))
+	if err != nil {
+		t.Fatal(err)
+	}
+	mutated := strings.Replace(string(original), "attempts >= maxRetries", "attempts < maxRetries", 1)
+	if mutated == string(original) {
+		t.Fatal("the mutation does not apply")
+	}
+	l, err := LoadWith(moduleRoot(t), selector, LoadOptions{Overlay: map[string][]byte{file: []byte(mutated)}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(l.Source) != mutated {
+		t.Fatal("Loaded.Source is not the overlay")
+	}
+	p, err := ExtractTyped(l, opts())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := p.Nodes[p.Entry].Expression; got != "(attempts < 3)" {
+		t.Fatalf("overlay branch %q", got)
+	}
+	base, err := ExtractTyped(loadFixture(t, selector.Package, selector.Receiver, selector.Method), opts())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := base.Nodes[base.Entry].Expression; got != "(attempts >= 3)" {
+		t.Fatalf("disk branch %q", got)
+	}
+	if p.SourceSHA256 == base.SourceSHA256 {
+		t.Fatal("source hash ignores the overlay")
+	}
+	// A path outside the loaded packages would be silently ignored, so it
+	// is an error.
+	_, err = LoadWith(moduleRoot(t), selector, LoadOptions{Overlay: map[string][]byte{"pkg/goflow/testdata/external/reconciler.go": []byte(mutated)}})
+	if err == nil || !strings.Contains(err.Error(), "is not a Go file of the loaded packages") {
+		t.Fatalf("unused overlay accepted: %v", err)
 	}
 }

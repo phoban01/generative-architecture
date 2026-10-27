@@ -349,11 +349,18 @@ const (
 // The package is loaded from root itself; inputs_test.go checks that
 // project.yaml selects exactly this package and constraints document.
 func Generate(root string) (model.Spec, error) {
+	return GenerateOverlay(root, nil)
+}
+
+// GenerateOverlay is Generate with Go source files replaced by overlay
+// (see goflow.LoadOptions), so a mutated controller rebuilds the model
+// without being written to disk.
+func GenerateOverlay(root string, overlay map[string][]byte) (model.Spec, error) {
 	abs, err := abstraction.Load(filepath.Join(root, "abstraction.yaml"))
 	if err != nil {
 		return model.Spec{}, err
 	}
-	l, err := goflow.Load(root, goflow.Selector{Package: ".", Receiver: "Reconciler", Method: "Reconcile"})
+	l, err := goflow.LoadWith(root, goflow.Selector{Package: ".", Receiver: "Reconciler", Method: "Reconcile"}, goflow.LoadOptions{Overlay: overlay})
 	if err != nil {
 		return model.Spec{}, err
 	}

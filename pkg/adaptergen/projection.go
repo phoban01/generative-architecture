@@ -68,7 +68,7 @@ func FromAbstraction(a abstraction.Abstraction) []Projection {
 // abstraction derives its state variable; a predicate field projects as a
 // comparison. The field must be valid (abstraction.Validate).
 func fieldProjection(r abstraction.Resource, o abstraction.Object, key ir.ObjectRef, f abstraction.Field) Projection {
-	p := Projection{State: abstraction.FieldVariable(r.GVK.Kind, o.ID, f), Resource: r.GVK, Key: key, JSONPath: append([]string(nil), f.Path...), Type: f.Type}
+	p := Projection{State: abstraction.FieldVariable(r.GVK.Kind, o.ID, f), Resource: r.GVK, Key: key, JSONPath: abstraction.JSONPath(f.Path), Type: f.Type}
 	if f.Equals != "" {
 		p.Equals, _ = f.Compared()
 		p.Compare = true

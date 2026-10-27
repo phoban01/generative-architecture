@@ -292,22 +292,36 @@ func (m *Compiled) Next(state map[string]any, action string) (map[string]any, er
 	return nil, fmt.Errorf("unknown action %s", action)
 }
 func (m *Compiled) Check(state map[string]any, event string) error {
-	e, err := expr.NewEvaluator()
+	violated, err := m.Violations(state, event)
 	if err != nil {
 		return err
 	}
+	if len(violated) > 0 {
+		return fmt.Errorf("property %s violated", violated[0])
+	}
+	return nil
+}
+
+// Violations names, in declaration order, every property that state
+// violates after event. Check reports only the first.
+func (m *Compiled) Violations(state map[string]any, event string) ([]string, error) {
+	e, err := expr.NewEvaluator()
+	if err != nil {
+		return nil, err
+	}
 	vars := m.vars(state)
 	vars["event"] = event
+	var violated []string
 	for _, p := range m.spec.Properties {
 		v, err := e.Eval(p.Expression, vars)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if v != true {
-			return fmt.Errorf("property %s violated", p.Name)
+			violated = append(violated, p.Name)
 		}
 	}
-	return nil
+	return violated, nil
 }
 
 // vars binds the CEL variables of a state: the state itself and each
