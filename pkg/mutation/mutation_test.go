@@ -89,6 +89,30 @@ func TestApplyInMemory(t *testing.T) {
 	}
 }
 
+func TestApplyEdits(t *testing.T) {
+	s, err := Load(writeSuite(t, suiteDoc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := Mutation{Name: "both", File: "counter.txt", Find: "count = 0", Replace: "count = 5", Edits: []Edit{{Find: "count + 1", Replace: "count - 1"}}}
+	out, err := Apply(s.Root, m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(out) != "count = 5\ncount = count - 1\n" {
+		t.Fatalf("mutated %q", out)
+	}
+	// An edit sees the result of the edits before it.
+	m.Edits = append(m.Edits, Edit{Find: "count + 1", Replace: "count"})
+	if _, err = Apply(s.Root, m); err == nil || !strings.Contains(err.Error(), `"count + 1" does not occur`) {
+		t.Fatalf("no-op edit accepted: %v", err)
+	}
+	s.Spec.Mutations = []Mutation{{Name: "bad", File: "counter.txt", Find: "count", Replace: "n", Edits: []Edit{{Find: "x", Replace: "x"}}, Expect: []string{"progress"}}}
+	if err = s.Validate(); err == nil || !strings.Contains(err.Error(), "edit 1") {
+		t.Fatalf("no-op edit validated: %v", err)
+	}
+}
+
 func TestRunDetectionMatrix(t *testing.T) {
 	s, err := Load(writeSuite(t, suiteDoc))
 	if err != nil {

@@ -54,11 +54,21 @@ func LoadSource(root string, source []byte) (Example, error) {
 // Schedule follows the extracted branches. Only environment changes and the
 // number of invocations are selected here; controller decisions come from Go.
 func (e Example) Schedule(name string) (conformance.Trace, error) {
-	state, err := e.Model.Initial()
+	actions, err := e.scheduleActions(name)
 	if err != nil {
 		return conformance.Trace{}, err
 	}
+	return conformance.Scenario(e.Model, actions...)
+}
+
+// scheduleActions returns the actions of schedule name. On error it returns
+// the actions taken before the step that failed.
+func (e Example) scheduleActions(name string) ([]string, error) {
 	actions := []string{}
+	state, err := e.Model.Initial()
+	if err != nil {
+		return actions, err
+	}
 	advance := func(name string) error {
 		next, err := e.Model.Next(state, name)
 		if err != nil {
@@ -93,58 +103,58 @@ func (e Example) Schedule(name string) (conformance.Trace, error) {
 	case "unsupported":
 		contract = "false"
 	default:
-		return conformance.Trace{}, fmt.Errorf("unknown scenario %s", name)
+		return actions, fmt.Errorf("unknown scenario %s", name)
 	}
 	discover, err := e.EnvironmentEvent(contractVariable, contract)
 	if err != nil {
-		return conformance.Trace{}, err
+		return actions, err
 	}
 	provision, err := e.EnvironmentEvent(instanceEndpointVariable, `"db-1.internal"`)
 	if err != nil {
-		return conformance.Trace{}, err
+		return actions, err
 	}
 	if err = advance(discover.Name); err != nil {
-		return conformance.Trace{}, err
+		return actions, err
 	}
 	if name == "absent" {
 		if err = advance("removeDatabaseBeforeRead"); err != nil {
-			return conformance.Trace{}, err
+			return actions, err
 		}
 	}
 	if err = advance(deliverDatabase); err != nil {
-		return conformance.Trace{}, err
+		return actions, err
 	}
 	if err = invoke(); err != nil {
-		return conformance.Trace{}, err
+		return actions, err
 	}
 	if name == "pending" || name == "provisioned" || name == "repeated" {
 		if err = advance(deliverInstance); err != nil {
-			return conformance.Trace{}, err
+			return actions, err
 		}
 		if err = invoke(); err != nil {
-			return conformance.Trace{}, err
+			return actions, err
 		}
 	}
 	if name == "provisioned" || name == "repeated" {
 		if err = advance(provision.Name); err != nil {
-			return conformance.Trace{}, err
+			return actions, err
 		}
 		if err = advance(deliverInstance); err != nil {
-			return conformance.Trace{}, err
+			return actions, err
 		}
 		if err = invoke(); err != nil {
-			return conformance.Trace{}, err
+			return actions, err
 		}
 	}
 	if name == "repeated" {
 		if err = advance(deliverDatabase); err != nil {
-			return conformance.Trace{}, err
+			return actions, err
 		}
 		if err = invoke(); err != nil {
-			return conformance.Trace{}, err
+			return actions, err
 		}
 	}
-	return conformance.Scenario(e.Model, actions...)
+	return actions, nil
 }
 
 // Adapter holds actual fixture contents and observations. It receives events,

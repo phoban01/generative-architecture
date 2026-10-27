@@ -1,0 +1,56 @@
+apiVersion: architecture.local/v1alpha1
+kind: MutationSuite
+metadata:
+  name: database
+spec:
+  # mutation_test.go generates the model from each mutated source and runs
+  # two detectors. The model detector runs the five schedules of the
+  # mutated model and names each constraint in constraints.yaml that a
+  # state violates. The native detector replays the schedules of the
+  # unchanged model through the mutated watches and the native
+  # controller-runtime handlers. It names each observed model variable
+  # that diverges. Replay runs the compiled controller, so only a wiring
+  # change can make it diverge.
+  mutations:
+    # The controller creates an instance for an incompatible Database.
+    - name: contract-check
+      file: controller.go
+      find: if !compatible
+      replace: if compatible
+      expect: [instancesRequireCompatibleDatabase]
+    # The controller reports ready before the instance has an endpoint.
+    - name: provisioning-check
+      file: controller.go
+      find: if endpoint == ""
+      replace: if endpoint != ""
+      expect: [readyHasEndpoint]
+    # The controller publishes an endpoint it never read.
+    - name: wrong-endpoint
+      file: controller.go
+      find: store.UpdateDatabaseStatus(endpoint)
+      replace: store.UpdateDatabaseStatus("wrong-endpoint")
+      expect: [publicationRequiresProvisionedInstance]
+    # Nothing watches the instance, so its provisioning never wakes the
+    # Database. The model then has no instance events for a constraint to
+    # read; the native handlers queue nothing where the model queues.
+    - name: missing-instance-watch
+      file: wiring.go
+      find: Watches(&apiv1.DatabaseInstance{}, handler.EnqueueRequestsFromMapFunc(InstanceToDatabase)).
+      replace: ""
+      expect: [queued_demo_db_1]
+    # The instance maps to its own name instead of its Database.
+    - name: wrong-mapping
+      file: wiring.go
+      find: instance.Spec.DatabaseName
+      replace: instance.Name
+      expect: [watchTargetsDatabase]
+    # A generation filter drops the status update that provisions the
+    # instance.
+    - name: generation-predicate
+      file: wiring.go
+      find: handler.EnqueueRequestsFromMapFunc(InstanceToDatabase))
+      replace: handler.EnqueueRequestsFromMapFunc(InstanceToDatabase), builder.WithPredicates(predicate.GenerationChangedPredicate{}))
+      edits:
+        - find: handler "sigs.k8s.io/controller-runtime/pkg/handler"
+          replace: "builder \"sigs.k8s.io/controller-runtime/pkg/builder\"\n\thandler \"sigs.k8s.io/controller-runtime/pkg/handler\"\n\tpredicate \"sigs.k8s.io/controller-runtime/pkg/predicate\""
+      expect: [instanceProvisioningEnqueuesReconciler, queued_demo_db_1]
