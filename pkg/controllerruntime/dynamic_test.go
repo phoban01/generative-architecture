@@ -8,6 +8,8 @@ import (
 	cr "generative-architecture/pkg/controllerruntime"
 	"generative-architecture/pkg/dynamicgen"
 	"generative-architecture/pkg/effect"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -141,5 +143,134 @@ func TestUnstructuredControllerRuntimeClientNeedsGVKNotScheme(t *testing.T) {
 	}
 	if err = wrapped.Get(ctx, client.ObjectKeyFromObject(obj), &unstructured.Unstructured{}); err == nil {
 		t.Fatal("missing GVK accepted")
+	}
+}
+
+// dynamicPeople builds a dynamic fake holding the given people and an
+// observer whose registry has one direct effect per operation.
+func dynamicPeople(t *testing.T, operations []string, people ...*unstructured.Unstructured) (dynamicgen.Binding, *dynamicfake.FakeDynamicClient, cr.Observer, *recorder) {
+	t.Helper()
+	binding := dynamicgen.Binding{Expression: "resource", Resource: effect.Resource{Group: "example.org", Version: "v1", Kind: "Person"}, Plural: "people", Scope: "Namespaced"}
+	var entries []effect.Descriptor
+	for _, op := range operations {
+		entries = append(entries, effect.Descriptor{ID: op, Resource: binding.Resource, Operation: op, Consistency: "direct"})
+	}
+	registry, err := effect.NewRegistry(entries)
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{binding.GVR(): "PersonList"})
+	// Seed through the client: the fake tracker would guess the plural of
+	// seeded objects.
+	for _, p := range people {
+		p.SetGroupVersionKind(binding.GVK())
+		if _, err := base.Resource(binding.GVR()).Namespace(p.GetNamespace()).Create(context.Background(), p, metav1.CreateOptions{}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	base.ClearActions()
+	rec := &recorder{}
+	return binding, base, cr.Observer{Registry: registry, Hook: rec.hook}, rec
+}
+
+func person(namespace, name string, labels map[string]string) *unstructured.Unstructured {
+	p := &unstructured.Unstructured{Object: map[string]any{"spec": map[string]any{"value": name}}}
+	p.SetName(name)
+	p.SetNamespace(namespace)
+	p.SetLabels(labels)
+	return p
+}
+
+func peopleMapper(t *testing.T, binding dynamicgen.Binding) meta.RESTMapper {
+	t.Helper()
+	mapper, err := (dynamicgen.Catalog{Bindings: []dynamicgen.Binding{binding}}).Mapper()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return mapper
+}
+
+func TestDynamicListIsObserved(t *testing.T) {
+	ctx := context.Background()
+	selected := map[string]string{"app": "mirror"}
+	binding, base, observer, rec := dynamicPeople(t, []string{"list"},
+		person("tenant", "one", selected), person("tenant", "two", selected),
+		person("tenant", "three", map[string]string{"app": "other"}), person("other", "four", selected))
+	dyn := observer.Dynamic(base, peopleMapper(t, binding))
+	resource := dyn.Resource(binding.GVR()).Namespace("tenant")
+	list, err := resource.List(ctx, metav1.ListOptions{LabelSelector: "app=mirror"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list.Items) != 2 {
+		t.Fatalf("expected two people, got %d", len(list.Items))
+	}
+	if len(rec.calls) != 1 {
+		t.Fatalf("expected one observed call, got %d", len(rec.calls))
+	}
+	call := rec.calls[0]
+	if call.Descriptor.Operation != "list" || call.Key != (effect.Key{Namespace: "tenant"}) || call.Options["labelSelector"] != "app=mirror" || call.Submitted != nil {
+		t.Fatalf("wrong call: %+v", call)
+	}
+	items := rec.results[0].Snapshot["items"].([]any)
+	if len(items) != 2 {
+		t.Fatalf("snapshot is not the listed objects: %+v", rec.results[0].Snapshot)
+	}
+	list.Items[0].Object["spec"].(map[string]any)["value"] = "mutated"
+	if items[0].(map[string]any)["spec"].(map[string]any)["value"] == "mutated" {
+		t.Fatal("snapshot aliases the live list")
+	}
+	for name, fn := range map[string]func() error{
+		"set-based selector": func() error {
+			_, err := resource.List(ctx, metav1.ListOptions{LabelSelector: "app in (mirror)"})
+			return err
+		},
+		"field selector": func() error {
+			_, err := resource.List(ctx, metav1.ListOptions{FieldSelector: "metadata.name=one"})
+			return err
+		},
+		"limit":          func() error { _, err := resource.List(ctx, metav1.ListOptions{Limit: 1}); return err },
+		"all namespaces": func() error { _, err := dyn.Resource(binding.GVR()).List(ctx, metav1.ListOptions{}); return err },
+	} {
+		t.Run(name, func(t *testing.T) {
+			before := len(base.Actions())
+			if err := fn(); err == nil {
+				t.Fatal("unsupported list accepted")
+			}
+			if len(base.Actions()) != before || len(rec.calls) != 1 {
+				t.Fatal("unsupported list reached the API or the hook")
+			}
+		})
+	}
+}
+
+func TestDynamicDeleteIsObserved(t *testing.T) {
+	ctx := context.Background()
+	binding, base, observer, rec := dynamicPeople(t, []string{"delete"}, person("tenant", "one", nil))
+	resource := observer.Dynamic(base, peopleMapper(t, binding)).Resource(binding.GVR()).Namespace("tenant")
+	if err := resource.Delete(ctx, "one", metav1.DeleteOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if len(rec.calls) != 1 {
+		t.Fatalf("expected one observed call, got %d", len(rec.calls))
+	}
+	call := rec.calls[0]
+	if call.Descriptor.Operation != "delete" || call.Key != (effect.Key{Namespace: "tenant", Name: "one"}) || call.Submitted != nil || rec.results[0].Snapshot != nil {
+		t.Fatalf("wrong call: %+v", call)
+	}
+	actions := base.Actions()
+	if len(actions) != 1 || actions[0].GetVerb() != "delete" || actions[0].GetNamespace() != "tenant" || actions[0].GetResource() != binding.GVR() {
+		t.Fatalf("wrong API endpoint: %+v", actions)
+	}
+	if err := resource.Delete(ctx, "one", metav1.DeleteOptions{}); !apierrors.IsNotFound(err) {
+		t.Fatalf("API error not preserved: %v", err)
+	}
+	expectRejected(t, resource.Delete(ctx, "one", metav1.DeleteOptions{DryRun: []string{metav1.DryRunAll}}), "dynamic.Delete with dry run")
+	expectRejected(t, resource.Delete(ctx, "one", metav1.DeleteOptions{}, "status"), "dynamic.Delete options/subresource")
+	if err := resource.Delete(ctx, "", metav1.DeleteOptions{}); err == nil {
+		t.Fatal("empty name accepted")
+	}
+	if len(rec.calls) != 2 || len(base.Actions()) != 2 {
+		t.Fatal("rejected delete reached the hook or the API")
 	}
 }

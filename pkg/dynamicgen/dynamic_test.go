@@ -66,6 +66,46 @@ func TestExtractDynamicResourceDependenciesAndRejectDrift(t *testing.T) {
 		}
 	}
 }
+
+// storeSource is a small dynamic store whose methods each make one call.
+const storeSource = `package store
+
+func (s *Store) ListPeople() {
+	s.Client.Resource(s.People).Namespace(s.Namespace).List(s.Context, metav1.ListOptions{LabelSelector: "app=x"})
+}
+
+func (s *Store) DeletePerson() {
+	s.Client.Resource(s.People).Namespace(s.Namespace).Delete(s.Context, s.Name, metav1.DeleteOptions{})
+}
+`
+
+func peopleCatalog() dynamicgen.Catalog {
+	return dynamicgen.Catalog{Bindings: []dynamicgen.Binding{{Expression: "s.People", Resource: effect.Resource{Group: "example.org", Version: "v1", Kind: "Person"}, Plural: "people", Scope: "Namespaced"}}}
+}
+
+func TestExtractDynamicListAndDelete(t *testing.T) {
+	methods := map[string]string{"ListPeople": "listPeople", "DeletePerson": "deletePerson"}
+	result, err := dynamicgen.Extract([]byte(storeSource), "Store", "s.Client", methods, peopleCatalog())
+	if err != nil {
+		t.Fatal(err)
+	}
+	operations := map[string]string{}
+	for _, a := range result.Accesses {
+		operations[a.Method] = a.Operation
+	}
+	if operations["ListPeople"] != "list" || operations["DeletePerson"] != "delete" || len(result.Accesses) != 2 {
+		t.Fatalf("wrong accesses: %+v", result.Accesses)
+	}
+	person := effect.Resource{Group: "example.org", Version: "v1", Kind: "Person"}
+	if err := result.CheckEffects([]effect.Descriptor{{ID: "listPeople", Resource: person, Operation: "list", Consistency: "direct"}, {ID: "deletePerson", Resource: person, Operation: "delete", Consistency: "direct"}}); err != nil {
+		t.Fatal(err)
+	}
+	withSubresource := strings.Replace(storeSource, "metav1.DeleteOptions{})", `metav1.DeleteOptions{}, "status")`, 1)
+	if _, err := dynamicgen.Extract([]byte(withSubresource), "Store", "s.Client", methods, peopleCatalog()); err == nil {
+		t.Fatal("delete with a subresource accepted")
+	}
+}
+
 func TestCatalogRejectsAmbiguousDiscovery(t *testing.T) {
 	a := dynamicgen.Binding{Expression: "a", Resource: effect.Resource{Group: "test", Version: "v1", Kind: "A"}, Plural: "items", Scope: "Namespaced"}
 	b := a
