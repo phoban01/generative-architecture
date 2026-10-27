@@ -184,7 +184,7 @@ func options(l goflow.Loaded) goflow.Options {
 		}
 		return true
 	})
-	opts := goflow.Options{File: l.Path, Scope: scope, Returns: []goflow.Return{{Zero: true}, {Error: true}}}
+	opts := goflow.Options{File: l.Path, Scope: scope, Returns: []goflow.Return{{Zero: true, Requeue: true}, {Error: true}}}
 	opts.MapKeys = func(root string, path []string) []string {
 		return mapKeys[symbol(root, path)]
 	}

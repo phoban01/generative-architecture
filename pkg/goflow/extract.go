@@ -45,6 +45,12 @@ type Node struct {
 	// value, as root.json.path: the abstraction selects nothing at or
 	// below them, so the write changes no model state.
 	Unmodelled []string `yaml:"unmodelled,omitempty"`
+	// Requeue is the requeue a return node asks the runtime for:
+	// ir.RequeueImmediate for Result{Requeue: true}, ir.RequeueAfter for
+	// Result{RequeueAfter: d}, empty for none. RequeueAfter keeps the Go
+	// source of d; the runtime model uses its own delay.
+	Requeue      string `yaml:"requeue,omitempty"`
+	RequeueAfter string `yaml:"requeueAfter,omitempty"`
 }
 type Program struct {
 	Entry        int    `yaml:"entry"`
@@ -57,11 +63,13 @@ type Program struct {
 // error result. Zero marks a result that is not modelled because every
 // return passes the zero value of its type (an empty composite literal such
 // as reconcile.Result{}); any other value is a diagnostic, and the result is
-// recorded as the empty expression.
+// recorded as the empty expression. Requeue, with Zero, also accepts a
+// reconcile result literal that asks for a requeue (see Node.Requeue).
 type Return struct {
-	Type  string
-	Error bool
-	Zero  bool
+	Type    string
+	Error   bool
+	Zero    bool
+	Requeue bool
 }
 
 // Convert lowers a Go expression that must have the given model type. It is an
@@ -302,12 +310,17 @@ func (e *extractor) statement(s ast.Stmt, next int) (int, error) {
 			return 0, e.diagnose(s, "return", fmt.Sprintf("unsupported return arity %d; expected %d", len(x.Results), len(e.opts.Returns)))
 		}
 		values := []expr.Expression{}
+		var requeue, after string
 		for i, result := range x.Results {
 			r := e.opts.Returns[i]
 			var v expr.Expression
 			var err error
 			if r.Zero {
-				if !zeroComposite(result) {
+				switch {
+				case zeroComposite(result):
+				case r.Requeue && e.info != nil:
+					requeue, after, err = e.requeue(result)
+				default:
 					return 0, e.diagnose(result, "return", "result must be the zero value of its type")
 				}
 			} else if r.Error && Code(result) == "nil" {
@@ -323,7 +336,7 @@ func (e *extractor) statement(s ast.Stmt, next int) (int, error) {
 			}
 			values = append(values, v)
 		}
-		n := Node{Kind: "return", Results: values}
+		n := Node{Kind: "return", Results: values, Requeue: requeue, RequeueAfter: after}
 		if len(values) > 0 {
 			n.Expression = values[0]
 		}
