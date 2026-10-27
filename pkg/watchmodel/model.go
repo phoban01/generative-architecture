@@ -6,6 +6,8 @@
 // The model is bounded: a watched resource has exactly one object, and
 // events on that object coalesce. A create followed by an update before
 // delivery keeps the create and marks a further update as pending.
+// Coalesced updates compare the last delivered object with the current one
+// and lose intermediate values, as an informer may after a relist.
 package watchmodel
 
 import (
@@ -100,6 +102,8 @@ type resource struct {
 	gvk    ir.GVK
 	object ir.ObjectRef
 	rules  []ir.Watch
+	// fieldVars lists the field variables that rules on this resource read.
+	fieldVars []string
 }
 
 type generator struct {
@@ -228,8 +232,10 @@ func (g *generator) deliver(r *resource) (model.Action, error) {
 	}
 	// The delivered object becomes the ObjectOld of the next update. A
 	// create leaves the copy that Emit took at creation, so that an update
-	// pending behind it compares against the created object.
-	for _, v := range []string{GenerationVar(r.gvk), ResourceVersionVar(r.gvk)} {
+	// pending behind it compares against the created object. Field copies
+	// then keep the value from before the create, which can add an old
+	// target but never drops one.
+	for _, v := range append([]string{GenerationVar(r.gvk), ResourceVersionVar(r.gvk)}, r.fieldVars...) {
 		updates[seen(v)] = expr.Expression(fmt.Sprintf(`%s == "create" ? %s : %s`, ev, seen(v), v))
 	}
 	for v, conditions := range hits {

@@ -44,6 +44,48 @@ func TestOwnerMapping(t *testing.T) {
 	}
 }
 
+func TestFieldReferenceMoveQueuesOldAndNewKeys(t *testing.T) {
+	a, b := object(primary, "a"), object(primary, "b")
+	qa, qb := watchmodel.QueuedVar(a), watchmodel.QueuedVar(b)
+	child := object(secondary, "c")
+	ref := ir.KeyMapping{Kind: ir.MappingField, FieldPath: []string{"Spec", "ParentName"}}
+	field := watchmodel.FieldVar(secondary, ref.FieldPath)
+	settled := []string{"createChild", "deliverChild", "consume"}
+	for _, tc := range []struct {
+		name    string
+		actions []string
+		want    map[string]any
+	}{
+		{"created at a", []string{"createChild", "deliverChild"}, map[string]any{qa: true, qb: false}},
+		{"moved from a to b", append(settled, "moveTo_b", "deliverChild"), map[string]any{qa: true, qb: true, "wrongKey": false}},
+		{"status update at a", append(settled, "updateChild", "deliverChild"), map[string]any{qa: true, qb: false}},
+		// Coalesced updates lose the intermediate value, as an informer
+		// does after a relist.
+		{"moved away and back before delivery", append(settled, "moveTo_b", "moveTo_a", "deliverChild"), map[string]any{qa: true, qb: false}},
+		{"moved after delivery of the move", append(settled, "moveTo_b", "deliverChild", "consume", "updateChild", "deliverChild"), map[string]any{qa: false, qb: true}},
+		{"moved out of the key set", append(settled, "moveTo_x", "deliverChild"), map[string]any{qa: true, qb: false, "wrongKey": true}},
+		{"moved to empty", append(settled, "moveTo_", "deliverChild"), map[string]any{qa: true, qb: false, "wrongKey": false}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fields := map[ir.ObjectRef]map[string]string{child: {"Spec.ParentName": "a"}}
+			spec, err := watchmodel.Add(baseSpec(t, secondary), []ir.Watch{watch(secondary, ref)}, []ir.ObjectRef{child}, []ir.ObjectRef{a, b}, watchmodel.WithFields(fields))
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, to := range []string{"a", "b", "x", ""} {
+				u, err := watchmodel.Emit(secondary, watchmodel.Update, true)
+				if err != nil {
+					t.Fatal(err)
+				}
+				u[field] = expr.Expression(`"` + to + `"`)
+				spec.Actions = append(spec.Actions, model.Action{Name: "moveTo_" + to, Guard: "true", Updates: u})
+			}
+			spec.Actions = append(spec.Actions, model.Action{Name: "consume", Guard: "true", Updates: map[string]expr.Expression{qa: "false", qb: "false"}})
+			check(t, run(t, spec, tc.actions...), tc.want)
+		})
+	}
+}
+
 func TestFieldMapping(t *testing.T) {
 	queued := watchmodel.QueuedVar(key)
 	child := object(secondary, "c")

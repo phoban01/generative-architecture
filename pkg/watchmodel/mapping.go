@@ -140,24 +140,31 @@ func (g *generator) routeField(t *target, r *resource, w ir.Watch) error {
 	}
 	v := FieldVar(r.gvk, w.Mapping.FieldPath)
 	if !g.declared[v] {
-		if err := g.addState(w, v, model.Variable{Type: "string", Initial: expr.Expression(strconv.Quote(value))}); err != nil {
-			return err
+		initial := model.Variable{Type: "string", Initial: expr.Expression(strconv.Quote(value))}
+		for _, name := range []string{v, seen(v)} {
+			if err := g.addState(w, name, initial); err != nil {
+				return err
+			}
 		}
 		g.declared[v] = true
+		r.fieldVars = append(r.fieldVars, v)
 	}
-	g.routeValue(t, r.object, v)
+	// controller-runtime maps both ObjectOld and ObjectNew of an update, so
+	// a reference that moved enqueues the old target as well as the new.
+	g.routeValue(t, r.object, v, "true")
+	g.routeValue(t, r.object, seen(v), EventVar(r.gvk)+` == "update"`)
 	return nil
 }
 
 // routeValue routes a request named by the string variable v in the
 // namespace of object: to each declared key the value can name, and to
-// wrongKey for any other non-empty value.
-func (g *generator) routeValue(t *target, object ir.ObjectRef, v string) {
+// wrongKey for any other non-empty value. Every route also needs when.
+func (g *generator) routeValue(t *target, object ir.ObjectRef, v, when string) {
 	names := []string{}
 	for _, k := range g.keys {
 		if k.Cluster == object.Cluster && k.Namespace == object.Namespace {
 			match := v + " == " + strconv.Quote(k.Name)
-			t.hit(g.queued[requestOf(k)], match)
+			t.hit(g.queued[requestOf(k)], both(when, match))
 			names = append(names, match)
 		}
 	}
@@ -165,7 +172,7 @@ func (g *generator) routeValue(t *target, object ir.ObjectRef, v string) {
 	if len(names) > 0 {
 		foreign += " && !(" + strings.Join(names, " || ") + ")"
 	}
-	t.foreign = append(t.foreign, foreign)
+	t.foreign = append(t.foreign, both(when, foreign))
 }
 
 // declareKeys adds the queued flag of every key and the wrong-key flag.
