@@ -26,3 +26,25 @@ jobs:
         run: go test ./...
       - name: Consumer module
         run: make consumer-test
+
+  envtest:
+    name: Envtest (Go ${{ matrix.go }})
+    needs: go
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The supported Go releases listed in README.md.
+        go: ["1.26.x", "1.27.x"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+          check-latest: true
+      # Installs kube-apiserver and etcd with setup-envtest for the
+      # controller-runtime and Kubernetes versions in go.mod, then runs the
+      # Envtest tests with go test -p 2. It fails if the assets cannot be
+      # installed, a test skips or no test runs.
+      - name: Envtest
+        run: make envtest

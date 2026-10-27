@@ -88,6 +88,8 @@ go test -p 2 -run Envtest ./...
 
 Without `KUBEBUILDER_ASSETS` these tests skip. With `ENVTEST_REQUIRED=1` they fail instead, so CI cannot pass by skipping them.
 
+`make envtest` does both steps. It reads the versions from `go.mod` and fails when the assets cannot be installed, a test skips or no test runs. The `envtest` job in `.github/workflows/ci.yml` runs it on each supported Go release after the build job. `hack/ci` parses the workflows and checks these jobs in `go test`.
+
 ## Diagrams and binaries
 
 ```sh
