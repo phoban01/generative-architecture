@@ -44,10 +44,13 @@ type Object struct {
 
 // Field selects one JSON path of a resource and gives it a model type.
 //
-// Path elements are identifiers, except that the element after
-// metadata.annotations or metadata.labels is a map key, such as an
-// annotation key containing dots and slashes. A field whose path holds such
-// a key cannot be named by its path and declares Name instead.
+// Path elements are identifiers or map keys. A map key is the last element
+// of a path of at least two elements, written as a double-quoted string
+// with Go escapes, such as '"app.config/key"' in YAML. It may hold any
+// non-empty string. The element after metadata.annotations or
+// metadata.labels may also be written unquoted. A field whose path holds a
+// map key cannot be named by its path and declares Name instead. JSONPath
+// gives the object keys a path selects.
 type Field struct {
 	Path []string `yaml:"path"`
 	Type string   `yaml:"type"`
@@ -179,10 +182,10 @@ func (a Abstraction) Validate() error {
 			}
 		}
 		paths := map[string]bool{}
-		for _, f := range r.Fields {
+		for i, f := range r.Fields {
 			key, err := validField(f)
 			if err != nil {
-				return fmt.Errorf("%s: %w", where, err)
+				return fmt.Errorf("%s: fields[%d]: %w", where, i, err)
 			}
 			if !types[f.Type] {
 				return fmt.Errorf("%s: field %s has unknown type %q; expected string, bool or int", where, key, f.Type)
@@ -200,15 +203,15 @@ func (a Abstraction) Validate() error {
 				return fmt.Errorf("%s: value domain of %s is empty", where, key)
 			}
 		}
-		for _, p := range r.Identity {
+		for i, p := range r.Identity {
 			if _, err := validPath(p); err != nil {
-				return fmt.Errorf("%s: identity: %w", where, err)
+				return fmt.Errorf("%s: identity[%d]: %w", where, i, err)
 			}
 		}
-		for _, ref := range r.References {
+		for i, ref := range r.References {
 			key, err := validPath(ref.Path)
 			if err != nil {
-				return fmt.Errorf("%s: reference: %w", where, err)
+				return fmt.Errorf("%s: references[%d]: %w", where, i, err)
 			}
 			if !known[ref.TargetGVK] {
 				return fmt.Errorf("%s: reference %s targets undeclared resource %s", where, key, ref.TargetGVK)
@@ -247,18 +250,9 @@ var mapFields = [][]string{{"metadata", "annotations"}, {"metadata", "labels"}}
 
 // validField checks a field's path, name and predicate and returns its key.
 func validField(f Field) (string, error) {
-	if len(f.Path) == 0 {
-		return "", fmt.Errorf("empty field path")
-	}
-	keyed := false
-	for i, p := range f.Path {
-		if identifier.MatchString(p) {
-			continue
-		}
-		if p == "" || i != 2 || len(f.Path) != 3 || !isMapField(f.Path[:2]) {
-			return "", fmt.Errorf("field path element %q must be an identifier (only the key after metadata.annotations or metadata.labels may be any string)", p)
-		}
-		keyed = true
+	keyed, err := checkPath(f.Path)
+	if err != nil {
+		return "", err
 	}
 	if f.Name != "" && !identifier.MatchString(f.Name) {
 		return "", fmt.Errorf("field name %q must be an identifier", f.Name)
@@ -286,16 +280,70 @@ func isMapField(prefix []string) bool {
 	return false
 }
 
+// validPath checks an identity or reference path and returns its key.
+// These paths derive no variable name, so a map key needs no name.
 func validPath(path []string) (string, error) {
-	if len(path) == 0 {
-		return "", fmt.Errorf("empty field path")
-	}
-	for _, p := range path {
-		if !identifier.MatchString(p) {
-			return "", fmt.Errorf("field path element %q must be an identifier", p)
-		}
+	if _, err := checkPath(path); err != nil {
+		return "", err
 	}
 	return PathKey(path), nil
+}
+
+// checkPath checks every element of a path and reports whether it holds
+// a map key. An error names the element by its index.
+func checkPath(path []string) (keyed bool, err error) {
+	if len(path) == 0 {
+		return false, fmt.Errorf("empty field path")
+	}
+	for i, p := range path {
+		if identifier.MatchString(p) {
+			continue
+		}
+		last := i == len(path)-1
+		if _, quoted := MapKey(p); quoted {
+			if i == 0 || !last {
+				return false, fmt.Errorf("path[%d]: map key %s must be the last element of a path of at least two elements", i, p)
+			}
+			keyed = true
+			continue
+		}
+		if strings.HasPrefix(p, `"`) {
+			return false, fmt.Errorf("path[%d]: map key %s is not a non-empty double-quoted string", i, p)
+		}
+		if p != "" && i == 2 && last && isMapField(path[:2]) {
+			keyed = true
+			continue
+		}
+		return false, fmt.Errorf("path[%d]: element %q must be an identifier; write a map key double-quoted, as '%s' in YAML", i, p, strconv.Quote(p))
+	}
+	return keyed, nil
+}
+
+// MapKey reports whether a path element is a double-quoted map key and
+// returns the key it holds.
+func MapKey(element string) (string, bool) {
+	if len(element) < 2 || element[0] != '"' {
+		return "", false
+	}
+	key, err := strconv.Unquote(element)
+	if err != nil || key == "" {
+		return "", false
+	}
+	return key, true
+}
+
+// JSONPath returns the object keys a valid path selects: each quoted map
+// key is unquoted and every other element is kept. The result is a new
+// slice.
+func JSONPath(path []string) []string {
+	out := make([]string, len(path))
+	for i, p := range path {
+		if key, ok := MapKey(p); ok {
+			p = key
+		}
+		out[i] = p
+	}
+	return out
 }
 
 // VariableName is the model variable for one field of one object:

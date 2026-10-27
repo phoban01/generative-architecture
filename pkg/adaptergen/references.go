@@ -62,7 +62,7 @@ func referenceChecks(spec abstraction.Spec) ([]referenceCheck, error) {
 				if err != nil {
 					return nil, fmt.Errorf("reference %s: %w", path, err)
 				}
-				c := referenceCheck{Key: key, Path: append([]string(nil), ref.Path...), Field: path, Target: ref.TargetGVK.Kind, Empty: empty}
+				c := referenceCheck{Key: key, Path: abstraction.JSONPath(ref.Path), Field: path, Target: ref.TargetGVK.Kind, Empty: empty}
 				for _, t := range target.Objects {
 					if t.Namespace == "" || t.Namespace == o.Namespace {
 						c.Names = append(c.Names, t.Name)

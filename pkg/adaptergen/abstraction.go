@@ -395,7 +395,7 @@ func readerEnvironment(pkg string, spec abstraction.Spec, changed, cached []stri
 					return nil, fmt.Errorf("changed object %s: two domain values are named %s", id, name)
 				}
 				seen["event/"+name] = true
-				sets = append(sets, valueChange{Name: name, Key: key, Path: append([]string(nil), f.Path...), Value: lit})
+				sets = append(sets, valueChange{Name: name, Key: key, Path: abstraction.JSONPath(f.Path), Value: lit})
 			}
 			continue
 		}
@@ -415,7 +415,7 @@ func readerEnvironment(pkg string, spec abstraction.Spec, changed, cached []stri
 			if len(values) == 0 {
 				return nil, fmt.Errorf("changed object %s, field %s: the domain has no value to change to", id, f.Key())
 			}
-			c.Fields = append(c.Fields, cycledField{Path: append([]string(nil), f.Path...), Values: values})
+			c.Fields = append(c.Fields, cycledField{Path: abstraction.JSONPath(f.Path), Values: values})
 		}
 		if len(c.Fields) == 0 {
 			return nil, fmt.Errorf("changed object %s has no declared field with a value domain", id)
@@ -437,7 +437,7 @@ func readerEnvironment(pkg string, spec abstraction.Spec, changed, cached []stri
 		}
 		d := deliveredObject{Key: key}
 		for _, f := range r.Fields {
-			d.Paths = append(d.Paths, append([]string(nil), f.Path...))
+			d.Paths = append(d.Paths, abstraction.JSONPath(f.Path))
 		}
 		deliveries = append(deliveries, d)
 	}

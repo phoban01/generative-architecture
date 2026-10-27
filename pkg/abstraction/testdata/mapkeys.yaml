@@ -1,0 +1,24 @@
+apiVersion: architecture.local/v1alpha1
+kind: Abstraction
+metadata:
+  name: mapkeys
+spec:
+  resources:
+    - gvk: {group: "", version: v1, kind: ConfigMap}
+      objects:
+        - {id: config, namespace: demo, name: app-config}
+      fields:
+        # A map key is the last element, written double-quoted.
+        - {path: [data, '"app.config/key"'], name: appKey, type: string}
+      valueDomains:
+        appKey: ['""', '"on"']
+      references:
+        - path: [data, '"app.config/target"']
+          targetGVK: {group: "", version: v1, kind: Secret}
+    - gvk: {group: "", version: v1, kind: Secret}
+      objects:
+        - {id: secret, namespace: demo, name: app-secret}
+      fields:
+        - {path: [type], type: string}
+      identity:
+        - [metadata, labels, '"app.kubernetes.io/name"']
