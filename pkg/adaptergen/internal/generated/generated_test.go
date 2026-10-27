@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"generative-architecture/pkg/adaptergen"
-	"generative-architecture/pkg/adaptergen/internal/fixture"
-	"generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/adaptergen"
+	"github.com/phoban01/generative-architecture/pkg/adaptergen/internal/fixture"
+	"github.com/phoban01/generative-architecture/pkg/ir"
 
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"generative-architecture/pkg/adaptergen"
-	"generative-architecture/pkg/adaptergen/internal/fixture"
-	cr "generative-architecture/pkg/controllerruntime"
+	"github.com/phoban01/generative-architecture/pkg/adaptergen"
+	"github.com/phoban01/generative-architecture/pkg/adaptergen/internal/fixture"
+	cr "github.com/phoban01/generative-architecture/pkg/controllerruntime"
 )
 
 func TestGenerateRuntime(t *testing.T) {
@@ -28,11 +28,11 @@ func TestGenerateRuntime(t *testing.T) {
 		t.Errorf("generated runtime imports %s", imp.Path.Value)
 	}
 	params, results := signature(t, p, "ApplyRuntime")
-	if !reflect.DeepEqual(params, []string{"generative-architecture/pkg/adaptergen/internal/typecheck.RuntimeWorker", "string"}) || !reflect.DeepEqual(results, []string{"bool", "error"}) {
+	if !reflect.DeepEqual(params, []string{"github.com/phoban01/generative-architecture/pkg/adaptergen/internal/typecheck.RuntimeWorker", "string"}) || !reflect.DeepEqual(results, []string{"bool", "error"}) {
 		t.Errorf("ApplyRuntime(%v) %v", params, results)
 	}
 	params, results = signature(t, p, "ProjectRuntime")
-	if !reflect.DeepEqual(params, []string{"generative-architecture/pkg/adaptergen/internal/typecheck.RuntimeWorker"}) || !reflect.DeepEqual(results, []string{"map[string]any"}) {
+	if !reflect.DeepEqual(params, []string{"github.com/phoban01/generative-architecture/pkg/adaptergen/internal/typecheck.RuntimeWorker"}) || !reflect.DeepEqual(results, []string{"map[string]any"}) {
 		t.Errorf("ProjectRuntime(%v) %v", params, results)
 	}
 	text := string(src)

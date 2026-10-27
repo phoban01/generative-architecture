@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"generative-architecture/pkg/krm"
-	"generative-architecture/pkg/model"
+	"github.com/phoban01/generative-architecture/pkg/krm"
+	"github.com/phoban01/generative-architecture/pkg/model"
 )
 
 func TestTemporalModule(t *testing.T) {

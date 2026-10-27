@@ -3,7 +3,7 @@ kind: Project
 metadata:
   name: config-mirror
 spec:
-  module: generative-architecture
+  module: github.com/phoban01/generative-architecture
   packages:
     - ./examples/configmirror
   catalog:

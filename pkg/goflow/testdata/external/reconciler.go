@@ -4,7 +4,7 @@
 // never built directly.
 package external
 
-import "generative-architecture/pkg/goflow/testdata/external/provisioner"
+import "github.com/phoban01/generative-architecture/pkg/goflow/testdata/external/provisioner"
 
 type Reconciler struct{}
 

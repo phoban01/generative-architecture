@@ -10,11 +10,11 @@ import (
 	"strings"
 	"testing"
 
-	"generative-architecture/pkg/abstraction"
-	"generative-architecture/pkg/effect"
-	"generative-architecture/pkg/expr"
-	"generative-architecture/pkg/krm"
-	"generative-architecture/pkg/model"
+	"github.com/phoban01/generative-architecture/pkg/abstraction"
+	"github.com/phoban01/generative-architecture/pkg/effect"
+	"github.com/phoban01/generative-architecture/pkg/expr"
+	"github.com/phoban01/generative-architecture/pkg/krm"
+	"github.com/phoban01/generative-architecture/pkg/model"
 )
 
 func generate(t *testing.T) (model.Spec, *model.Compiled) {

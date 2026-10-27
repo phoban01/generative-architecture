@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"generative-architecture/pkg/krm"
+	"github.com/phoban01/generative-architecture/pkg/krm"
 )
 
 func TestSupportWriteReadOrdering(t *testing.T) {

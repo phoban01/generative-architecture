@@ -5,8 +5,8 @@ import (
 	"reflect"
 	"slices"
 
-	"generative-architecture/pkg/abstraction"
-	"generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/abstraction"
+	"github.com/phoban01/generative-architecture/pkg/ir"
 )
 
 // referenceCheck is one object whose field must name an object of the

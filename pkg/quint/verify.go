@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"generative-architecture/pkg/model"
+	"github.com/phoban01/generative-architecture/pkg/model"
 )
 
 // VerifyBackend is the model checker behind quint verify. Quint 0.33

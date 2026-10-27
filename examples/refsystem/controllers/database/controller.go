@@ -12,7 +12,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	"generative-architecture/examples/refsystem/api/v1alpha1"
+	"github.com/phoban01/generative-architecture/examples/refsystem/api/v1alpha1"
 )
 
 // TenantLabel marks a Database with the name of its Tenant, so that a

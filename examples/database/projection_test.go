@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"generative-architecture/examples/database/generated"
+	"github.com/phoban01/generative-architecture/examples/database/generated"
 
 	"golang.org/x/tools/go/packages"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -165,10 +165,10 @@ func TestGeneratedPackageReadsImplementationStateOnly(t *testing.T) {
 		t.Fatalf("generated package does not type-check: %+v", pkgs)
 	}
 	p := pkgs[0]
-	forbidden := map[string]bool{"generative-architecture/pkg/model": true, "generative-architecture/pkg/conformance": true}
+	forbidden := map[string]bool{"github.com/phoban01/generative-architecture/pkg/model": true, "github.com/phoban01/generative-architecture/pkg/conformance": true}
 	// The gating takes the effect gate and the loaded process nodes, which
 	// describe boundaries and control flow and hold no model state.
-	allowed := map[string]bool{"generative-architecture/pkg/effect": true, "generative-architecture/pkg/ir": true, "generative-architecture/pkg/krm": true}
+	allowed := map[string]bool{"github.com/phoban01/generative-architecture/pkg/effect": true, "github.com/phoban01/generative-architecture/pkg/ir": true, "github.com/phoban01/generative-architecture/pkg/krm": true}
 	var reached []string
 	seen := map[*types.Package]bool{}
 	var walk func(*types.Package, []string)
@@ -178,7 +178,7 @@ func TestGeneratedPackageReadsImplementationStateOnly(t *testing.T) {
 		}
 		seen[pkg] = true
 		via = append(via, pkg.Path())
-		if forbidden[pkg.Path()] || strings.HasPrefix(pkg.Path(), "generative-architecture/") && pkg != p.Types && !allowed[pkg.Path()] {
+		if forbidden[pkg.Path()] || strings.HasPrefix(pkg.Path(), "github.com/phoban01/generative-architecture/") && pkg != p.Types && !allowed[pkg.Path()] {
 			reached = append(reached, strings.Join(via, " -> "))
 		}
 		for _, imp := range pkg.Imports() {
@@ -215,7 +215,7 @@ func TestStoreProxyReadsImplementationStateOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	allowed := map[string]bool{`"context"`: true, `"fmt"`: true, `"generative-architecture/pkg/effect"`: true}
+	allowed := map[string]bool{`"context"`: true, `"fmt"`: true, `"github.com/phoban01/generative-architecture/pkg/effect"`: true}
 	for _, imp := range f.Imports {
 		if !allowed[imp.Path.Value] {
 			t.Errorf("store proxy imports %s", imp.Path.Value)

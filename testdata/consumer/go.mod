@@ -3,7 +3,7 @@ module example.org/architecture-consumer
 go 1.25.0
 
 require (
-	generative-architecture v0.0.0
+	github.com/phoban01/generative-architecture v0.0.0
 	sigs.k8s.io/controller-runtime v0.23.3
 )
 
@@ -70,4 +70,4 @@ require (
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
 
-replace generative-architecture => ../..
+replace github.com/phoban01/generative-architecture => ../..

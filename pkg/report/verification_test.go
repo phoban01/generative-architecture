@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"generative-architecture/pkg/receipt"
+	"github.com/phoban01/generative-architecture/pkg/receipt"
 )
 
 func sampleVerification() Verification {

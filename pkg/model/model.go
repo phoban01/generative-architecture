@@ -3,8 +3,8 @@ package model
 
 import (
 	"fmt"
-	"generative-architecture/pkg/effect"
-	"generative-architecture/pkg/expr"
+	"github.com/phoban01/generative-architecture/pkg/effect"
+	"github.com/phoban01/generative-architecture/pkg/expr"
 	"regexp"
 	"slices"
 	"sort"

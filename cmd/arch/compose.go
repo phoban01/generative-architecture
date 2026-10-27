@@ -7,17 +7,17 @@ import (
 	"strconv"
 	"strings"
 
-	"generative-architecture/pkg/abstraction"
-	"generative-architecture/pkg/adaptergen"
-	cr "generative-architecture/pkg/controllerruntime"
-	"generative-architecture/pkg/effect"
-	"generative-architecture/pkg/expr"
-	"generative-architecture/pkg/goflow"
-	"generative-architecture/pkg/ir"
-	"generative-architecture/pkg/model"
-	"generative-architecture/pkg/process"
-	"generative-architecture/pkg/project"
-	"generative-architecture/pkg/summaries"
+	"github.com/phoban01/generative-architecture/pkg/abstraction"
+	"github.com/phoban01/generative-architecture/pkg/adaptergen"
+	cr "github.com/phoban01/generative-architecture/pkg/controllerruntime"
+	"github.com/phoban01/generative-architecture/pkg/effect"
+	"github.com/phoban01/generative-architecture/pkg/expr"
+	"github.com/phoban01/generative-architecture/pkg/goflow"
+	"github.com/phoban01/generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/model"
+	"github.com/phoban01/generative-architecture/pkg/process"
+	"github.com/phoban01/generative-architecture/pkg/project"
+	"github.com/phoban01/generative-architecture/pkg/summaries"
 )
 
 // Runtime events: the actions of the controller-runtime profile the model

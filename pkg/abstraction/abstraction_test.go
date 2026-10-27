@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/ir"
 )
 
 func TestLoadAndDerive(t *testing.T) {

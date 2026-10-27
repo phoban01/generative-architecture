@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/ir"
 )
 
 // hinted has three elements, two relations, a static view and a dynamic

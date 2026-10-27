@@ -5,12 +5,12 @@ import (
 	"strings"
 	"testing"
 
-	"generative-architecture/pkg/expr"
-	"generative-architecture/pkg/goflow"
-	"generative-architecture/pkg/ir"
-	"generative-architecture/pkg/model"
-	"generative-architecture/pkg/process"
-	"generative-architecture/pkg/summaries"
+	"github.com/phoban01/generative-architecture/pkg/expr"
+	"github.com/phoban01/generative-architecture/pkg/goflow"
+	"github.com/phoban01/generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/model"
+	"github.com/phoban01/generative-architecture/pkg/process"
+	"github.com/phoban01/generative-architecture/pkg/summaries"
 )
 
 // getBindings binds the direct get summary's placeholders to model state.

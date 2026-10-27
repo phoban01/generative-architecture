@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sort"
 
-	cr "generative-architecture/pkg/controllerruntime"
+	cr "github.com/phoban01/generative-architecture/pkg/controllerruntime"
 )
 
 // RuntimeBinding names the actions and state variables of a

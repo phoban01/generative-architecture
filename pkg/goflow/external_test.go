@@ -6,13 +6,13 @@ import (
 	"strings"
 	"testing"
 
-	"generative-architecture/pkg/expr"
-	"generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/expr"
+	"github.com/phoban01/generative-architecture/pkg/ir"
 )
 
 const (
-	externalPackage = "generative-architecture/pkg/goflow/testdata/external"
-	provisionCallee = "generative-architecture/pkg/goflow/testdata/external/provisioner.Provision"
+	externalPackage = "github.com/phoban01/generative-architecture/pkg/goflow/testdata/external"
+	provisionCallee = "github.com/phoban01/generative-architecture/pkg/goflow/testdata/external/provisioner.Provision"
 )
 
 func externalOptions(t *testing.T) Options {

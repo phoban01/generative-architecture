@@ -7,7 +7,7 @@ import (
 	"errors"
 	"fmt"
 
-	"generative-architecture/pkg/effect"
+	"github.com/phoban01/generative-architecture/pkg/effect"
 )
 
 // BoundarySteps is the number of effects of process database-reconcile.

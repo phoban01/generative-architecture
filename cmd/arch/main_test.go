@@ -48,7 +48,7 @@ func TestImportsNothingFromExamples(t *testing.T) {
 		t.Fatal(err)
 	}
 	packages.Visit(pkgs, nil, func(p *packages.Package) {
-		if strings.HasPrefix(p.PkgPath, "generative-architecture/examples/") {
+		if strings.HasPrefix(p.PkgPath, "github.com/phoban01/generative-architecture/examples/") {
 			t.Errorf("cmd/arch depends on %s", p.PkgPath)
 		}
 	})

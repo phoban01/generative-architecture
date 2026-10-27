@@ -13,12 +13,12 @@ import (
 	"strings"
 	"time"
 
-	"generative-architecture/pkg/conformance"
-	"generative-architecture/pkg/ir"
-	"generative-architecture/pkg/krm"
-	"generative-architecture/pkg/likec4"
-	"generative-architecture/pkg/model"
-	"generative-architecture/pkg/mutation"
+	"github.com/phoban01/generative-architecture/pkg/conformance"
+	"github.com/phoban01/generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/krm"
+	"github.com/phoban01/generative-architecture/pkg/likec4"
+	"github.com/phoban01/generative-architecture/pkg/model"
+	"github.com/phoban01/generative-architecture/pkg/mutation"
 )
 
 // Evidence files, relative to the example directory. cmd/library-demo

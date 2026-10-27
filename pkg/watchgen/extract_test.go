@@ -1,10 +1,10 @@
 package watchgen_test
 
 import (
-	"generative-architecture/pkg/effect"
-	"generative-architecture/pkg/goflow"
-	"generative-architecture/pkg/ir"
-	"generative-architecture/pkg/watchgen"
+	"github.com/phoban01/generative-architecture/pkg/effect"
+	"github.com/phoban01/generative-architecture/pkg/goflow"
+	"github.com/phoban01/generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/watchgen"
 	"os"
 	"strings"
 	"testing"
@@ -18,7 +18,7 @@ func fixture(t *testing.T) ([]byte, map[string]effect.Resource) {
 	}
 	resources := map[string]effect.Resource{}
 	for _, kind := range []string{"Database", "DatabaseInstance"} {
-		resources["generative-architecture/examples/database/api/v1alpha1."+kind] = effect.Resource{Group: "test.example", Version: "v1", Kind: kind}
+		resources["github.com/phoban01/generative-architecture/examples/database/api/v1alpha1."+kind] = effect.Resource{Group: "test.example", Version: "v1", Kind: kind}
 	}
 	return source, resources
 }

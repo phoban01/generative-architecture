@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"generative-architecture/pkg/adaptergen"
-	"generative-architecture/pkg/adaptergen/internal/fixture"
-	"generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/adaptergen"
+	"github.com/phoban01/generative-architecture/pkg/adaptergen/internal/fixture"
+	"github.com/phoban01/generative-architecture/pkg/ir"
 )
 
 func TestGenerateEnvironment(t *testing.T) {

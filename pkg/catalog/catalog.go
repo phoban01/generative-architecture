@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"sort"
 
-	"generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/ir"
 
 	"k8s.io/apimachinery/pkg/api/meta"
 )

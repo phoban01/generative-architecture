@@ -3,7 +3,7 @@ package conformance
 import (
 	"errors"
 	"fmt"
-	"generative-architecture/pkg/goflow"
+	"github.com/phoban01/generative-architecture/pkg/goflow"
 )
 
 // Category classifies why a replay or check failed so that reports can

@@ -7,7 +7,7 @@ import (
 	"io"
 	"strings"
 
-	"generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/ir"
 )
 
 // errDiffers reports that two IR documents differ. arch exits with status 2

@@ -1,7 +1,7 @@
 package contracts
 
 import (
-	"generative-architecture/pkg/krm"
+	"github.com/phoban01/generative-architecture/pkg/krm"
 	"os"
 	"path/filepath"
 	"slices"

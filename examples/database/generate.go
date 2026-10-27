@@ -12,18 +12,18 @@ import (
 	"strconv"
 	"strings"
 
-	"generative-architecture/pkg/abstraction"
-	"generative-architecture/pkg/adaptergen"
-	"generative-architecture/pkg/dynamicgen"
-	"generative-architecture/pkg/effect"
-	"generative-architecture/pkg/expr"
-	"generative-architecture/pkg/goflow"
-	"generative-architecture/pkg/ir"
-	"generative-architecture/pkg/krm"
-	"generative-architecture/pkg/model"
-	"generative-architecture/pkg/process"
-	"generative-architecture/pkg/watchgen"
-	"generative-architecture/pkg/watchmodel"
+	"github.com/phoban01/generative-architecture/pkg/abstraction"
+	"github.com/phoban01/generative-architecture/pkg/adaptergen"
+	"github.com/phoban01/generative-architecture/pkg/dynamicgen"
+	"github.com/phoban01/generative-architecture/pkg/effect"
+	"github.com/phoban01/generative-architecture/pkg/expr"
+	"github.com/phoban01/generative-architecture/pkg/goflow"
+	"github.com/phoban01/generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/krm"
+	"github.com/phoban01/generative-architecture/pkg/model"
+	"github.com/phoban01/generative-architecture/pkg/process"
+	"github.com/phoban01/generative-architecture/pkg/watchgen"
+	"github.com/phoban01/generative-architecture/pkg/watchmodel"
 )
 
 // This file derives the Database controller's TransitionModel from its
@@ -530,7 +530,7 @@ const (
 func extractWatches(wiring []byte) (watchgen.Result, error) {
 	resources := map[string]effect.Resource{}
 	for _, kind := range []string{"Database", "DatabaseInstance"} {
-		resources["generative-architecture/examples/database/api/v1alpha1."+kind] = effect.Resource{Group: "demo.architecture.local", Version: "v1alpha1", Kind: kind}
+		resources["github.com/phoban01/generative-architecture/examples/database/api/v1alpha1."+kind] = effect.Resource{Group: "demo.architecture.local", Version: "v1alpha1", Kind: kind}
 	}
 	w, err := watchgen.Extract(wiring, watchController, "SetupWithManager", resources)
 	if err != nil {

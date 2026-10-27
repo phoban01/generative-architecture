@@ -2,8 +2,8 @@ package conformance
 
 import (
 	"fmt"
-	"generative-architecture/pkg/ir"
-	"generative-architecture/pkg/model"
+	"github.com/phoban01/generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/model"
 	"strings"
 )
 

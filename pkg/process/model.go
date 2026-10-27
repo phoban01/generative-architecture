@@ -4,11 +4,11 @@ package process
 
 import (
 	"fmt"
-	"generative-architecture/pkg/expr"
-	"generative-architecture/pkg/goflow"
-	"generative-architecture/pkg/ir"
-	"generative-architecture/pkg/model"
-	"generative-architecture/pkg/summaries"
+	"github.com/phoban01/generative-architecture/pkg/expr"
+	"github.com/phoban01/generative-architecture/pkg/goflow"
+	"github.com/phoban01/generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/model"
+	"github.com/phoban01/generative-architecture/pkg/summaries"
 	"strconv"
 )
 

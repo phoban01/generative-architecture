@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/ir"
 )
 
 var update = flag.Bool("update", false, "rewrite the golden files in testdata")

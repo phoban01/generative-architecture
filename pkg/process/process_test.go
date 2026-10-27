@@ -1,10 +1,10 @@
 package process_test
 
 import (
-	"generative-architecture/pkg/expr"
-	"generative-architecture/pkg/goflow"
-	"generative-architecture/pkg/model"
-	"generative-architecture/pkg/process"
+	"github.com/phoban01/generative-architecture/pkg/expr"
+	"github.com/phoban01/generative-architecture/pkg/goflow"
+	"github.com/phoban01/generative-architecture/pkg/model"
+	"github.com/phoban01/generative-architecture/pkg/process"
 	"testing"
 )
 

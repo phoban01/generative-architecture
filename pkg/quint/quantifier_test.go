@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"generative-architecture/pkg/expr"
-	"generative-architecture/pkg/model"
-	"generative-architecture/pkg/quint"
+	"github.com/phoban01/generative-architecture/pkg/expr"
+	"github.com/phoban01/generative-architecture/pkg/model"
+	"github.com/phoban01/generative-architecture/pkg/quint"
 )
 
 // on is the CEL predicate "the flag of key v is set" over the keys a and b.

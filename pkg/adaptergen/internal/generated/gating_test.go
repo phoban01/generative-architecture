@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"generative-architecture/pkg/adaptergen"
-	"generative-architecture/pkg/adaptergen/internal/fixture"
-	"generative-architecture/pkg/effect"
-	"generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/adaptergen"
+	"github.com/phoban01/generative-architecture/pkg/adaptergen/internal/fixture"
+	"github.com/phoban01/generative-architecture/pkg/effect"
+	"github.com/phoban01/generative-architecture/pkg/ir"
 )
 
 func TestGatingUpToDate(t *testing.T) {

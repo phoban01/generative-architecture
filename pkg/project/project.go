@@ -16,8 +16,8 @@ import (
 
 	"golang.org/x/mod/module"
 
-	"generative-architecture/pkg/catalog"
-	"generative-architecture/pkg/krm"
+	"github.com/phoban01/generative-architecture/pkg/catalog"
+	"github.com/phoban01/generative-architecture/pkg/krm"
 )
 
 // Kind is the KRM kind of a project document.

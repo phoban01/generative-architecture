@@ -14,7 +14,7 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
-	"generative-architecture/pkg/report"
+	"github.com/phoban01/generative-architecture/pkg/report"
 )
 
 var (

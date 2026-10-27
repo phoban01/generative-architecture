@@ -12,8 +12,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	"generative-architecture/examples/refsystem/api/v1alpha1"
-	"generative-architecture/examples/refsystem/internal/extractcheck"
+	"github.com/phoban01/generative-architecture/examples/refsystem/api/v1alpha1"
+	"github.com/phoban01/generative-architecture/examples/refsystem/internal/extractcheck"
 )
 
 func newClient(t *testing.T, objs ...client.Object) client.Client {

@@ -3,7 +3,7 @@ package adaptergen
 import (
 	"fmt"
 
-	"generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/ir"
 )
 
 // kindConstants names the ir constant for each node kind in generated code.
@@ -98,8 +98,8 @@ import (
 	"context"
 	"fmt"
 
-	"generative-architecture/pkg/effect"
-	"generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/effect"
+	"github.com/phoban01/generative-architecture/pkg/ir"
 )
 
 // ApplyProcessEvent gates the node of process {{.ID}} named event at its
@@ -317,7 +317,7 @@ import (
 	"errors"
 	"fmt"
 
-	"generative-architecture/pkg/effect"
+	"github.com/phoban01/generative-architecture/pkg/effect"
 )
 
 // BoundarySteps is the number of effects of process {{.ID}}.

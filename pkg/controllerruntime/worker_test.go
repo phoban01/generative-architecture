@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	cr "generative-architecture/pkg/controllerruntime"
+	cr "github.com/phoban01/generative-architecture/pkg/controllerruntime"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"

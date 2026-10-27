@@ -24,7 +24,7 @@ func TestLoadReturnsTypedPackage(t *testing.T) {
 	if l.Package == nil || l.Package.TypesInfo == nil {
 		t.Fatalf("type information missing: %+v", l)
 	}
-	if l.Package.PkgPath != "generative-architecture/examples/configmirror" {
+	if l.Package.PkgPath != "github.com/phoban01/generative-architecture/examples/configmirror" {
 		t.Fatalf("unexpected package %q", l.Package.PkgPath)
 	}
 	if l.File == nil || l.Func == nil || l.Func.Name.Name != "Reconcile" {

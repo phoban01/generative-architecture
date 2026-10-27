@@ -5,9 +5,9 @@ import (
 	"strconv"
 	"strings"
 
-	"generative-architecture/pkg/expr"
-	"generative-architecture/pkg/ir"
-	"generative-architecture/pkg/model"
+	"github.com/phoban01/generative-architecture/pkg/expr"
+	"github.com/phoban01/generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/model"
 )
 
 // WrongKeyVar names the state that records a delivery to a key outside the

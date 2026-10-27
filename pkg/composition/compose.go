@@ -3,11 +3,11 @@ package composition
 
 import (
 	"fmt"
-	"generative-architecture/pkg/effect"
-	"generative-architecture/pkg/expr"
-	"generative-architecture/pkg/ir"
-	"generative-architecture/pkg/model"
-	"generative-architecture/pkg/protocol"
+	"github.com/phoban01/generative-architecture/pkg/effect"
+	"github.com/phoban01/generative-architecture/pkg/expr"
+	"github.com/phoban01/generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/model"
+	"github.com/phoban01/generative-architecture/pkg/protocol"
 	"reflect"
 	"strings"
 )

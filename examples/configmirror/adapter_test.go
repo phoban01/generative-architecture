@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"generative-architecture/pkg/conformance"
-	"generative-architecture/pkg/krm"
-	"generative-architecture/pkg/model"
+	"github.com/phoban01/generative-architecture/pkg/conformance"
+	"github.com/phoban01/generative-architecture/pkg/krm"
+	"github.com/phoban01/generative-architecture/pkg/model"
 )
 
 // committedModel loads the generated model the evidence was produced from.

@@ -4,12 +4,12 @@ import (
 	"context"
 	"fmt"
 
-	"generative-architecture/examples/database/generated"
-	cr "generative-architecture/pkg/controllerruntime"
-	"generative-architecture/pkg/effect"
-	"generative-architecture/pkg/ir"
-	"generative-architecture/pkg/watchgen"
-	"generative-architecture/pkg/watchmodel"
+	"github.com/phoban01/generative-architecture/examples/database/generated"
+	cr "github.com/phoban01/generative-architecture/pkg/controllerruntime"
+	"github.com/phoban01/generative-architecture/pkg/effect"
+	"github.com/phoban01/generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/watchgen"
+	"github.com/phoban01/generative-architecture/pkg/watchmodel"
 
 	"k8s.io/apimachinery/pkg/api/meta"
 	dynamicfake "k8s.io/client-go/dynamic/fake"

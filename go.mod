@@ -1,4 +1,4 @@
-module generative-architecture
+module github.com/phoban01/generative-architecture
 
 go 1.25.0
 

@@ -2,7 +2,7 @@ package effect_test
 
 import (
 	"context"
-	"generative-architecture/pkg/effect"
+	"github.com/phoban01/generative-architecture/pkg/effect"
 	"testing"
 	"time"
 )

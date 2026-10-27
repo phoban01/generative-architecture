@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"generative-architecture/pkg/adaptergen"
-	"generative-architecture/pkg/adaptergen/internal/fixture"
+	"github.com/phoban01/generative-architecture/pkg/adaptergen"
+	"github.com/phoban01/generative-architecture/pkg/adaptergen/internal/fixture"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

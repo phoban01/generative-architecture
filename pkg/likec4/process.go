@@ -3,7 +3,7 @@ package likec4
 import (
 	"fmt"
 
-	"generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/ir"
 )
 
 // ProcessView draws the control flow of one IR process: a step element per

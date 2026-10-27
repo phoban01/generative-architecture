@@ -60,7 +60,7 @@ func copyClosure(t *testing.T, r Receipt) Receipt {
 
 func TestCollectClosure(t *testing.T) {
 	r := collect(t)
-	if r.Module != "generative-architecture" {
+	if r.Module != "github.com/phoban01/generative-architecture" {
 		t.Fatalf("module %q", r.Module)
 	}
 	for _, want := range []string{"examples/configmirror/controller.go", "examples/configmirror/adapter.go", "pkg/conformance/replay.go", "pkg/controllerruntime/worker.go", "pkg/krm/resource.go", "pkg/model/model.go", "pkg/expr/cel.go", "go.mod", "go.sum", "examples/configmirror/abstraction.yaml", "pkg/summaries/data/get.yaml"} {

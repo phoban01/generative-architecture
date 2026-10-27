@@ -8,10 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	"generative-architecture/pkg/conformance"
-	"generative-architecture/pkg/expr"
-	"generative-architecture/pkg/model"
-	"generative-architecture/pkg/report"
+	"github.com/phoban01/generative-architecture/pkg/conformance"
+	"github.com/phoban01/generative-architecture/pkg/expr"
+	"github.com/phoban01/generative-architecture/pkg/model"
+	"github.com/phoban01/generative-architecture/pkg/report"
 )
 
 // savedTraces are the traces committed with the ConfigMirror sample,

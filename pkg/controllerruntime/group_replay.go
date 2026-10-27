@@ -5,8 +5,8 @@ package controllerruntime
 import (
 	"context"
 	"fmt"
-	"generative-architecture/pkg/conformance"
-	"generative-architecture/pkg/model"
+	"github.com/phoban01/generative-architecture/pkg/conformance"
+	"github.com/phoban01/generative-architecture/pkg/model"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"time"

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"generative-architecture/examples/configmirror/generated"
+	"github.com/phoban01/generative-architecture/examples/configmirror/generated"
 
 	"golang.org/x/tools/go/packages"
 	corev1 "k8s.io/api/core/v1"
@@ -93,7 +93,7 @@ func loadGenerated(t *testing.T) *packages.Package {
 // model state, and Project takes nothing but a context and API readers.
 func TestGeneratedPackageReadsImplementationStateOnly(t *testing.T) {
 	p := loadGenerated(t)
-	forbidden := map[string]bool{"generative-architecture/pkg/model": true, "generative-architecture/pkg/conformance": true}
+	forbidden := map[string]bool{"github.com/phoban01/generative-architecture/pkg/model": true, "github.com/phoban01/generative-architecture/pkg/conformance": true}
 	var reached []string
 	seen := map[*types.Package]bool{}
 	var walk func(*types.Package, []string)

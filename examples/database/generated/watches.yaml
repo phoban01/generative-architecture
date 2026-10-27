@@ -18,12 +18,12 @@ status:
         group: demo.architecture.local
         version: v1alpha1
         kind: DatabaseInstance
-      goType: generative-architecture/examples/database/api/v1alpha1.DatabaseInstance
+      goType: github.com/phoban01/generative-architecture/examples/database/api/v1alpha1.DatabaseInstance
       mapping: InstanceToDatabase
       line: 31
       namePath:
         - Spec
         - DatabaseName
       mappingSha256: d1ad1325888dcccb9d76ed8811b8cae8c33b507edd4a81d3ac7034e0a45635e2
-  sourceSha256: 0e4e54b649f30aa7eeb224b026909b36bf24c95e486d00baa6cf678fcca0777a
+  sourceSha256: f8ca9b059fe3d46a5f4a2c5320f530fb83c4c17af5c9b6fe05bff470aac35272
   methodSha256: 7d3a780b9bca3d2974ccf7f511febfa67fab3e059782d9e458a375bbfc13db56

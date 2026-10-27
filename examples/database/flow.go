@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strconv"
 
-	"generative-architecture/pkg/effect"
-	"generative-architecture/pkg/ir"
-	"generative-architecture/pkg/likec4"
+	"github.com/phoban01/generative-architecture/pkg/effect"
+	"github.com/phoban01/generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/likec4"
 )
 
 // Process converts the extracted Reconcile into an IR process. Store

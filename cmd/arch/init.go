@@ -11,8 +11,8 @@ import (
 
 	"k8s.io/apimachinery/pkg/util/validation"
 
-	"generative-architecture/pkg/krm"
-	"generative-architecture/pkg/project"
+	"github.com/phoban01/generative-architecture/pkg/krm"
+	"github.com/phoban01/generative-architecture/pkg/project"
 )
 
 // Files written by arch init into the current directory.

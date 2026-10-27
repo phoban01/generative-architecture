@@ -1,7 +1,7 @@
 package goflow
 
 import (
-	"generative-architecture/pkg/expr"
+	"github.com/phoban01/generative-architecture/pkg/expr"
 	"go/ast"
 	"os"
 	"reflect"
@@ -120,10 +120,10 @@ func TestCallResolvesCalleeBySymbol(t *testing.T) {
 		scope[name] = expr.Symbol{Type: typ, Quint: name}
 	}
 	kinds := map[Callee]string{
-		{Package: "generative-architecture/examples/database", Receiver: "Store", Method: "DatabaseExists"}:                "readDatabase",
-		{Package: "generative-architecture/examples/database", Receiver: "Store", Method: "SatisfiesProvisioningContract"}: "checkContract",
-		{Package: "generative-architecture/examples/database", Receiver: "Store", Method: "DatabaseInstance"}:              "readInstance",
-		{Package: "generative-architecture/examples/database", Receiver: "Store", Method: "CreateDatabaseInstance"}:        "createInstance",
+		{Package: "github.com/phoban01/generative-architecture/examples/database", Receiver: "Store", Method: "DatabaseExists"}:                "readDatabase",
+		{Package: "github.com/phoban01/generative-architecture/examples/database", Receiver: "Store", Method: "SatisfiesProvisioningContract"}: "checkContract",
+		{Package: "github.com/phoban01/generative-architecture/examples/database", Receiver: "Store", Method: "DatabaseInstance"}:              "readInstance",
+		{Package: "github.com/phoban01/generative-architecture/examples/database", Receiver: "Store", Method: "CreateDatabaseInstance"}:        "createInstance",
 	}
 	var seen []Callee
 	opts := Options{Scope: scope, Returns: []Return{{Type: "string"}}}
@@ -142,7 +142,7 @@ func TestCallResolvesCalleeBySymbol(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(seen) != 5 || seen[2] != (Callee{Package: "generative-architecture/examples/database", Receiver: "Store", Method: "DatabaseInstance"}) {
+	if len(seen) != 5 || seen[2] != (Callee{Package: "github.com/phoban01/generative-architecture/examples/database", Receiver: "Store", Method: "DatabaseInstance"}) {
 		t.Fatalf("unexpected callees %+v", seen)
 	}
 	var instance *Node

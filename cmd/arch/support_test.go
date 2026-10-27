@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"generative-architecture/pkg/ir"
-	"generative-architecture/pkg/report"
+	"github.com/phoban01/generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/report"
 )
 
 // support runs arch support and returns its output and error.

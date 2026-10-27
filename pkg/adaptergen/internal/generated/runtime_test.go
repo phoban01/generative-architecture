@@ -6,9 +6,9 @@ import (
 	"reflect"
 	"testing"
 
-	"generative-architecture/pkg/adaptergen"
-	"generative-architecture/pkg/adaptergen/internal/fixture"
-	cr "generative-architecture/pkg/controllerruntime"
+	"github.com/phoban01/generative-architecture/pkg/adaptergen"
+	"github.com/phoban01/generative-architecture/pkg/adaptergen/internal/fixture"
+	cr "github.com/phoban01/generative-architecture/pkg/controllerruntime"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"

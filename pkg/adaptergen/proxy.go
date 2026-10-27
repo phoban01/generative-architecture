@@ -8,14 +8,14 @@ import (
 	"strconv"
 	"strings"
 
-	"generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/ir"
 )
 
 // Packages every generated proxy imports, by the name it uses for them.
 var proxyImports = map[string]string{
 	"context": "context",
 	"fmt":     "fmt",
-	"effect":  "generative-architecture/pkg/effect",
+	"effect":  "github.com/phoban01/generative-architecture/pkg/effect",
 }
 
 type proxyImport struct{ Alias, Path string }
@@ -290,7 +290,7 @@ import (
 	"context"
 	"fmt"
 
-	"generative-architecture/pkg/effect"
+	"github.com/phoban01/generative-architecture/pkg/effect"
 {{- range .Imports}}
 	{{.Alias}} {{q .Path}}
 {{- end}}

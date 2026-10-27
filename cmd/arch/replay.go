@@ -9,8 +9,8 @@ import (
 	"runtime"
 	"sort"
 
-	"generative-architecture/pkg/conformance"
-	"generative-architecture/pkg/report"
+	"github.com/phoban01/generative-architecture/pkg/conformance"
+	"github.com/phoban01/generative-architecture/pkg/report"
 )
 
 // noAdapter is the unsupported finding of every replay: arch replays

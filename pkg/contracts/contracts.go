@@ -5,8 +5,8 @@ package contracts
 import (
 	"errors"
 	"fmt"
-	"generative-architecture/pkg/goflow"
-	"generative-architecture/pkg/krm"
+	"github.com/phoban01/generative-architecture/pkg/goflow"
+	"github.com/phoban01/generative-architecture/pkg/krm"
 	"go/ast"
 	"go/token"
 	"go/types"

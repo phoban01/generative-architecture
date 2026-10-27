@@ -11,13 +11,13 @@ import (
 	"sort"
 	"strings"
 
-	"generative-architecture/pkg/conformance"
-	"generative-architecture/pkg/ir"
-	"generative-architecture/pkg/krm"
-	"generative-architecture/pkg/model"
-	"generative-architecture/pkg/project"
-	"generative-architecture/pkg/receipt"
-	"generative-architecture/pkg/report"
+	"github.com/phoban01/generative-architecture/pkg/conformance"
+	"github.com/phoban01/generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/krm"
+	"github.com/phoban01/generative-architecture/pkg/model"
+	"github.com/phoban01/generative-architecture/pkg/project"
+	"github.com/phoban01/generative-architecture/pkg/receipt"
+	"github.com/phoban01/generative-architecture/pkg/report"
 )
 
 // Files arch check and arch replay read and write under --out.

@@ -12,11 +12,11 @@ import (
 	"reflect"
 	"testing"
 
-	"generative-architecture/pkg/abstraction"
-	"generative-architecture/pkg/adaptergen"
-	"generative-architecture/pkg/effect"
-	"generative-architecture/pkg/ir"
-	"generative-architecture/pkg/project"
+	"github.com/phoban01/generative-architecture/pkg/abstraction"
+	"github.com/phoban01/generative-architecture/pkg/adaptergen"
+	"github.com/phoban01/generative-architecture/pkg/effect"
+	"github.com/phoban01/generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/project"
 )
 
 // The replay adapter's projection, reference check, environment, process
@@ -96,7 +96,7 @@ func storeType() (*types.Named, error) {
 	if err != nil {
 		return nil, err
 	}
-	pkg, err := (&types.Config{}).Check("generative-architecture/examples/database", fset, []*ast.File{f}, nil)
+	pkg, err := (&types.Config{}).Check("github.com/phoban01/generative-architecture/examples/database", fset, []*ast.File{f}, nil)
 	if err != nil {
 		return nil, err
 	}

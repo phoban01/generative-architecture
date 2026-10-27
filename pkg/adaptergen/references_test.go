@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"generative-architecture/pkg/abstraction"
-	"generative-architecture/pkg/adaptergen"
-	"generative-architecture/pkg/adaptergen/internal/fixture"
+	"github.com/phoban01/generative-architecture/pkg/abstraction"
+	"github.com/phoban01/generative-architecture/pkg/adaptergen"
+	"github.com/phoban01/generative-architecture/pkg/adaptergen/internal/fixture"
 )
 
 func TestGenerateReferenceCheck(t *testing.T) {

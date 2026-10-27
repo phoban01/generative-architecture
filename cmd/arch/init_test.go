@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"generative-architecture/pkg/krm"
-	"generative-architecture/pkg/project"
+	"github.com/phoban01/generative-architecture/pkg/krm"
+	"github.com/phoban01/generative-architecture/pkg/project"
 )
 
 func runIn(t *testing.T, args ...string) error {

@@ -1,8 +1,8 @@
 package conformance_test
 
 import (
-	"generative-architecture/pkg/conformance"
-	"generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/conformance"
+	"github.com/phoban01/generative-architecture/pkg/ir"
 	"reflect"
 	"testing"
 )

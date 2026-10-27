@@ -7,7 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"generative-architecture/pkg/model"
+	"github.com/phoban01/generative-architecture/pkg/model"
 	"os"
 	"reflect"
 	"strconv"

@@ -6,7 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"generative-architecture/pkg/effect"
+	"github.com/phoban01/generative-architecture/pkg/effect"
 	"reflect"
 	"strings"
 

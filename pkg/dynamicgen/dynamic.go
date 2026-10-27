@@ -10,8 +10,8 @@ import (
 	"sort"
 	"strings"
 
-	"generative-architecture/pkg/effect"
-	"generative-architecture/pkg/goflow"
+	"github.com/phoban01/generative-architecture/pkg/effect"
+	"github.com/phoban01/generative-architecture/pkg/goflow"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )

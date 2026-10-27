@@ -1,10 +1,10 @@
 package database
 
 import (
-	"generative-architecture/examples/database/generated"
-	"generative-architecture/pkg/abstraction"
-	cr "generative-architecture/pkg/controllerruntime"
-	"generative-architecture/pkg/effect"
+	"github.com/phoban01/generative-architecture/examples/database/generated"
+	"github.com/phoban01/generative-architecture/pkg/abstraction"
+	cr "github.com/phoban01/generative-architecture/pkg/controllerruntime"
+	"github.com/phoban01/generative-architecture/pkg/effect"
 	"k8s.io/apimachinery/pkg/runtime"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 )

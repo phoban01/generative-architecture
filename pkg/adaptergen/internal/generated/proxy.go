@@ -6,8 +6,8 @@ import (
 	"context"
 	"fmt"
 
-	fixture "generative-architecture/pkg/adaptergen/internal/fixture"
-	"generative-architecture/pkg/effect"
+	fixture "github.com/phoban01/generative-architecture/pkg/adaptergen/internal/fixture"
+	"github.com/phoban01/generative-architecture/pkg/effect"
 )
 
 // ProvisionerProxy gates the effects of fixture.Provisioner: a call of a gated

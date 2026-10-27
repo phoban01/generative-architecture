@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/ir"
 )
 
 // readOperations are the API operations drawn as reads; every other API

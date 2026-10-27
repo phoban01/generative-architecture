@@ -1,7 +1,7 @@
 package goflow
 
 import (
-	"generative-architecture/pkg/expr"
+	"github.com/phoban01/generative-architecture/pkg/expr"
 	"go/ast"
 	"reflect"
 	"testing"
@@ -17,9 +17,9 @@ func fetchOptions() Options {
 	}
 	opts.Call = func(c Callee, call *ast.CallExpr, convert Convert) (Node, bool, error) {
 		switch c {
-		case Callee{Package: "generative-architecture/pkg/goflow/testdata/typed", Receiver: "Reconciler", Method: "get"}:
+		case Callee{Package: "github.com/phoban01/generative-architecture/pkg/goflow/testdata/typed", Receiver: "Reconciler", Method: "get"}:
 			return Node{Kind: "get"}, true, nil
-		case Callee{Package: "generative-architecture/pkg/goflow/testdata/typed", Receiver: "Reconciler", Method: "record"}:
+		case Callee{Package: "github.com/phoban01/generative-architecture/pkg/goflow/testdata/typed", Receiver: "Reconciler", Method: "record"}:
 			return Node{Kind: "record"}, true, nil
 		}
 		return Node{}, false, nil

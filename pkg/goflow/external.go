@@ -3,8 +3,8 @@ package goflow
 import (
 	"fmt"
 
-	"generative-architecture/pkg/ir"
-	"generative-architecture/pkg/krm"
+	"github.com/phoban01/generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/krm"
 )
 
 // ExternalEffectsKind is the KRM kind of a document declaring the effects a

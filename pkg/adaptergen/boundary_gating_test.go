@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"generative-architecture/pkg/adaptergen"
-	"generative-architecture/pkg/adaptergen/internal/fixture"
-	"generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/adaptergen"
+	"github.com/phoban01/generative-architecture/pkg/adaptergen/internal/fixture"
+	"github.com/phoban01/generative-architecture/pkg/ir"
 )
 
 func boundaryEvents() []adaptergen.BoundaryEvent {
@@ -28,11 +28,11 @@ func TestGenerateBoundaryGating(t *testing.T) {
 	golden(t, "boundary_gating", src)
 	p := typecheck(t, src)
 	params, results := signature(t, p, "ApplyBoundary")
-	wantParams := []string{"context.Context", "*generative-architecture/pkg/effect.Gate", "string"}
+	wantParams := []string{"context.Context", "*github.com/phoban01/generative-architecture/pkg/effect.Gate", "string"}
 	if !reflect.DeepEqual(params, wantParams) {
 		t.Errorf("ApplyBoundary takes %v, want %v", params, wantParams)
 	}
-	if !reflect.DeepEqual(results, []string{"generative-architecture/pkg/adaptergen/internal/typecheck.Boundary", "bool", "error"}) {
+	if !reflect.DeepEqual(results, []string{"github.com/phoban01/generative-architecture/pkg/adaptergen/internal/typecheck.Boundary", "bool", "error"}) {
 		t.Errorf("ApplyBoundary returns %v", results)
 	}
 	assertNoModelState(t, p)

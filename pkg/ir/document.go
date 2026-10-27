@@ -3,7 +3,7 @@ package ir
 import (
 	"fmt"
 
-	"generative-architecture/pkg/krm"
+	"github.com/phoban01/generative-architecture/pkg/krm"
 )
 
 // SchemaVersion is the IR document version this package reads and writes.

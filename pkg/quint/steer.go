@@ -6,9 +6,9 @@ import (
 	"slices"
 	"strings"
 
-	"generative-architecture/pkg/conformance"
-	"generative-architecture/pkg/model"
-	"generative-architecture/pkg/receipt"
+	"github.com/phoban01/generative-architecture/pkg/conformance"
+	"github.com/phoban01/generative-architecture/pkg/model"
+	"github.com/phoban01/generative-architecture/pkg/receipt"
 )
 
 // Sampling strategies, as a receipt records them.

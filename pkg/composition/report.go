@@ -1,6 +1,6 @@
 package composition
 
-import "generative-architecture/pkg/report"
+import "github.com/phoban01/generative-architecture/pkg/report"
 
 // ReportSections turns the links and join diagnostics of a composition and
 // its protocol checks (Result.Protocols) into the binding and protocol

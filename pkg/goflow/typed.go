@@ -2,7 +2,7 @@ package goflow
 
 import (
 	"fmt"
-	"generative-architecture/pkg/expr"
+	"github.com/phoban01/generative-architecture/pkg/expr"
 	"go/ast"
 	"go/constant"
 	"go/types"

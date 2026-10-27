@@ -1,8 +1,8 @@
 package composition_test
 
 import (
-	"generative-architecture/pkg/composition"
-	"generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/composition"
+	"github.com/phoban01/generative-architecture/pkg/ir"
 	"os"
 	"path/filepath"
 	"strings"

@@ -2,8 +2,8 @@ package process
 
 import (
 	"fmt"
-	"generative-architecture/pkg/expr"
-	"generative-architecture/pkg/goflow"
+	"github.com/phoban01/generative-architecture/pkg/expr"
+	"github.com/phoban01/generative-architecture/pkg/goflow"
 )
 
 // Call binds an extracted subreconciler's symbols and return values to its

@@ -6,7 +6,7 @@ spec:
   effects:
     - id: provision
       target:
-        package: generative-architecture/pkg/goflow/testdata/external/provisioner
+        package: github.com/phoban01/generative-architecture/pkg/goflow/testdata/external/provisioner
         func: Provision
       outcomes:
         - name: provisioned

@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"generative-architecture/pkg/ir"
-	"generative-architecture/pkg/watchgen"
+	"github.com/phoban01/generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/watchgen"
 )
 
 func TestIRWatches(t *testing.T) {

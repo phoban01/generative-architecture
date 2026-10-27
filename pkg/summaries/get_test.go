@@ -3,7 +3,7 @@ package summaries
 import (
 	"testing"
 
-	"generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/ir"
 )
 
 func TestBuiltinGet(t *testing.T) {

@@ -5,7 +5,7 @@ package sourcegen
 import (
 	"crypto/sha256"
 	"fmt"
-	"generative-architecture/pkg/contracts"
+	"github.com/phoban01/generative-architecture/pkg/contracts"
 	"os"
 	"path/filepath"
 	"reflect"

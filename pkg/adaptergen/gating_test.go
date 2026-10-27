@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"generative-architecture/pkg/adaptergen"
-	"generative-architecture/pkg/adaptergen/internal/fixture"
-	"generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/adaptergen"
+	"github.com/phoban01/generative-architecture/pkg/adaptergen/internal/fixture"
+	"github.com/phoban01/generative-architecture/pkg/ir"
 )
 
 func TestGenerateGating(t *testing.T) {
@@ -18,7 +18,7 @@ func TestGenerateGating(t *testing.T) {
 	golden(t, "gating", src)
 	p := typecheck(t, src)
 	params, results := signature(t, p, "ApplyProcessEvent")
-	wantParams := []string{"context.Context", "*generative-architecture/pkg/effect.Gate", "map[string]generative-architecture/pkg/ir.Node", "string", "func(id string, r generative-architecture/pkg/effect.Result)"}
+	wantParams := []string{"context.Context", "*github.com/phoban01/generative-architecture/pkg/effect.Gate", "map[string]github.com/phoban01/generative-architecture/pkg/ir.Node", "string", "func(id string, r github.com/phoban01/generative-architecture/pkg/effect.Result)"}
 	if !reflect.DeepEqual(params, wantParams) {
 		t.Errorf("ApplyProcessEvent takes %v, want %v", params, wantParams)
 	}

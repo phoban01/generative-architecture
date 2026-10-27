@@ -3,7 +3,7 @@ kind: Project
 metadata:
   name: watched
 spec:
-  module: generative-architecture
+  module: github.com/phoban01/generative-architecture
   packages:
     - ./cmd/arch/testdata/watched
   catalog:
