@@ -1,0 +1,12 @@
+apiVersion: architecture.local/v1alpha1
+kind: Project
+metadata:
+  name: widget
+spec:
+  module: github.com/phoban01/generative-architecture
+  packages:
+    - ./cmd/arch/testdata/grouped/widget
+  catalog:
+    # Lists Widget in two groups with the same version.
+    discovery:
+      - discovery.json
