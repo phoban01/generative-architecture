@@ -5,6 +5,7 @@ import (
 	"generative-architecture/pkg/goflow"
 	"generative-architecture/pkg/krm"
 	"generative-architecture/pkg/model"
+	"generative-architecture/pkg/protocol"
 	"generative-architecture/pkg/sourcegen"
 	"golang.org/x/mod/modfile"
 	"os"
@@ -117,6 +118,25 @@ func Load(root, path string) (Loaded, error) {
 			return out, err
 		}
 	}
-	out.Result, err = Compose(doc.Name, components, links, doc.Properties)
+	// A link's protocol is a ProtocolContract file relative to root.
+	protocols := map[string]protocol.Contract{}
+	for i, l := range links {
+		if l.Protocol == "" || protocols[l.Protocol].Name != "" {
+			continue
+		}
+		file, err := sourcegen.LocalPath(root, l.Protocol)
+		if err != nil {
+			return out, fmt.Errorf("links[%d].protocol: %w", i, err)
+		}
+		c, err := protocol.Load(file)
+		if err != nil {
+			return out, fmt.Errorf("links[%d].protocol: %w", i, err)
+		}
+		if err = record(file); err != nil {
+			return out, err
+		}
+		protocols[l.Protocol] = c
+	}
+	out.Result, err = ComposeWithProtocols(doc.Name, components, links, doc.Properties, protocols)
 	return out, err
 }
