@@ -86,6 +86,9 @@ type generation struct {
 	Spec        model.Spec
 	Program     goflow.Program
 	Environment []EnvironmentAction
+	// Results names, per effect, the Go locals Reconcile assigns the
+	// results of its Store call to, in result order.
+	Results map[string][]string
 }
 
 // generate derives the TransitionModel of Reconcile in source from the
@@ -105,7 +108,7 @@ func generate(abs abstraction.Abstraction, source []byte, accesses dynamicgen.Re
 	if err != nil {
 		return generation{}, err
 	}
-	program, goLocals, err := extract(source, state)
+	program, goLocals, results, err := extract(source, state)
 	if err != nil {
 		return generation{}, err
 	}
@@ -145,7 +148,7 @@ func generate(abs abstraction.Abstraction, source []byte, accesses dynamicgen.Re
 	// Between invocations the system may stay idle, so bounded traces need
 	// not end in a reconcile.
 	spec.Actions = append(spec.Actions, model.Action{Name: "idle", Guard: expr.Expression(config.Finished), Updates: map[string]expr.Expression{}})
-	return generation{Spec: spec, Program: program, Environment: env}, nil
+	return generation{Spec: spec, Program: program, Environment: env, Results: results}, nil
 }
 
 // generateEffects lists one effect per Store method: the extracted dynamic
@@ -301,20 +304,24 @@ func (e Example) EnvironmentEvent(variable, value string) (EnvironmentAction, er
 // of a Store method on Reconcile's Store parameter becomes a node of the
 // method's effect; its arguments lower to the node's expression with the
 // model type of the parameter the Store interface declares. It returns the
-// program and the names of the Go locals Reconcile assigns.
-func extract(source []byte, state map[string]model.Variable) (goflow.Program, []string, error) {
+// program, the names of the Go locals Reconcile assigns and, per effect,
+// the locals its call's results are assigned to, in result order ("" for a
+// result left unassigned).
+func extract(source []byte, state map[string]model.Variable) (goflow.Program, []string, map[string][]string, error) {
 	params, store, err := storeSignature(source)
 	if err != nil {
-		return goflow.Program{}, nil, err
+		return goflow.Program{}, nil, nil, err
 	}
 	scope := map[string]expr.Symbol{}
 	for name, v := range state {
 		scope[name] = expr.Symbol{Type: v.Type, Quint: name}
 	}
 	locals := map[string]bool{}
+	results := map[string][]string{}
 	opts := goflow.Options{File: "controller.go", Method: "Reconcile", Scope: scope, Returns: []goflow.Return{{Type: abstraction.TypeString}}}
 	opts.Statement = func(s ast.Stmt, convert goflow.Convert) (goflow.Node, bool, error) {
 		var call *ast.CallExpr
+		var assigned []string
 		switch x := s.(type) {
 		case *ast.ExprStmt:
 			call, _ = x.X.(*ast.CallExpr)
@@ -323,9 +330,12 @@ func extract(source []byte, state map[string]model.Variable) (goflow.Program, []
 				call, _ = x.Rhs[0].(*ast.CallExpr)
 			}
 			for _, lhs := range x.Lhs {
+				name := ""
 				if id, ok := lhs.(*ast.Ident); ok && id.Name != "_" {
 					locals[id.Name] = true
+					name = id.Name
 				}
+				assigned = append(assigned, name)
 			}
 		}
 		if call == nil {
@@ -342,6 +352,10 @@ func extract(source []byte, state map[string]model.Variable) (goflow.Program, []
 		if !ok {
 			return goflow.Node{}, false, fmt.Errorf("Store method %s performs no declared effect", sel.Sel.Name)
 		}
+		if prev, seen := results[kind]; seen && !slices.Equal(prev, assigned) {
+			return goflow.Node{}, false, fmt.Errorf("Store method %s: its results are assigned to %v and to %v", sel.Sel.Name, prev, assigned)
+		}
+		results[kind] = assigned
 		types := params[sel.Sel.Name]
 		if len(call.Args) != len(types) || len(types) > 1 {
 			return goflow.Node{}, false, fmt.Errorf("Store method %s: %d arguments; at most one is supported", sel.Sel.Name, len(call.Args))
@@ -354,14 +368,14 @@ func extract(source []byte, state map[string]model.Variable) (goflow.Program, []
 	}
 	p, err := goflow.Extract(source, opts)
 	if err != nil {
-		return goflow.Program{}, nil, err
+		return goflow.Program{}, nil, nil, err
 	}
 	names := make([]string, 0, len(locals))
 	for name := range locals {
 		names = append(names, name)
 	}
 	sort.Strings(names)
-	return *p, names, nil
+	return *p, names, results, nil
 }
 
 // storeSignature parses controller.go for the Store interface's method
@@ -475,7 +489,7 @@ func LoadSources(root string, source, wiring []byte) (Example, error) {
 			return Example{}, fmt.Errorf("watch identity does not match this slice's API resources: %w", err)
 		}
 	}
-	spec, watchState, err := composeWatches(g.Spec, watches, g.Environment, abs)
+	spec, watchState, emits, err := composeWatches(g.Spec, watches, g.Environment, abs)
 	if err != nil {
 		return Example{}, err
 	}
@@ -491,7 +505,13 @@ func LoadSources(root string, source, wiring []byte) (Example, error) {
 	}
 	constrained := spec
 	constrained.Properties = requirements.Properties
-	e := Example{Dynamic: accesses, Resources: catalog, Watches: watches, Program: g.Program, Spec: spec, Environment: g.Environment, Model: compiled}
+	e := Example{Dynamic: accesses, Resources: catalog, Watches: watches, Program: g.Program, Spec: spec, Environment: g.Environment, Model: compiled, Results: g.Results, emits: emits, Locals: map[string]string{}}
+	for _, l := range abs.Spec.Locals {
+		e.Locals[l.Name] = l.Type
+	}
+	if e.ReconcileProcess, err = e.eventProcess(); err != nil {
+		return Example{}, err
+	}
 	e.Observed = append(watchState, abs.SortedVariables()...)
 	e.Constrained, err = model.Compile(constrained)
 	return e, err
@@ -530,8 +550,9 @@ func extractWatches(wiring []byte) (watchgen.Result, error) {
 // the extracted watches. The objects and the reconcile keys come from the
 // abstraction: the keys are the objects of the primary resource. Each
 // action that changes a watched object records its event with Emit. It
-// returns the spec and the state the watch model added, sorted.
-func composeWatches(spec model.Spec, w watchgen.Result, env []EnvironmentAction, abs abstraction.Abstraction) (model.Spec, []string, error) {
+// returns the spec, the state the watch model added, sorted, and the event
+// each action raises.
+func composeWatches(spec model.Spec, w watchgen.Result, env []EnvironmentAction, abs abstraction.Abstraction) (model.Spec, []string, map[string]watchEvent, error) {
 	watches := w.IR(watchController, watchFile)
 	watched := map[string]ir.GVK{}
 	var primary ir.GVK
@@ -554,23 +575,23 @@ func composeWatches(spec model.Spec, w watchgen.Result, env []EnvironmentAction,
 		}
 	}
 	if len(keys) != 1 {
-		return spec, nil, fmt.Errorf("the reconcile action pops one key; the abstraction declares %d", len(keys))
+		return spec, nil, nil, fmt.Errorf("the reconcile action pops one key; the abstraction declares %d", len(keys))
 	}
 	fields, err := watchFields(abs, watches, refs)
 	if err != nil {
-		return spec, nil, err
+		return spec, nil, nil, err
 	}
 	out, err := watchmodel.Add(spec, watches, objects, keys, watchmodel.WithFields(fields))
 	if err != nil {
-		return spec, nil, err
+		return spec, nil, nil, err
 	}
 	queued := watchmodel.QueuedVar(keys[0])
 	// A delayed event can refer to an object already gone by reconciliation
 	// time: the environment removes the Database before the first read.
-	out.Actions = append(out.Actions, model.Action{Name: "removeDatabaseBeforeRead", Guard: expr.Expression(databaseExistsVariable + " && !" + instanceExistsVariable + " && " + invocationCounter + " == 0"), Updates: map[string]expr.Expression{databaseExistsVariable: "false", contractVariable: "false", databaseEndpointVariable: `""`}})
+	out.Actions = append(out.Actions, model.Action{Name: removeBeforeRead, Guard: expr.Expression(databaseExistsVariable + " && !" + instanceExistsVariable + " && " + invocationCounter + " == 0"), Updates: map[string]expr.Expression{databaseExistsVariable: "false", contractVariable: "false", databaseEndpointVariable: `""`}})
 	emits, err := watchEmits(out, env, abs)
 	if err != nil {
-		return spec, nil, err
+		return spec, nil, nil, err
 	}
 	for i := range out.Actions {
 		a := &out.Actions[i]
@@ -582,11 +603,11 @@ func composeWatches(spec model.Spec, w watchgen.Result, env []EnvironmentAction,
 		if e, ok := emits[a.Name]; ok && watched[e.kind] != (ir.GVK{}) {
 			u, err := watchmodel.Emit(watched[e.kind], e.event, e.generation)
 			if err != nil {
-				return spec, nil, err
+				return spec, nil, nil, err
 			}
 			for k, v := range u {
 				if _, dup := updates[k]; dup {
-					return spec, nil, fmt.Errorf("action %s already updates %s", a.Name, k)
+					return spec, nil, nil, fmt.Errorf("action %s already updates %s", a.Name, k)
 				}
 				updates[k] = v
 			}
@@ -606,7 +627,7 @@ func composeWatches(spec model.Spec, w watchgen.Result, env []EnvironmentAction,
 		}
 	}
 	sort.Strings(added)
-	return out, added, nil
+	return out, added, emits, nil
 }
 
 // watchFields supplies the value of each field a field mapping reads, from
@@ -660,6 +681,10 @@ func goPath(api, fields []string) bool {
 	return true
 }
 
+// removeBeforeRead is the environment action that deletes the Database
+// before the first reconcile reads it.
+const removeBeforeRead = "removeDatabaseBeforeRead"
+
 // watchEvent is the event an action raises on the object of kind.
 type watchEvent struct {
 	kind, event string
@@ -671,7 +696,7 @@ type watchEvent struct {
 // generation. An effect action raises the event of its API operation.
 // removeDatabaseBeforeRead deletes the Database.
 func watchEmits(spec model.Spec, env []EnvironmentAction, abs abstraction.Abstraction) (map[string]watchEvent, error) {
-	out := map[string]watchEvent{"removeDatabaseBeforeRead": {kind: "Database", event: watchmodel.Delete}}
+	out := map[string]watchEvent{removeBeforeRead: {kind: "Database", event: watchmodel.Delete}}
 	for _, e := range env {
 		switch e.Operation {
 		case EnvCreate:

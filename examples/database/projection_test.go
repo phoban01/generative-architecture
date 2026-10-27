@@ -2,6 +2,8 @@ package database
 
 import (
 	"context"
+	"go/parser"
+	"go/token"
 	"go/types"
 	"reflect"
 	"sort"
@@ -164,6 +166,9 @@ func TestGeneratedPackageReadsImplementationStateOnly(t *testing.T) {
 	}
 	p := pkgs[0]
 	forbidden := map[string]bool{"generative-architecture/pkg/model": true, "generative-architecture/pkg/conformance": true}
+	// The gating takes the effect gate and the loaded process nodes, which
+	// describe boundaries and control flow and hold no model state.
+	allowed := map[string]bool{"generative-architecture/pkg/effect": true, "generative-architecture/pkg/ir": true, "generative-architecture/pkg/krm": true}
 	var reached []string
 	seen := map[*types.Package]bool{}
 	var walk func(*types.Package, []string)
@@ -173,7 +178,7 @@ func TestGeneratedPackageReadsImplementationStateOnly(t *testing.T) {
 		}
 		seen[pkg] = true
 		via = append(via, pkg.Path())
-		if forbidden[pkg.Path()] || strings.HasPrefix(pkg.Path(), "generative-architecture/") && pkg != p.Types {
+		if forbidden[pkg.Path()] || strings.HasPrefix(pkg.Path(), "generative-architecture/") && pkg != p.Types && !allowed[pkg.Path()] {
 			reached = append(reached, strings.Join(via, " -> "))
 		}
 		for _, imp := range pkg.Imports() {
@@ -200,5 +205,20 @@ func TestGeneratedPackageReadsImplementationStateOnly(t *testing.T) {
 	want := []string{"context.Context", "k8s.io/client-go/dynamic.Interface", "k8s.io/apimachinery/pkg/api/meta.RESTMapper"}
 	if !reflect.DeepEqual(params, want) {
 		t.Fatalf("Project takes %v, want only a context and API clients %v", params, want)
+	}
+}
+
+// The generated Store proxy lives in this package to embed Store; it
+// imports nothing but the context, formatting and effect packages.
+func TestStoreProxyReadsImplementationStateOnly(t *testing.T) {
+	f, err := parser.ParseFile(token.NewFileSet(), "store_proxy_generated.go", nil, parser.ImportsOnly)
+	if err != nil {
+		t.Fatal(err)
+	}
+	allowed := map[string]bool{`"context"`: true, `"fmt"`: true, `"generative-architecture/pkg/effect"`: true}
+	for _, imp := range f.Imports {
+		if !allowed[imp.Path.Value] {
+			t.Errorf("store proxy imports %s", imp.Path.Value)
+		}
 	}
 }

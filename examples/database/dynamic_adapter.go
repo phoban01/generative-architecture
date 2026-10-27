@@ -5,8 +5,6 @@ import (
 	"generative-architecture/pkg/abstraction"
 	cr "generative-architecture/pkg/controllerruntime"
 	"generative-architecture/pkg/effect"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 )
@@ -41,35 +39,8 @@ var (
 	databaseEndpointVariable = abstraction.VariableName("Database", "db1", []string{"status", "endpoint"})
 	contractVariable         = abstraction.FieldVariable("Database", "db1", abstraction.Field{Name: "contractSatisfied"})
 	instanceExistsVariable   = abstraction.ExistsVariable("DatabaseInstance", "inst1")
-	instanceEndpointVariable = abstraction.VariableName("DatabaseInstance", "inst1", []string{"status", "endpoint"}))
-
-func (a *Adapter) discoverDynamic(contractSatisfied bool) error {
-	obj := &unstructured.Unstructured{}
-	obj.SetGroupVersionKind(a.dynamicStore.DatabaseKind)
-	obj.SetName(databaseKey.Name)
-	obj.SetNamespace(databaseKey.Namespace)
-	obj.SetGeneration(1)
-	if contractSatisfied {
-		obj.SetAnnotations(map[string]string{"architecture.local/provisioning-contract": "v1"})
-	}
-	_, err := a.api.Resource(a.dynamicStore.DatabaseResource).Namespace(databaseKey.Namespace).Create(a.ctx, obj, metav1.CreateOptions{})
-	return err
-}
-func (a *Adapter) provisionDynamic(endpoint string) error {
-	resource := a.api.Resource(a.dynamicStore.InstanceResource).Namespace(databaseKey.Namespace)
-	obj, err := resource.Get(a.ctx, "instance-for-"+databaseKey.Name, metav1.GetOptions{})
-	if err != nil {
-		return err
-	}
-	if err = unstructured.SetNestedField(obj.Object, endpoint, "status", "endpoint"); err != nil {
-		return err
-	}
-	_, err = resource.UpdateStatus(a.ctx, obj, metav1.UpdateOptions{})
-	return err
-}
-func (a *Adapter) removeDynamic() error {
-	return a.api.Resource(a.dynamicStore.DatabaseResource).Namespace(databaseKey.Namespace).Delete(a.ctx, databaseKey.Name, metav1.DeleteOptions{})
-}
+	instanceEndpointVariable = abstraction.VariableName("DatabaseInstance", "inst1", []string{"status", "endpoint"})
+)
 
 // projectAPI projects the real fixture contents with the projection
 // generated from abstraction.yaml, independently of the model and cached
