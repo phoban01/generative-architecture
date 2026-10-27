@@ -1,0 +1,6 @@
+apiVersion: architecture.local/v1alpha1
+kind: ModelConstraints
+metadata:
+  name: cronjob
+spec:
+  properties: []
