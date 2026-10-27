@@ -3,6 +3,7 @@
 package contracts
 
 import (
+	"errors"
 	"fmt"
 	"generative-architecture/pkg/goflow"
 	"generative-architecture/pkg/krm"
@@ -17,11 +18,60 @@ import (
 	"strings"
 )
 
+// Definition is an InteractionContract. Fields must exist in an implementing
+// type. Optional fields may be absent, but when present they must have the
+// declared type. A field type is a primitive (string, bool, int), or a
+// primitive prefixed with "*", which also accepts a pointer to it (a JSON
+// field that may be null).
 type Definition struct {
-	Name    string            `yaml:"-"`
-	Version string            `yaml:"version"`
-	Fields  map[string]string `yaml:"fields"`
+	Name     string            `yaml:"-"`
+	Version  string            `yaml:"version"`
+	Fields   map[string]string `yaml:"fields"`
+	Optional map[string]string `yaml:"optional,omitempty"`
 }
+
+// Validate checks names, versions and field types of a contract.
+func (d Definition) Validate() error {
+	if d.Name == "" || d.Version == "" || len(d.Fields) == 0 {
+		return fmt.Errorf("interaction contract %s/%s: name, version and fields are required", d.Name, d.Version)
+	}
+	for _, fields := range []map[string]string{d.Fields, d.Optional} {
+		for logical, t := range fields {
+			if logical == "" {
+				return fmt.Errorf("interaction contract %s/%s: empty field name", d.Name, d.Version)
+			}
+			if !validFieldType(t) {
+				return fmt.Errorf("interaction contract %s/%s: field %s: unsupported type %q", d.Name, d.Version, logical, t)
+			}
+		}
+	}
+	for logical := range d.Optional {
+		if _, ok := d.Fields[logical]; ok {
+			return fmt.Errorf("interaction contract %s/%s: field %s is both required and optional", d.Name, d.Version, logical)
+		}
+	}
+	return nil
+}
+
+func validFieldType(t string) bool {
+	switch strings.TrimPrefix(t, "*") {
+	case "string", "bool", "int":
+		return true
+	}
+	return false
+}
+
+// matches reports whether a resolved Go type has the contract field type.
+func matches(t types.Type, want string) bool {
+	base, nullable := strings.CutPrefix(want, "*")
+	if nullable {
+		t = deref(t)
+	}
+	return primitive(t) == base
+}
+
+var errMissing = errors.New("missing contract field")
+
 type Implementation struct {
 	Contract string            `yaml:"contract"`
 	Package  string            `yaml:"package"`
@@ -29,11 +79,13 @@ type Implementation struct {
 	Fields   map[string]string `yaml:"fields,omitempty"`
 }
 type Evidence struct {
-	Contract     string            `yaml:"contract"`
-	GoType       string            `yaml:"goType"`
-	Module       string            `yaml:"module,omitempty"`
-	Version      string            `yaml:"moduleVersion,omitempty"`
-	JSONPaths    map[string]string `yaml:"jsonPaths"`
+	Contract  string            `yaml:"contract"`
+	GoType    string            `yaml:"goType"`
+	Module    string            `yaml:"module,omitempty"`
+	Version   string            `yaml:"moduleVersion,omitempty"`
+	JSONPaths map[string]string `yaml:"jsonPaths"`
+	// Absent lists optional contract fields the type does not have.
+	Absent       []string          `yaml:"absentOptional,omitempty"`
 	SourceHashes map[string]string `yaml:"sourceHashes"`
 	Origin       string            `yaml:"origin"`
 }
@@ -42,7 +94,13 @@ func Load(path string) (Definition, error) {
 	var d Definition
 	meta, err := krm.Read(path, "InteractionContract", &d)
 	d.Name = meta.Name
-	return d, err
+	if err != nil {
+		return d, err
+	}
+	if err := d.Validate(); err != nil {
+		return d, fmt.Errorf("%s: %w", path, err)
+	}
+	return d, nil
 }
 func primitive(t types.Type) string {
 	b, ok := t.Underlying().(*types.Basic)
@@ -88,7 +146,7 @@ func field(t types.Type, path string) (types.Type, string, error) {
 			break
 		}
 		if !found {
-			return nil, "", fmt.Errorf("missing contract field %s", path)
+			return nil, "", fmt.Errorf("%w %s", errMissing, path)
 		}
 	}
 	return t, strings.Join(jsonPath, "."), nil
@@ -100,13 +158,11 @@ func Inspect(root string, definitions []Definition, patterns []string, external 
 	defs := map[string]Definition{}
 	for _, d := range definitions {
 		ref := d.Name + "/" + d.Version
-		if d.Name == "" || d.Version == "" || len(d.Fields) == 0 || defs[ref].Name != "" {
-			return nil, fmt.Errorf("invalid/duplicate interaction contract")
+		if err := d.Validate(); err != nil {
+			return nil, err
 		}
-		for _, t := range d.Fields {
-			if t != "string" && t != "bool" && t != "int" {
-				return nil, fmt.Errorf("unsupported contract field type %s", t)
-			}
+		if defs[ref].Name != "" {
+			return nil, fmt.Errorf("duplicate interaction contract %s", ref)
 		}
 		defs[ref] = d
 	}
@@ -225,23 +281,38 @@ func Inspect(root string, definitions []Definition, patterns []string, external 
 			evidence.Version = p.Module.Version
 		}
 		shapes := []string{}
-		for logical, want := range d.Fields {
+		wants := map[string]string{}
+		logicals := []string{}
+		for _, fields := range []map[string]string{d.Fields, d.Optional} {
+			for logical, want := range fields {
+				wants[logical] = want
+				logicals = append(logicals, logical)
+			}
+		}
+		sort.Strings(logicals)
+		for _, logical := range logicals {
+			want := wants[logical]
+			_, optional := d.Optional[logical]
 			path := impl.Fields[logical]
 			if path == "" {
 				path = logical
 			}
 			t, jsonPath, err := field(object.Type(), path)
+			if optional && errors.Is(err, errMissing) {
+				evidence.Absent = append(evidence.Absent, logical)
+				continue
+			}
 			if err != nil {
 				return nil, fmt.Errorf("%s: field %s: %w", where, logical, err)
 			}
-			if got := primitive(t); got != want {
+			if !matches(t, want) {
 				return nil, fmt.Errorf("%s: field %s: expected %s, got %s", where, logical, want, t)
 			}
 			evidence.JSONPaths[logical] = jsonPath
 			shapes = append(shapes, logical+":"+jsonPath+":"+types.TypeString(t, nil))
 		}
 		for logical := range impl.Fields {
-			if _, ok := d.Fields[logical]; !ok {
+			if _, ok := wants[logical]; !ok {
 				return nil, fmt.Errorf("%s: unknown mapped contract field %s", where, logical)
 			}
 		}

@@ -1,0 +1,26 @@
+# Cluster API InfrastructureMachine provider contract, version v1beta1.
+# Source: the InfraMachine contract page for cluster-api v1.9, the version
+# that the clustercache boundary in pkg/boundary/library/clusterapi pins.
+#
+# A "*" type also accepts a pointer, because a pointer has the same JSON shape.
+# The contract page lists spec.providerID as *string and calls it mandatory.
+#
+# Not checked yet: status.addresses (a list) and status.conditions. The
+# contract vocabulary has no list or condition types.
+apiVersion: architecture.local/v1alpha1
+kind: InteractionContract
+metadata:
+  name: capi.infrastructure-machine
+  annotations:
+    architecture.local/upstream: sigs.k8s.io/cluster-api
+    architecture.local/upstream-version: v1.9.0
+    architecture.local/reference: https://release-1-9.cluster-api.sigs.k8s.io/developer/providers/contracts/infra-machine
+spec:
+  version: v1beta1
+  fields:
+    spec.providerID: "*string"
+    status.ready: bool
+  optional:
+    spec.failureDomain: "*string"
+    status.failureReason: "*string"
+    status.failureMessage: "*string"
