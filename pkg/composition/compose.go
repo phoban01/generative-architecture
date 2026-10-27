@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"generative-architecture/pkg/effect"
 	"generative-architecture/pkg/expr"
+	"generative-architecture/pkg/ir"
 	"generative-architecture/pkg/model"
 	"reflect"
 	"strings"
@@ -16,6 +17,10 @@ type Port struct {
 	Version   string `yaml:"version"`
 	Direction string `yaml:"direction"`
 	Writable  bool   `yaml:"writable,omitempty"`
+	// Evidence and Provenance are set on ports derived from IR facts. A
+	// hand-written port leaves them empty and counts as declared.
+	Evidence   ir.Evidence     `yaml:"evidence,omitempty"`
+	Provenance []ir.Provenance `yaml:"provenance,omitempty"`
 }
 type Component struct {
 	Name  string
