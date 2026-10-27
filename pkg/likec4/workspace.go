@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -70,14 +71,28 @@ type Step struct {
 }
 
 // View is a static view that includes the listed elements, or, when Dynamic
-// is set, a dynamic view that plays Steps in order.
+// is set, a dynamic view that plays Steps in order. Groups and Layout are
+// presentation only (VIS-3): a group draws a frame around included
+// elements of a static view, and Layout sets the view's autoLayout
+// direction.
 type View struct {
 	Name    string
 	Title   string
 	Include []string
 	Dynamic bool
 	Steps   []Step
+	Groups  []Group
+	Layout  string
 }
+
+// Group frames elements that a static view already includes.
+type Group struct {
+	Title   string
+	Include []string
+}
+
+// Layouts are the accepted values of View.Layout.
+var Layouts = []string{"TopBottom", "BottomTop", "LeftRight", "RightLeft"}
 
 // Workspace is everything one LikeC4 workspace holds.
 type Workspace struct {
@@ -186,6 +201,37 @@ func (w Workspace) Validate() error {
 		}
 		if v.Dynamic != (len(v.Steps) > 0) || (v.Dynamic && len(v.Include) > 0) {
 			return fmt.Errorf("view %s: a dynamic view has steps and no includes; a static view has no steps", v.Name)
+		}
+		if err := validatePresentation(v); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validatePresentation checks a view's layout and groups: a known layout,
+// and groups only in static views, each titled, framing elements the view
+// includes, with no element in two groups.
+func validatePresentation(v View) error {
+	if v.Layout != "" && !slices.Contains(Layouts, v.Layout) {
+		return fmt.Errorf("view %s: unknown layout %q; expected one of %s", v.Name, v.Layout, strings.Join(Layouts, ", "))
+	}
+	if v.Dynamic && len(v.Groups) > 0 {
+		return fmt.Errorf("view %s: a dynamic view has no groups", v.Name)
+	}
+	grouped := map[string]string{}
+	for _, g := range v.Groups {
+		if strings.TrimSpace(g.Title) == "" || len(g.Include) == 0 {
+			return fmt.Errorf("view %s: a group needs a title and elements", v.Name)
+		}
+		for _, id := range g.Include {
+			if !slices.Contains(v.Include, id) {
+				return fmt.Errorf("view %s: group %q frames element %s, which the view does not include", v.Name, g.Title, id)
+			}
+			if other, ok := grouped[id]; ok {
+				return fmt.Errorf("view %s: element %s is in groups %q and %q", v.Name, id, other, g.Title)
+			}
+			grouped[id] = g.Title
 		}
 	}
 	return nil
@@ -337,12 +383,31 @@ func view(v View) []byte {
 			b.WriteString("\n")
 		}
 	} else {
-		include := append([]string(nil), v.Include...)
+		grouped := map[string]bool{}
+		for _, g := range v.Groups {
+			for _, id := range g.Include {
+				grouped[id] = true
+			}
+		}
+		var include []string
+		for _, id := range v.Include {
+			if !grouped[id] {
+				include = append(include, id)
+			}
+		}
 		sort.Strings(include)
 		fmt.Fprintf(&b, "  view %s {\n    title %s\n", v.Name, quote(v.Title))
 		if len(include) > 0 {
 			fmt.Fprintf(&b, "    include %s\n", strings.Join(include, ", "))
 		}
+		for _, g := range v.Groups {
+			members := append([]string(nil), g.Include...)
+			sort.Strings(members)
+			fmt.Fprintf(&b, "    group %s {\n      include %s\n    }\n", quote(g.Title), strings.Join(members, ", "))
+		}
+	}
+	if v.Layout != "" {
+		fmt.Fprintf(&b, "    autoLayout %s\n", v.Layout)
 	}
 	b.WriteString("  }\n}\n")
 	return b.Bytes()
