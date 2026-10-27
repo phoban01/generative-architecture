@@ -145,7 +145,7 @@ func TestAnnotationPredicateField(t *testing.T) {
 }
 
 func TestLoadRejectsWrongKind(t *testing.T) {
-	if _, err := Load("../../examples/database/model.yaml"); err == nil {
-		t.Fatal("TransitionModel accepted as Abstraction")
+	if _, err := Load("../../examples/database/constraints.yaml"); err == nil {
+		t.Fatal("ModelConstraints accepted as Abstraction")
 	}
 }

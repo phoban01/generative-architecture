@@ -5,18 +5,20 @@ metadata:
 spec:
   properties:
     - name: instancesRequireCompatibleDatabase
-      expression: '!instanceExists || (databaseExists && contractSatisfied)'
+      expression: '!DatabaseInstance_inst1_exists || (Database_db1_exists && Database_db1_contractSatisfied)'
     - name: atMostOneInstance
       expression: 'instanceCreates <= 1'
+    - name: instanceReferencesItsDatabase
+      expression: '!DatabaseInstance_inst1_exists || DatabaseInstance_inst1_spec_databaseName == "db-1"'
     - name: publicationRequiresProvisionedInstance
-      expression: 'statusEndpoint == "" || (instanceExists && instanceEndpoint != "" && statusEndpoint == instanceEndpoint)'
+      expression: 'Database_db1_status_endpoint == "" || (DatabaseInstance_inst1_exists && DatabaseInstance_inst1_status_endpoint != "" && Database_db1_status_endpoint == DatabaseInstance_inst1_status_endpoint)'
     - name: waitingHasAInstance
-      expression: 'outcome != "waiting" || instanceExists'
+      expression: 'outcome != "waiting" || DatabaseInstance_inst1_exists'
     - name: readyHasEndpoint
-      expression: 'outcome != "ready" || statusEndpoint != ""'
+      expression: 'outcome != "ready" || Database_db1_status_endpoint != ""'
     - name: databaseWatchEnqueuesReconciler
       expression: 'event != "deliverDatabase" || queued'
     - name: instanceProvisioningEnqueuesReconciler
-      expression: 'event != "deliverInstance" || instanceEndpoint == "" || queued'
+      expression: 'event != "deliverInstance" || DatabaseInstance_inst1_status_endpoint == "" || queued'
     - name: watchTargetsDatabase
       expression: '!wrongKey'

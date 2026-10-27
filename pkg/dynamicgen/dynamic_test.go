@@ -22,7 +22,7 @@ func TestExtractDynamicResourceDependenciesAndRejectDrift(t *testing.T) {
 		t.Fatal(err)
 	}
 	var spec model.Spec
-	if _, err = krm.Read("../../examples/database/model.yaml", "TransitionModel", &spec); err != nil {
+	if _, err = krm.Read("../../examples/database/generated/model.yaml", "TransitionModel", &spec); err != nil {
 		t.Fatal(err)
 	}
 	methods := map[string]string{"DatabaseExists": "readDatabase", "DatabaseInstance": "readInstance", "CreateDatabaseInstance": "createInstance", "UpdateDatabaseStatus": "publish"}

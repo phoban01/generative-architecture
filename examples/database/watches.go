@@ -50,23 +50,35 @@ func extractWatches(source []byte) (watchgen.Result, error) {
 
 // addWatchModel composes the extracted registrations with a reviewed one-key FIFO
 // summary. Events may be delivered while processing; queued then means a dirty key.
-func addWatchModel(spec model.Spec, w watchgen.Result) (model.Spec, error) {
+// The generated environment actions raise the event of their object's kind:
+// creating the Database raises a create event, and an update of the
+// instance raises an update that coalesces with an undelivered create.
+func addWatchModel(spec model.Spec, w watchgen.Result, env []EnvironmentAction) (model.Spec, error) {
 	for _, name := range []string{"queued", "wrongKey", "instanceUpdatePending"} {
 		spec.State[name] = model.Variable{Type: "bool", Initial: "false"}
 	}
 	for _, name := range []string{"databaseEvent", "instanceEvent"} {
 		spec.State[name] = model.Variable{Type: "string", Initial: `""`}
 	}
+	environment := map[string]EnvironmentAction{}
+	for _, e := range env {
+		environment[e.Name] = e
+	}
 	for i := range spec.Actions {
 		a := &spec.Actions[i]
-		switch a.Name {
-		case "discoverCompatible", "discoverUnsupported":
-			a.Updates["databaseEvent"] = `"create"`
-		case "provisionInstance":
-			a.Updates["instanceEvent"] = `instanceEvent == "create" ? "create" : "update"`
-			a.Updates["instanceUpdatePending"] = `instanceEvent == "create" || instanceUpdatePending`
-		case "reconcile":
-			a.Guard = "finished && queued && invocations < 4"
+		if e, ok := environment[a.Name]; ok {
+			switch {
+			case e.Kind == "Database" && e.Operation == EnvCreate:
+				a.Updates["databaseEvent"] = `"create"`
+			case e.Kind == "DatabaseInstance" && e.Operation == EnvUpdate:
+				a.Updates["instanceEvent"] = `instanceEvent == "create" ? "create" : "update"`
+				a.Updates["instanceUpdatePending"] = `instanceEvent == "create" || instanceUpdatePending`
+			default:
+				return spec, fmt.Errorf("environment action %s: no watch event for %s of %s", e.Name, e.Operation, e.Kind)
+			}
+		}
+		if a.Name == "reconcile" {
+			a.Guard = "(" + a.Guard + ") && queued"
 			a.Updates["queued"] = "false"
 		}
 		if a.Effect == "createInstance" {
@@ -114,7 +126,7 @@ func addWatchModel(spec model.Spec, w watchgen.Result) (model.Spec, error) {
 		spec.Actions = append(spec.Actions, model.Action{Name: r.action, Guard: expr.Expression(r.event + ` != ""`), Updates: updates})
 	}
 	// A delayed event can refer to an object already gone by reconciliation time.
-	spec.Actions = append(spec.Actions, model.Action{Name: "removeDatabaseBeforeRead", Guard: "databaseExists && !instanceExists && invocations == 0", Updates: map[string]expr.Expression{"databaseExists": "false", "contractSatisfied": "false", "databaseEvent": `"delete"`}})
+	spec.Actions = append(spec.Actions, model.Action{Name: "removeDatabaseBeforeRead", Guard: expr.Expression(databaseExistsVariable + " && !" + instanceExistsVariable + " && invocations == 0"), Updates: map[string]expr.Expression{databaseExistsVariable: "false", contractVariable: "false", databaseEndpointVariable: `""`, "databaseEvent": `"delete"`}})
 	return spec, nil
 }
 

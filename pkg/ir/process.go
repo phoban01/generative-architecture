@@ -19,6 +19,9 @@ type Node struct {
 	Next       string `yaml:"next,omitempty"`
 	Else       string `yaml:"else,omitempty"`
 	Source     Source `yaml:"source,omitempty"`
+	// Code is the Go source text of the statement or condition, when the
+	// frontend keeps it.
+	Code string `yaml:"code,omitempty"`
 }
 
 // Process is the control-flow graph of one reconcile method.

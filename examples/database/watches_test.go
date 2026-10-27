@@ -58,7 +58,7 @@ func TestNoReconcileWithoutDeliveredWatch(t *testing.T) {
 	if _, err = e.Model.Next(state, "reconcile"); err == nil {
 		t.Fatal("unsolicited reconcile allowed")
 	}
-	state, err = e.Model.Next(state, "discoverCompatible")
+	state, err = e.Model.Next(state, "createDb1_true")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +98,7 @@ func TestMissingWatchAndWrongMappingChangeModel(t *testing.T) {
 			}
 			events := firstAttempt(t, base)
 			if tc.provision {
-				events = append(events, "provisionInstance")
+				events = append(events, "changeInst1_1")
 			}
 			events = append(events, "deliverInstance")
 			trace, err := conformance.Scenario(mutated.Model, events...)
@@ -128,7 +128,7 @@ func TestStatusPredicateMatchesNativeHandler(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			events := append(eventsOf(pending), "provisionInstance", "deliverInstance")
+			events := append(eventsOf(pending), "changeInst1_1", "deliverInstance")
 			trace, err := conformance.Scenario(e.Model, events...)
 			if err != nil {
 				t.Fatal(err)
@@ -148,7 +148,7 @@ func TestStatusPredicateMatchesNativeHandler(t *testing.T) {
 			defer cancel()
 			a := New(ctx, e, false)
 			defer a.Close()
-			if _, err = conformance.ReplayObserved(ctx, e.Model, trace, a, Observed); err != nil {
+			if _, err = conformance.ReplayObserved(ctx, e.Model, trace, a, e.Observed); err != nil {
 				t.Fatal(err)
 			}
 		})
@@ -163,7 +163,7 @@ func TestEventDuringReconcileSurvivesReturn(t *testing.T) {
 	for _, event := range firstAttempt(t, e) {
 		events = append(events, event)
 		if strings.HasSuffix(event, "_createInstance") {
-			events = append(events, "deliverInstance", "provisionInstance", "deliverInstance")
+			events = append(events, "deliverInstance", "changeInst1_1", "deliverInstance")
 		}
 	}
 	prefix, err := conformance.Scenario(e.Model, events...)
@@ -196,7 +196,7 @@ func TestEventDuringReconcileSurvivesReturn(t *testing.T) {
 	defer cancel()
 	a := New(ctx, e, false)
 	defer a.Close()
-	if _, err = conformance.ReplayObserved(ctx, e.Model, trace, a, Observed); err != nil {
+	if _, err = conformance.ReplayObserved(ctx, e.Model, trace, a, e.Observed); err != nil {
 		t.Fatal(err)
 	}
 	if err = e.CheckConstraints(trace); err != nil {
@@ -206,7 +206,7 @@ func TestEventDuringReconcileSurvivesReturn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if state["statusEndpoint"] != "db-1.internal" || state["invocations"] != int64(2) {
+	if state["Database_db1_status_endpoint"] != "db-1.internal" || state["invocations"] != int64(2) {
 		t.Fatalf("dirty-key notification lost or duplicated: %v", state)
 	}
 }

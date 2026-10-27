@@ -3,6 +3,7 @@ package database
 import (
 	"fmt"
 	"generative-architecture/examples/database/generated"
+	"generative-architecture/pkg/abstraction"
 	cr "generative-architecture/pkg/controllerruntime"
 	"generative-architecture/pkg/effect"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -34,25 +35,36 @@ func (a *Adapter) initDynamic(e Example) error {
 	a.dynamicStore = &DynamicStore{Client: cr.Observer{Registry: registry}.Dynamic(a.api, mapper), Context: a.ctx, Key: databaseKey, DatabaseResource: database.GVR(), InstanceResource: instance.GVR(), DatabaseKind: database.GVK(), InstanceKind: instance.GVK()}
 	return nil
 }
-func (a *Adapter) discoverDynamic() error {
+
+// Abstraction variables the schedules and the fixture operations address.
+var (
+	databaseExistsVariable   = abstraction.ExistsVariable("Database", "db1")
+	databaseEndpointVariable = abstraction.VariableName("Database", "db1", []string{"status", "endpoint"})
+	contractVariable         = abstraction.FieldVariable("Database", "db1", abstraction.Field{Name: "contractSatisfied"})
+	instanceExistsVariable   = abstraction.ExistsVariable("DatabaseInstance", "inst1")
+	instanceEndpointVariable = abstraction.VariableName("DatabaseInstance", "inst1", []string{"status", "endpoint"})
+	instanceReference        = abstraction.VariableName("DatabaseInstance", "inst1", []string{"spec", "databaseName"})
+)
+
+func (a *Adapter) discoverDynamic(contractSatisfied bool) error {
 	obj := &unstructured.Unstructured{}
 	obj.SetGroupVersionKind(a.dynamicStore.DatabaseKind)
 	obj.SetName(databaseKey.Name)
 	obj.SetNamespace(databaseKey.Namespace)
 	obj.SetGeneration(1)
-	if a.contractSatisfied {
+	if contractSatisfied {
 		obj.SetAnnotations(map[string]string{"architecture.local/provisioning-contract": "v1"})
 	}
 	_, err := a.api.Resource(a.dynamicStore.DatabaseResource).Namespace(databaseKey.Namespace).Create(a.ctx, obj, metav1.CreateOptions{})
 	return err
 }
-func (a *Adapter) provisionDynamic() error {
+func (a *Adapter) provisionDynamic(endpoint string) error {
 	resource := a.api.Resource(a.dynamicStore.InstanceResource).Namespace(databaseKey.Namespace)
 	obj, err := resource.Get(a.ctx, "instance-for-"+databaseKey.Name, metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
-	if err = unstructured.SetNestedField(obj.Object, "db-1.internal", "status", "endpoint"); err != nil {
+	if err = unstructured.SetNestedField(obj.Object, endpoint, "status", "endpoint"); err != nil {
 		return err
 	}
 	_, err = resource.UpdateStatus(a.ctx, obj, metav1.UpdateOptions{})
@@ -62,40 +74,19 @@ func (a *Adapter) removeDynamic() error {
 	return a.api.Resource(a.dynamicStore.DatabaseResource).Namespace(databaseKey.Namespace).Delete(a.ctx, databaseKey.Name, metav1.DeleteOptions{})
 }
 
-// projectedState names, for each API-state variable of the hand-written
-// model, the variable abstraction.yaml derives for it and the generated
-// projection reads.
-var projectedState = map[string]string{
-	"databaseExists":    "Database_db1_exists",
-	"contractSatisfied": "Database_db1_contractSatisfied",
-	"statusEndpoint":    "Database_db1_status_endpoint",
-	"instanceExists":    "DatabaseInstance_inst1_exists",
-	"instanceEndpoint":  "DatabaseInstance_inst1_status_endpoint",
-}
-
-// instanceReference is the instance's declared reference to its Database.
-// The model has one Database, so the reference is checked, not modelled.
-const instanceReference = "DatabaseInstance_inst1_spec_databaseName"
-
 // projectAPI projects the real fixture contents with the projection
 // generated from abstraction.yaml, independently of the model and cached
 // Store snapshots. It reads the underlying fake API, not the observed client
-// DatabaseReconciler uses, so projecting crosses no boundary gate.
+// DatabaseReconciler uses, so projecting crosses no boundary gate. The
+// projected names are the model's names. The instance's reference to its
+// Database is still checked by hand here (#137).
 func (a *Adapter) projectAPI() (map[string]any, error) {
 	projected, err := generated.Project(a.ctx, a.api, a.mapper)
 	if err != nil {
 		return nil, err
 	}
-	if projected[projectedState["instanceExists"]] == true && projected[instanceReference] != databaseKey.Name {
+	if projected[instanceExistsVariable] == true && projected[instanceReference] != databaseKey.Name {
 		return nil, fmt.Errorf("instance points at the wrong Database: %v", projected[instanceReference])
 	}
-	state := make(map[string]any, len(projectedState))
-	for model, name := range projectedState {
-		v, ok := projected[name]
-		if !ok {
-			return nil, fmt.Errorf("generated projection lacks %s", name)
-		}
-		state[model] = v
-	}
-	return state, nil
+	return projected, nil
 }

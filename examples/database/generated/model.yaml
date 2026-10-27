@@ -1,0 +1,239 @@
+apiVersion: architecture.local/v1alpha1
+kind: TransitionModel
+metadata:
+  name: database
+spec:
+  name: DatabaseWalkthrough
+  state:
+    Database_db1_contractSatisfied:
+      type: bool
+      initial: "false"
+    Database_db1_exists:
+      type: bool
+      initial: "false"
+    Database_db1_status_endpoint:
+      type: string
+      initial: '""'
+    DatabaseInstance_inst1_exists:
+      type: bool
+      initial: "false"
+    DatabaseInstance_inst1_spec_databaseName:
+      type: string
+      initial: '""'
+    DatabaseInstance_inst1_status_endpoint:
+      type: string
+      initial: '""'
+    compatible:
+      type: bool
+      initial: "false"
+    databaseEvent:
+      type: string
+      initial: '""'
+    endpoint:
+      type: string
+      initial: '""'
+    finished:
+      type: bool
+      initial: "true"
+    found:
+      type: bool
+      initial: "false"
+    instanceCreates:
+      type: int
+      initial: "0"
+    instanceEvent:
+      type: string
+      initial: '""'
+    instanceFound:
+      type: bool
+      initial: "false"
+    instanceUpdatePending:
+      type: bool
+      initial: "false"
+    invocations:
+      type: int
+      initial: "0"
+    outcome:
+      type: string
+      initial: '""'
+    pc:
+      type: int
+      initial: "-1"
+    queued:
+      type: bool
+      initial: "false"
+    wrongKey:
+      type: bool
+      initial: "false"
+  effects:
+    - id: checkContract
+      resource:
+        group: demo.architecture.local
+        version: v1alpha1
+        kind: Database
+      operation: derive
+      consistency: schema
+    - id: createInstance
+      resource:
+        group: demo.architecture.local
+        version: v1alpha1
+        kind: DatabaseInstance
+      operation: create
+      consistency: direct
+    - id: publish
+      resource:
+        group: demo.architecture.local
+        version: v1alpha1
+        kind: Database
+      operation: status.update
+      consistency: direct
+    - id: readDatabase
+      resource:
+        group: demo.architecture.local
+        version: v1alpha1
+        kind: Database
+      operation: get
+      consistency: direct
+    - id: readInstance
+      resource:
+        group: demo.architecture.local
+        version: v1alpha1
+        kind: DatabaseInstance
+      operation: get
+      consistency: direct
+  actions:
+    - name: createDb1_false
+      guard: '!Database_db1_exists && invocations == 0'
+      updates:
+        Database_db1_contractSatisfied: "false"
+        Database_db1_exists: "true"
+        databaseEvent: '"create"'
+    - name: createDb1_true
+      guard: '!Database_db1_exists && invocations == 0'
+      updates:
+        Database_db1_contractSatisfied: "true"
+        Database_db1_exists: "true"
+        databaseEvent: '"create"'
+    - name: changeInst1_1
+      guard: DatabaseInstance_inst1_exists && DatabaseInstance_inst1_status_endpoint == ""
+      updates:
+        DatabaseInstance_inst1_status_endpoint: '"db-1.internal"'
+        instanceEvent: 'instanceEvent == "create" ? "create" : "update"'
+        instanceUpdatePending: instanceEvent == "create" || instanceUpdatePending
+    - name: node0_return
+      guard: '!finished && pc == 0 && (true)'
+      updates:
+        finished: "true"
+        outcome: '"ready"'
+        pc: "-1"
+    - name: node1_publish
+      guard: '!finished && pc == 1 && (true)'
+      updates:
+        Database_db1_status_endpoint: endpoint
+        databaseEvent: '"update"'
+        pc: "0"
+      effect: publish
+    - name: node2_return
+      guard: '!finished && pc == 2 && (true)'
+      updates:
+        finished: "true"
+        outcome: '"waiting"'
+        pc: "-1"
+    - name: node3_branch
+      guard: '!finished && pc == 3 && (true)'
+      updates:
+        pc: '(endpoint == "") ? 2 : 1'
+    - name: node4_return
+      guard: '!finished && pc == 4 && (true)'
+      updates:
+        finished: "true"
+        outcome: '"waiting"'
+        pc: "-1"
+    - name: node5_createInstance
+      guard: '!finished && pc == 5 && (true)'
+      updates:
+        DatabaseInstance_inst1_exists: "true"
+        DatabaseInstance_inst1_spec_databaseName: '"db-1"'
+        instanceCreates: instanceCreates + 1
+        instanceEvent: '"create"'
+        pc: "4"
+      effect: createInstance
+    - name: node6_branch
+      guard: '!finished && pc == 6 && (true)'
+      updates:
+        pc: '!instanceFound ? 5 : 3'
+    - name: node7_readInstance
+      guard: '!finished && pc == 7 && (true)'
+      updates:
+        endpoint: DatabaseInstance_inst1_status_endpoint
+        instanceFound: DatabaseInstance_inst1_exists
+        pc: "6"
+      effect: readInstance
+    - name: node8_return
+      guard: '!finished && pc == 8 && (true)'
+      updates:
+        finished: "true"
+        outcome: '"unsupported"'
+        pc: "-1"
+    - name: node9_branch
+      guard: '!finished && pc == 9 && (true)'
+      updates:
+        pc: '!compatible ? 8 : 7'
+    - name: node10_checkContract
+      guard: '!finished && pc == 10 && (true)'
+      updates:
+        compatible: Database_db1_contractSatisfied
+        pc: "9"
+      effect: checkContract
+    - name: node11_return
+      guard: '!finished && pc == 11 && (true)'
+      updates:
+        finished: "true"
+        outcome: '"absent"'
+        pc: "-1"
+    - name: node12_branch
+      guard: '!finished && pc == 12 && (true)'
+      updates:
+        pc: '!found ? 11 : 10'
+    - name: node13_readDatabase
+      guard: '!finished && pc == 13 && (true)'
+      updates:
+        found: Database_db1_exists
+        pc: "12"
+      effect: readDatabase
+    - name: reconcile
+      guard: (finished && invocations < 4) && queued
+      updates:
+        compatible: "false"
+        endpoint: '""'
+        finished: "false"
+        found: "false"
+        instanceFound: "false"
+        invocations: invocations + 1
+        outcome: '""'
+        pc: "13"
+        queued: "false"
+    - name: idle
+      guard: finished
+      updates: {}
+    - name: deliverDatabase
+      guard: databaseEvent != ""
+      updates:
+        databaseEvent: '""'
+        queued: queued || (true)
+        wrongKey: wrongKey
+    - name: deliverInstance
+      guard: instanceEvent != ""
+      updates:
+        instanceEvent: 'instanceEvent == "create" && instanceUpdatePending ? "update" : ""'
+        instanceUpdatePending: "false"
+        queued: queued || (true)
+        wrongKey: wrongKey
+    - name: removeDatabaseBeforeRead
+      guard: Database_db1_exists && !DatabaseInstance_inst1_exists && invocations == 0
+      updates:
+        Database_db1_contractSatisfied: "false"
+        Database_db1_exists: "false"
+        Database_db1_status_endpoint: '""'
+        databaseEvent: '"delete"'
+  properties: []

@@ -6,30 +6,36 @@ spec:
   pc: pc
   finished: finished
   results: [outcome]
-  # These describe Store effects only. Go supplies their order and conditions.
+  # Business summaries of the Store interface, written against the variables
+  # abstraction.yaml derives. Go supplies their order and conditions. The
+  # targets a summary assigns are the controller's writes; the generator gives
+  # every other field to the environment.
   operations:
     readDatabase:
       - name: readDatabase
         guard: 'true'
-        updates: {found: databaseExists}
+        updates: {found: Database_db1_exists}
         effect: readDatabase
     checkContract:
       - name: checkContract
         guard: 'true'
-        updates: {compatible: contractSatisfied}
+        updates: {compatible: Database_db1_contractSatisfied}
         effect: checkContract
     readInstance:
       - name: readInstance
         guard: 'true'
-        updates: {instanceFound: instanceExists, endpoint: instanceEndpoint}
+        updates: {instanceFound: DatabaseInstance_inst1_exists, endpoint: DatabaseInstance_inst1_status_endpoint}
         effect: readInstance
     createInstance:
       - name: createInstance
         guard: 'true'
-        updates: {instanceExists: 'true', instanceCreates: 'instanceCreates + 1'}
+        updates:
+          DatabaseInstance_inst1_exists: 'true'
+          DatabaseInstance_inst1_spec_databaseName: '"db-1"'
+          instanceCreates: 'instanceCreates + 1'
         effect: createInstance
     publish:
       - name: publish
         guard: 'true'
-        updates: {statusEndpoint: _value}
+        updates: {Database_db1_status_endpoint: _value}
         effect: publish

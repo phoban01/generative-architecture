@@ -2,12 +2,12 @@
 
 YAML describes typed state, effects and transitions. CEL supplies read-only expressions for initial values, guards, update values and properties. `pkg/expr` type-checks a deliberately bounded CEL subset and lowers it to Quint; the authored files contain no Quint syntax or `{{...}}` substitutions.
 
-For example, the sample controller's environment action that provisions an instance, from `examples/database/model.yaml`, is:
+For example, the sample controller's environment action that provisions an instance, from the generated `examples/database/generated/model.yaml`, is:
 
 ```yaml
-- name: provisionInstance
-  guard: 'instanceExists && instanceEndpoint == ""'
-  updates: {instanceEndpoint: '"db-1.internal"'}
+- name: changeInst1_1
+  guard: DatabaseInstance_inst1_exists && DatabaseInstance_inst1_status_endpoint == ""
+  updates: {DatabaseInstance_inst1_status_endpoint: '"db-1.internal"'}
 ```
 
 The controller's own steps are not authored this way. `pkg/goflow` extracts branches, calls and returns from `Reconcile`, `pkg/process` lowers them into actions using the effect summaries in `process.yaml`, and the result is the same kind of action.
@@ -16,7 +16,7 @@ An independent requirement, from `examples/database/constraints.yaml`, uses the 
 
 ```yaml
 - name: publicationRequiresProvisionedInstance
-  expression: 'statusEndpoint == "" || (instanceExists && instanceEndpoint != "" && statusEndpoint == instanceEndpoint)'
+  expression: 'Database_db1_status_endpoint == "" || (DatabaseInstance_inst1_exists && DatabaseInstance_inst1_status_endpoint != "" && Database_db1_status_endpoint == DatabaseInstance_inst1_status_endpoint)'
 ```
 
 Properties are compiled separately from the behaviour model. A trace can therefore conform to the implementation while violating a requirement, which is what the source-mutation tests demonstrate.

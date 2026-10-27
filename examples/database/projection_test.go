@@ -123,14 +123,14 @@ func TestAdapterProjectsThroughGeneratedProjection(t *testing.T) {
 	defer cancel()
 	a := New(ctx, e, false)
 	defer a.Close()
-	if err := a.Apply(ctx, "discoverCompatible"); err != nil {
+	if err := a.Apply(ctx, "createDb1_true"); err != nil {
 		t.Fatal(err)
 	}
 	state, err := a.projectAPI()
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := map[string]any{"databaseExists": true, "contractSatisfied": true, "statusEndpoint": "", "instanceExists": false, "instanceEndpoint": ""}
+	want := map[string]any{"Database_db1_exists": true, "Database_db1_contractSatisfied": true, "Database_db1_status_endpoint": "", "DatabaseInstance_inst1_exists": false, "DatabaseInstance_inst1_spec_databaseName": "", "DatabaseInstance_inst1_status_endpoint": ""}
 	if !reflect.DeepEqual(state, want) {
 		t.Fatalf("projected %v, want %v", state, want)
 	}
