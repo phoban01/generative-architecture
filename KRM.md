@@ -41,6 +41,7 @@ spec:
 | A system composition document | SystemComposition | spec | `pkg/composition.Load`: each component names a TransitionModel with declared ports, or a BoundaryModel whose ports, watches and effects enter the composition with `assumed` evidence |
 | A protocol contract named by a composition link | ProtocolContract | spec | `pkg/protocol`: roles, states, permitted writes to the bound state and properties; `pkg/composition` generates a conformance monitor and the properties into the composed model (CON-10) |
 | A boundary model of an upstream project | BoundaryModel | spec | `pkg/boundary`: pinned upstream version and optional image digest, owned and watched resources, effects, ports, contracts and assumptions; each assumption is `declared` or `assumed` and names a conformance hook (`envtest`, `documentation` or `none`) (EXT-1) |
+| `pkg/boundary/library/flux/kustomization.yaml`, `kustomization-model.yaml` | BoundaryModel, TransitionModel | spec | Flux kustomize-controller v1.4.0: `interval` as a periodic requeue, `dependsOn` as an ordering guard, server-side apply and prune as declared assumptions (EXT-4) |
 | An interaction contract document | InteractionContract | spec | `pkg/contracts` (`+arch:implements` checks) |
 | `examples/database/generated/process.yaml` | ExtractedProcess | status | control-flow graph and source evidence |
 | `examples/database/generated/watches.yaml` | ExtractedWatches | status | registrations, mapper field paths, predicates, hashes |
