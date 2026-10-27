@@ -162,4 +162,3 @@ func TestEmitRejectsUnknownEvent(t *testing.T) {
 		t.Fatal("accepted unknown event kind")
 	}
 }
-

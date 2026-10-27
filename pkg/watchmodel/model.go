@@ -10,6 +10,7 @@ package watchmodel
 
 import (
 	"fmt"
+	"strings"
 	"unicode"
 
 	"generative-architecture/pkg/expr"
@@ -77,7 +78,10 @@ type generator struct {
 	spec      model.Spec
 	resources []*resource
 	keys      []ir.ObjectRef
+	queued    map[request]string // declared key -> its queued variable
 }
+
+var boolFalse = model.Variable{Type: "bool", Initial: "false"}
 
 func newGenerator(spec model.Spec, watches []ir.Watch, objects, keys []ir.ObjectRef) (*generator, error) {
 	if len(watches) == 0 {
@@ -124,11 +128,14 @@ func newGenerator(spec model.Spec, watches []ir.Watch, objects, keys []ir.Object
 }
 
 func (g *generator) generate() (model.Spec, error) {
+	if err := g.declareKeys(g.resources[0].rules[0]); err != nil {
+		return g.spec, err
+	}
 	for _, r := range g.resources {
 		if err := g.addState(r.rules[0], EventVar(r.gvk), model.Variable{Type: "string", Initial: `""`}); err != nil {
 			return g.spec, err
 		}
-		if err := g.addState(r.rules[0], PendingVar(r.gvk), model.Variable{Type: "bool", Initial: "false"}); err != nil {
+		if err := g.addState(r.rules[0], PendingVar(r.gvk), boolFalse); err != nil {
 			return g.spec, err
 		}
 	}
@@ -149,13 +156,17 @@ func (g *generator) generate() (model.Spec, error) {
 
 // deliver builds the delivery action of r. One action serves every rule on
 // r, because the informer hands one event to all handlers of a resource. It
-// clears the event, or moves a pending update into the slot.
+// sets the queued flag of each key a passing rule maps the event to, and
+// the wrong-key flag for keys outside the set. It clears the event, or
+// moves a pending update into the slot.
 func (g *generator) deliver(r *resource) (model.Action, error) {
 	ev, pending := EventVar(r.gvk), PendingVar(r.gvk)
 	updates := map[string]expr.Expression{
 		ev:      expr.Expression(pending + ` ? "update" : ""`),
 		pending: "false",
 	}
+	hits := map[string][]string{}
+	var foreign []string
 	for _, w := range r.rules {
 		if w.Mapping.Kind == ir.MappingCustom {
 			return model.Action{}, diagnose(w, "mapping", "custom key mapping has no summary")
@@ -163,8 +174,32 @@ func (g *generator) deliver(r *resource) (model.Action, error) {
 		if len(w.Predicates) > 0 {
 			return model.Action{}, diagnose(w, "predicate", "predicates are not modelled yet")
 		}
+		t, err := g.route(r, w)
+		if err != nil {
+			return model.Action{}, err
+		}
+		for v, conditions := range t.hits {
+			hits[v] = append(hits[v], conditions...)
+		}
+		foreign = append(foreign, t.foreign...)
+	}
+	for v, conditions := range hits {
+		updates[v] = raise(v, conditions)
+	}
+	if len(foreign) > 0 {
+		updates[WrongKeyVar] = raise(WrongKeyVar, foreign)
 	}
 	return model.Action{Name: DeliverAction(r.gvk), Guard: expr.Expression(ev + ` != ""`), Updates: updates}, nil
+}
+
+// raise sets flag when any condition holds and keeps it set otherwise.
+func raise(flag string, conditions []string) expr.Expression {
+	for _, c := range conditions {
+		if c == "true" {
+			return "true"
+		}
+	}
+	return expr.Expression(flag + " || (" + strings.Join(conditions, ") || (") + ")")
 }
 
 // addState declares a new variable and refuses to replace an existing one.
