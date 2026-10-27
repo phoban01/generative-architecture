@@ -248,3 +248,111 @@ func TestExternalCronJobPipelineReport(t *testing.T) {
 		t.Fatalf("%s is stale; rerun with -update-external\ngot:\n%s", committed, got)
 	}
 }
+
+// TestAdoptionGuideWalk repeats the commands of docs/ADOPTION.md on a copy
+// of the pinned controller, from the directory an adopter works in, and
+// checks the messages the guide quotes. It reads only the module cache.
+func TestAdoptionGuideWalk(t *testing.T) {
+	src, err := filepath.Abs(cronJobDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	for _, name := range []string{"go.mod", "go.sum", "api", "internal", "config", "catalog"} {
+		copyTree(t, filepath.Join(src, name), filepath.Join(dir, name))
+	}
+	t.Setenv("GOWORK", "off")
+	t.Setenv("GOPROXY", "off")
+	t.Setenv("GOFLAGS", "-mod=readonly")
+	t.Chdir(dir)
+	arch := func(args ...string) (string, error) {
+		var stdout, stderr bytes.Buffer
+		err := run(args, &stdout, &stderr)
+		return stdout.String(), err
+	}
+	wantErr := func(err error, msg string) {
+		t.Helper()
+		if err == nil || err.Error() != msg {
+			t.Fatalf("got error %v, want %q", err, msg)
+		}
+	}
+
+	// Section 2: arch init writes no catalog, abstraction or controllers.
+	if _, err := arch("init", "--module", "tutorial.kubebuilder.io/project", "--package", "./internal/controller", "--package", "./api/v1", "--name", "cronjob"); err != nil {
+		t.Fatal(err)
+	}
+	p, err := project.Load(projectFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s := p.Spec; len(s.Catalog.CRDs)+len(s.Catalog.Discovery) > 0 || s.Abstraction != "" || len(s.Controllers) > 0 {
+		t.Fatalf("arch init wrote more than the guide says: %+v", s)
+	}
+
+	// Sections 3 and 4: without a catalog the report is the committed one.
+	_, err = arch("extract")
+	wantErr(err, "arch extract: unsupported constructs: 1 found, listed in generated/support.yaml")
+	got, err := os.ReadFile(filepath.Join(generatedDir, supportFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := os.ReadFile(filepath.Join(src, generatedDir, supportFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Fatalf("the report without a catalog differs from the committed one:\n%s", got)
+	}
+	out, err := arch("support")
+	if err != nil || !strings.Contains(out, "internal/controller/cronjob_controller.go:553  expected an unstructured object declaration") {
+		t.Fatalf("arch support: %v\n%s", err, out)
+	}
+
+	// Section 5: strict mode fails on the same construct.
+	_, err = arch("--strict", "support")
+	wantErr(err, "arch support: verification mode (--strict) refuses incomplete semantics: 1 unsupported or unresolved items in the selected packages, first preamble if r.Clock == nil {\n\tr.Clock = realClock{}\n} at internal/controller/cronjob_controller.go:553")
+
+	// Sections 6 to 9 with the committed project and abstraction.
+	for _, name := range []string{projectFile, "abstraction.yaml"} {
+		copyTree(t, filepath.Join(src, name), filepath.Join(dir, name))
+	}
+	_, err = arch("--strict", "extract")
+	wantErr(err, "arch extract: unsupported constructs: 1 found, listed in generated/support.yaml")
+	_, err = arch("generate")
+	wantErr(err, "arch generate: generated/ir.yaml not found; run arch extract first")
+	_, err = arch("check")
+	wantErr(err, "arch check: generated/ir.yaml not found; run arch extract and arch generate first")
+	_, err = arch("replay")
+	wantErr(err, "arch replay: no traces match generated/traces/*.itf.json; run arch check first or pass --traces")
+	_, err = arch("render")
+	wantErr(err, "arch render: no workspace in generated/likec4; run arch generate first")
+}
+
+// generatedDir is the default --out directory.
+const generatedDir = "generated"
+
+// copyTree copies a file or a directory tree.
+func copyTree(t *testing.T, from, to string) {
+	t.Helper()
+	err := filepath.WalkDir(from, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(from, path)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(to, rel)
+		if d.IsDir() {
+			return os.MkdirAll(target, 0o755)
+		}
+		b, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(target, b, 0o644)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
