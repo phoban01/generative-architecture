@@ -75,6 +75,19 @@ make verify
 
 `make verify` refreshes the sample controller's 40 sampled Quint traces and replays them against Go, samples 40 multi-controller runtime traces, refreshes ConfigMirror's 40 traces sampled from its generated model with its mutation matrix and input-closure receipt, runs every test and checks the separate consumer module. Simulation is bounded, not exhaustive verification or a liveness proof. Fixtures also contain deliberate source mutations; a passing run means the constraints detected them.
 
+## Continuous integration
+
+### Envtest
+
+Some tests start a local API server with controller-runtime's envtest, through `pkg/envtest`. They need the kube-apiserver and etcd binaries, which `setup-envtest` installs. Use the release branch of the controller-runtime version in `go.mod` and the Kubernetes minor of `k8s.io/api`:
+
+```sh
+export KUBEBUILDER_ASSETS="$(go run sigs.k8s.io/controller-runtime/tools/setup-envtest@release-0.23 use 1.35.x --bin-dir bin/envtest -p path)"
+go test -p 2 -run Envtest ./...
+```
+
+Without `KUBEBUILDER_ASSETS` these tests skip. With `ENVTEST_REQUIRED=1` they fail instead, so CI cannot pass by skipping them.
+
 ## Diagrams and binaries
 
 ```sh
