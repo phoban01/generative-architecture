@@ -61,6 +61,9 @@ type Call struct {
 	Key        Key
 	// Snapshots are detached from implementation objects. Hooks may inspect them.
 	Submitted map[string]any
+	// Options are the call's recorded options, such as patchType, patch,
+	// labelSelector or fieldManager. Nil when the call has none.
+	Options map[string]string
 }
 type Result struct {
 	Snapshot map[string]any
