@@ -5,6 +5,7 @@ metadata:
 spec:
   name: MultipleControllers
   maxTicks: 20
+  queue: fifo
   controllers:
     - name: writer
       workers: 2

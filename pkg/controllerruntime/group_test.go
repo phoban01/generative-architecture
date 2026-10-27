@@ -10,6 +10,7 @@ import (
 	cr "generative-architecture/pkg/controllerruntime"
 	"generative-architecture/pkg/model"
 
+	"reflect"
 	"testing"
 	"time"
 )
@@ -35,6 +36,42 @@ func TestMultipleControllersWorkersAndKeys(t *testing.T) {
 
 	if _, err = cr.ReplayGroup(ctx, m, trace); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestGroupProfileQueue(t *testing.T) {
+	base, err := cr.BuildGroupModel(groupProfile())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name, profile, controller string
+		ok                        bool
+	}{
+		{name: "default", ok: true},
+		{name: "fifo", profile: "fifo", ok: true},
+		{name: "controller fifo", controller: "fifo", ok: true},
+		{name: "unknown", profile: "lifo"},
+		{name: "controller unknown", profile: "fifo", controller: "lifo"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := groupProfile()
+			p.Queue = tc.profile
+			p.Controllers[0].Queue = tc.controller
+			m, err := cr.BuildGroupModel(p)
+			if !tc.ok {
+				if err == nil {
+					t.Fatal("unknown queue accepted")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(m.Spec, base.Spec) {
+				t.Fatal("fifo model differs from the default model")
+			}
+		})
 	}
 }
 
