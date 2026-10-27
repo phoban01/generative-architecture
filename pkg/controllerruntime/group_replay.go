@@ -21,14 +21,25 @@ type runtimeAdapter struct {
 	dirty   map[string]bool
 	order   map[string]int64
 	next    map[string]int64
+	// Priority queue bookkeeping: the queue kind per controller, and per key
+	// the item's priority and the priority its invocation was taken with.
+	queue    map[string]string
+	priority map[string]int64
+	taken    map[string]int64
 }
 
 func request(k ModelKey) reconcile.Request {
 	return reconcile.Request{NamespacedName: client.ObjectKey{Namespace: k.Namespace, Name: k.Name}}
 }
 func newRuntimeAdapter(ctx context.Context, m GroupModel) (*runtimeAdapter, error) {
-	a := &runtimeAdapter{m: m, g: NewGroup(ctx), c: map[string]*Controller{}, inv: map[string]*Invocation{}, replies: map[string]chan string{}, dirty: map[string]bool{}, order: map[string]int64{}, next: map[string]int64{}}
+	a := &runtimeAdapter{m: m, g: NewGroup(ctx), c: map[string]*Controller{}, inv: map[string]*Invocation{}, replies: map[string]chan string{}, dirty: map[string]bool{}, order: map[string]int64{}, next: map[string]int64{}, queue: map[string]string{}, priority: map[string]int64{}, taken: map[string]int64{}}
 	for _, cfg := range m.Profile.Controllers {
+		queue, err := m.Profile.QueueOf(cfg)
+		if err != nil {
+			a.g.Close()
+			return nil, err
+		}
+		a.queue[cfg.Name] = queue
 		keys := []reconcile.Request{}
 		lookup := map[reconcile.Request]string{}
 		for _, k := range cfg.Keys {
@@ -36,7 +47,7 @@ func newRuntimeAdapter(ctx context.Context, m GroupModel) (*runtimeAdapter, erro
 			lookup[request(k)] = k.ID
 			a.replies[cfg.Name+"_"+k.ID] = make(chan string)
 		}
-		c, err := a.g.Add(ControllerOptions{Name: cfg.Name, Workers: cfg.Workers, Keys: keys, RetryTicks: cfg.RetryTicks, Reconciler: reconcile.Func(func(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
+		c, err := a.g.Add(ControllerOptions{Name: cfg.Name, Queue: queue, Workers: cfg.Workers, Keys: keys, RetryTicks: cfg.RetryTicks, Reconciler: reconcile.Func(func(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
 			var outcome string
 			select {
 			case outcome = <-a.replies[cfg.Name+"_"+lookup[req]]:
@@ -96,6 +107,9 @@ func (a *runtimeAdapter) Apply(ctx context.Context, name string) error {
 	prefix := e.Controller + "_" + e.Key
 	c := a.c[e.Controller]
 	key := request(a.key(e.Controller, e.Key))
+	if a.queue[e.Controller] == QueuePriority {
+		return a.applyPriority(ctx, e, prefix, c, key)
+	}
 	switch e.Kind {
 	case "enqueue":
 		if err := c.Enqueue(key); err != nil {
@@ -139,6 +153,12 @@ func (a *runtimeAdapter) Project(context.Context) (map[string]any, error) {
 	out := map[string]any{"now": a.g.Now()}
 	for _, c := range a.m.Profile.Controllers {
 		out[c.Name+"_next"] = a.next[c.Name]
+		if a.queue[c.Name] == QueuePriority {
+			if err := a.projectPriority(c, out); err != nil {
+				return nil, err
+			}
+			continue
+		}
 		ready := 0
 		for _, k := range c.Keys {
 			prefix := c.Name + "_" + k.ID

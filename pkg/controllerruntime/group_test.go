@@ -10,6 +10,8 @@ import (
 	cr "generative-architecture/pkg/controllerruntime"
 	"generative-architecture/pkg/model"
 
+	"fmt"
+	"math/rand"
 	"reflect"
 	"testing"
 	"time"
@@ -126,5 +128,77 @@ func TestInvocationEffectsRemainIsolated(t *testing.T) {
 	}
 	if result := cr.InvocationHook(ctx, effect.Call{}, nil); result.Err == nil {
 		t.Fatal("uncontrolled effect accepted")
+	}
+}
+
+// mixedProfile runs a priority queue controller beside a FIFO controller.
+func mixedProfile() cr.GroupProfile {
+	p := groupProfile()
+	p.Name = "MixedQueues"
+	p.Controllers[0].Queue = cr.QueuePriority
+	return p
+}
+
+// sampleActions walks the model from its initial state and picks an enabled
+// action at random in each step.
+func sampleActions(t *testing.T, g cr.GroupModel, m *model.Compiled, seed int64, n int) []string {
+	t.Helper()
+	r := rand.New(rand.NewSource(seed))
+	s, err := m.Initial()
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := []string{}
+	for range n {
+		enabled := []string{}
+		next := map[string]map[string]any{}
+		for _, a := range g.Spec.Actions {
+			if v, err := m.Next(s, a.Name); err == nil {
+				enabled = append(enabled, a.Name)
+				next[a.Name] = v
+			}
+		}
+		if len(enabled) == 0 {
+			break
+		}
+		pick := enabled[r.Intn(len(enabled))]
+		out = append(out, pick)
+		s = next[pick]
+	}
+	return out
+}
+
+func TestPriorityQueueReplaysAgainstNativeQueue(t *testing.T) {
+	g, err := cr.BuildGroupModel(mixedProfile())
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, err := model.Compile(g.Spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scenarios := map[string][]string{
+		// A low-priority key waits behind a normal key enqueued later.
+		"low after normal": {"writer_a_enqueueLow", "writer_b_enqueue", "writer_b_start", "writer_a_start", "writer_b_success", "writer_a_success"},
+		// An add during processing takes its counter at add time. A retry
+		// re-adds at the priority the key was taken with. An enqueue makes a
+		// waiting item ready with its old counter. A fired timer takes a new one.
+		"timers": {"writer_a_enqueueLow", "writer_a_start", "writer_a_enqueue", "writer_b_enqueue", "writer_a_error", "writer_a_start", "writer_b_start", "writer_b_requeue", "writer_a_after", "writer_a_enqueue", "writer_a_start", "writer_a_success", "advance", "advance", "writer_b_fire", "writer_b_start", "writer_b_errorAfter", "advance", "advance", "writer_b_fire", "writer_b_start", "writer_b_terminal"},
+	}
+	for i := range 4 {
+		scenarios[fmt.Sprintf("sampled %d", i)] = sampleActions(t, g, m, int64(i), 80)
+	}
+	for name, actions := range scenarios {
+		t.Run(name, func(t *testing.T) {
+			trace, err := conformance.Scenario(m, actions...)
+			if err != nil {
+				t.Fatal(err)
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+			defer cancel()
+			if _, err := cr.ReplayGroup(ctx, g, trace); err != nil {
+				t.Fatal(err)
+			}
+		})
 	}
 }
