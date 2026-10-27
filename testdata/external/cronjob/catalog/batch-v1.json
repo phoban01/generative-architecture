@@ -1,0 +1,9 @@
+[
+  {
+    "kind": "APIResourceList",
+    "groupVersion": "batch/v1",
+    "resources": [
+      {"name": "jobs", "singularName": "job", "namespaced": true, "kind": "Job", "verbs": ["create", "delete", "deletecollection", "get", "list", "patch", "update", "watch"]}
+    ]
+  }
+]

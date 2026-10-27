@@ -1,0 +1,18 @@
+apiVersion: architecture.local/v1alpha1
+kind: Project
+metadata:
+  name: cronjob
+spec:
+  module: tutorial.kubebuilder.io/project
+  packages:
+    - ./internal/controller
+    - ./api/v1
+  catalog:
+    crds:
+      - config/crd/bases/batch.tutorial.kubebuilder.io_cronjobs.yaml
+    discovery:
+      - catalog/batch-v1.json
+  constraints:
+    - constraints.yaml
+  runtime:
+    profile: controller-runtime
