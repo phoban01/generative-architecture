@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"generative-architecture/pkg/conformance"
+	"generative-architecture/pkg/model"
 	"os"
 	"strings"
 	"testing"
@@ -65,7 +66,7 @@ func TestNoReconcileWithoutDeliveredWatch(t *testing.T) {
 	if _, err = e.Model.Next(state, "reconcile"); err == nil {
 		t.Fatal("write bypassed watch delivery")
 	}
-	state, err = e.Model.Next(state, "deliverDatabase")
+	state, err = e.Model.Next(state, deliverDatabase)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,42 +74,70 @@ func TestNoReconcileWithoutDeliveredWatch(t *testing.T) {
 		t.Fatal(err)
 	}
 }
-func TestMissingWatchAndWrongMappingChangeModel(t *testing.T) {
+func TestWrongMappingViolatesConstraint(t *testing.T) {
+	code, wiring := wiringSources(t)
+	base, err := LoadSources(".", code, []byte(wiring))
+	if err != nil {
+		t.Fatal(err)
+	}
+	wrong := strings.ReplaceAll(wiring, "instance.Spec.DatabaseName", "instance.Name")
+	if wrong == wiring {
+		t.Fatal("mutation did not change source")
+	}
+	mutated, err := LoadSources(".", code, []byte(wrong))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mutated.Model.Quint() == base.Model.Quint() {
+		t.Fatal("wiring change did not change model")
+	}
+	trace, err := conformance.Scenario(mutated.Model, append(firstAttempt(t, base), deliverInstance)...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = mutated.CheckConstraints(trace); err == nil || !strings.Contains(err.Error(), "watchTargetsDatabase") {
+		t.Fatalf("constraint missed the wrong mapping: %v", err)
+	}
+}
+
+// Without the instance watch, the generated model has no instance events,
+// so no constraint over them can fire. The native handlers detect it: the
+// unchanged model expects the instance event to queue the Database, and
+// delivery through the mutated wiring queues nothing.
+func TestMissingWatchDivergesFromNativeDelivery(t *testing.T) {
 	code, wiring := wiringSources(t)
 	base, err := LoadSources(".", code, []byte(wiring))
 	if err != nil {
 		t.Fatal(err)
 	}
 	missing := strings.Replace(wiring, "Watches(&apiv1.DatabaseInstance{}, handler.EnqueueRequestsFromMapFunc(InstanceToDatabase)).\n\t\t", "", 1)
-	wrong := strings.ReplaceAll(wiring, "instance.Spec.DatabaseName", "instance.Name")
-	for _, tc := range []struct {
-		name, wiring, property string
-		provision              bool
-	}{{"missing-watch", missing, "instanceProvisioningEnqueuesReconciler", true}, {"wrong-target", wrong, "watchTargetsDatabase", false}} {
-		t.Run(tc.name, func(t *testing.T) {
-			if tc.wiring == wiring {
-				t.Fatal("mutation did not change source")
-			}
-			mutated, err := LoadSources(".", code, []byte(tc.wiring))
-			if err != nil {
-				t.Fatal(err)
-			}
-			if mutated.Model.Quint() == base.Model.Quint() {
-				t.Fatal("wiring change did not change model")
-			}
-			events := firstAttempt(t, base)
-			if tc.provision {
-				events = append(events, "changeInst1_1")
-			}
-			events = append(events, "deliverInstance")
-			trace, err := conformance.Scenario(mutated.Model, events...)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if err = mutated.CheckConstraints(trace); err == nil || !strings.Contains(err.Error(), tc.property) {
-				t.Fatalf("constraint missed %s: %v", tc.name, err)
-			}
-		})
+	if missing == wiring {
+		t.Fatal("mutation did not change source")
+	}
+	mutated, err := LoadSources(".", code, []byte(missing))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range mutated.Observed {
+		if strings.HasPrefix(name, "databaseInstance") {
+			t.Fatalf("unwatched instance keeps watch state %s", name)
+		}
+	}
+	if _, err := conformance.Scenario(mutated.Model, append(firstAttempt(t, base), deliverInstance)...); err == nil || !strings.Contains(err.Error(), deliverInstance) {
+		t.Fatalf("unwatched instance is still delivered: %v", err)
+	}
+	trace, err := base.Schedule("pending")
+	if err != nil {
+		t.Fatal(err)
+	}
+	native := base
+	native.Watches = mutated.Watches
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	a := New(ctx, native, false)
+	defer a.Close()
+	if _, err = conformance.ReplayObserved(ctx, base.Model, trace, a, base.Observed); err == nil || !strings.Contains(err.Error(), "queued_demo_db_1:true") {
+		t.Fatalf("native delivery missed the removed watch: %v", err)
 	}
 }
 func TestStatusPredicateMatchesNativeHandler(t *testing.T) {
@@ -128,13 +157,13 @@ func TestStatusPredicateMatchesNativeHandler(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			events := append(eventsOf(pending), "changeInst1_1", "deliverInstance")
+			events := append(eventsOf(pending), "changeInst1_1", deliverInstance)
 			trace, err := conformance.Scenario(e.Model, events...)
 			if err != nil {
 				t.Fatal(err)
 			}
 			last := trace.States[len(trace.States)-1].Values
-			if last["queued"] != tc.wantWakeup {
+			if last["queued_demo_db_1"] != tc.wantWakeup {
 				t.Fatalf("wrong generated predicate behaviour: %v", last)
 			}
 			err = e.CheckConstraints(trace)
@@ -163,7 +192,7 @@ func TestEventDuringReconcileSurvivesReturn(t *testing.T) {
 	for _, event := range firstAttempt(t, e) {
 		events = append(events, event)
 		if strings.HasSuffix(event, "_createInstance") {
-			events = append(events, "deliverInstance", "changeInst1_1", "deliverInstance")
+			events = append(events, deliverInstance, "changeInst1_1", deliverInstance)
 		}
 	}
 	prefix, err := conformance.Scenario(e.Model, events...)
@@ -219,5 +248,59 @@ func TestWatchAndDynamicResourceVersionsMustMatch(t *testing.T) {
 	}
 	if _, err := LoadSources(".", code, []byte(changed)); err == nil || !strings.Contains(err.Error(), "watch identity") {
 		t.Fatalf("different API versions were conflated: %v", err)
+	}
+}
+
+// Every action that changes a watched object records its event, and only a
+// create moves the generation here. The reference the instance mapping
+// reads starts at the one value its abstraction domain allows.
+func TestComposedWatchEvents(t *testing.T) {
+	e, err := Load(".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	actions := map[string]model.Action{}
+	for _, a := range e.Spec.Actions {
+		actions[a.Name] = a
+		if a.Effect != "" {
+			actions[a.Effect] = a
+		}
+	}
+	for _, tc := range []struct {
+		action, event, value string
+		generation           bool
+	}{
+		{"createDb1_true", "databaseEvent", `"create"`, true},
+		{"createDb1_false", "databaseEvent", `"create"`, true},
+		{"createInstance", "databaseInstanceEvent", `"create"`, true},
+		{"changeInst1_1", "databaseInstanceEvent", `databaseInstanceEvent == "" ? "update" : databaseInstanceEvent`, false},
+		{"publish", "databaseEvent", `databaseEvent == "" ? "update" : databaseEvent`, false},
+		{"removeDatabaseBeforeRead", "databaseEvent", `"delete"`, false},
+	} {
+		a, ok := actions[tc.action]
+		if !ok {
+			t.Fatalf("no action %s", tc.action)
+		}
+		if got := string(a.Updates[tc.event]); got != tc.value {
+			t.Errorf("%s: %s = %q, want %q", tc.action, tc.event, got, tc.value)
+		}
+		generation := strings.TrimSuffix(tc.event, "Event") + "Generation"
+		if _, moved := a.Updates[generation]; moved != tc.generation {
+			t.Errorf("%s: moves %s = %v, want %v", tc.action, generation, moved, tc.generation)
+		}
+	}
+	for _, name := range []string{"readDatabase", "readInstance", "checkContract"} {
+		for v := range actions[name].Updates {
+			if strings.HasSuffix(v, "Event") {
+				t.Errorf("read %s raises %s", name, v)
+			}
+		}
+	}
+	reconcile := actions["reconcile"]
+	if !strings.HasSuffix(string(reconcile.Guard), "&& queued_demo_db_1") || reconcile.Updates["queued_demo_db_1"] != "false" {
+		t.Fatalf("reconcile does not pop the key: %v", reconcile)
+	}
+	if got := e.Spec.State["databaseInstance_Spec_DatabaseName"].Initial; got != `"db-1"` {
+		t.Fatalf("instance reference starts at %s", got)
 	}
 }
