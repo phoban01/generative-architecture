@@ -20,7 +20,8 @@ import (
 
 // Definition is an InteractionContract. Fields must exist in an implementing
 // type. Optional fields may be absent, but when present they must have the
-// declared type. A field type is a primitive (string, bool, int), or a
+// declared type. A field type is a primitive (string, bool, int for int64,
+// int32), or a
 // primitive prefixed with "*", which also accepts a pointer to it (a JSON
 // field that may be null).
 type Definition struct {
@@ -55,7 +56,7 @@ func (d Definition) Validate() error {
 
 func validFieldType(t string) bool {
 	switch strings.TrimPrefix(t, "*") {
-	case "string", "bool", "int":
+	case "string", "bool", "int", "int32":
 		return true
 	}
 	return false
@@ -114,6 +115,8 @@ func primitive(t types.Type) string {
 		return "bool"
 	case types.Int64:
 		return "int"
+	case types.Int32:
+		return "int32"
 	}
 	return ""
 }

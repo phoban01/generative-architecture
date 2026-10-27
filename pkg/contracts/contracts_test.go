@@ -77,7 +77,7 @@ func TestDefinitionValidate(t *testing.T) {
 		def     Definition
 		wantErr string
 	}{
-		{name: "primitives", def: Definition{Name: "c", Version: "v1", Fields: map[string]string{"a": "string", "b": "bool", "c": "int"}}},
+		{name: "primitives", def: Definition{Name: "c", Version: "v1", Fields: map[string]string{"a": "string", "b": "bool", "c": "int", "d": "int32"}}},
 		{name: "nullable and optional", def: Definition{Name: "c", Version: "v1", Fields: map[string]string{"a": "*string"}, Optional: map[string]string{"b": "*bool"}}},
 		{name: "no required fields", def: Definition{Name: "c", Version: "v1", Optional: map[string]string{"b": "bool"}}, wantErr: "name, version and fields are required"},
 		{name: "unsupported type", def: Definition{Name: "c", Version: "v1", Fields: map[string]string{"a": "float"}}, wantErr: `field a: unsupported type "float"`},
@@ -111,6 +111,10 @@ func TestFieldTypeMatches(t *testing.T) {
 		{name: "nullable accepts value", got: str, want: "*string", ok: true},
 		{name: "nullable checks the base type", got: types.NewPointer(types.Typ[types.Bool]), want: "*string"},
 		{name: "int is int64", got: types.Typ[types.Int64], want: "int", ok: true},
+		{name: "int32", got: types.Typ[types.Int32], want: "int32", ok: true},
+		{name: "int32 is not int", got: types.Typ[types.Int32], want: "int"},
+		{name: "int is not int32", got: types.Typ[types.Int64], want: "int32"},
+		{name: "Go int is neither", got: types.Typ[types.Int], want: "int32"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := matches(tc.got, tc.want); got != tc.ok {

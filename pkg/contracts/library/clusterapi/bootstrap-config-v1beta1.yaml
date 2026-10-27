@@ -1,0 +1,26 @@
+# Cluster API BootstrapConfig provider contract, version v1beta1.
+# Source: the BootstrapConfig contract page for cluster-api v1.9, the version
+# that the clustercache boundary in pkg/boundary/library/clusterapi pins.
+#
+# A "*" type also accepts a pointer, because a pointer has the same JSON shape.
+# The page does not give a Go type for status.dataSecretName. Cluster API's own
+# KubeadmConfig uses *string.
+#
+# Not checked yet: status.conditions. The contract vocabulary has no condition
+# type.
+apiVersion: architecture.local/v1alpha1
+kind: InteractionContract
+metadata:
+  name: capi.bootstrap-config
+  annotations:
+    architecture.local/upstream: sigs.k8s.io/cluster-api
+    architecture.local/upstream-version: v1.9.0
+    architecture.local/reference: https://release-1-9.cluster-api.sigs.k8s.io/developer/providers/contracts/bootstrap-config
+spec:
+  version: v1beta1
+  fields:
+    status.ready: bool
+    status.dataSecretName: "*string"
+  optional:
+    status.failureReason: "*string"
+    status.failureMessage: "*string"

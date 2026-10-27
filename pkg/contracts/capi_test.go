@@ -15,6 +15,8 @@ const capiLibrary = "library/clusterapi"
 var capiContracts = map[string]string{
 	"infrastructure-machine-v1beta1.yaml": "capi.infrastructure-machine/v1beta1",
 	"infrastructure-machine-v1beta2.yaml": "capi.infrastructure-machine/v1beta2",
+	"infrastructure-cluster-v1beta1.yaml": "capi.infrastructure-cluster/v1beta1",
+	"bootstrap-config-v1beta1.yaml":       "capi.bootstrap-config/v1beta1",
 }
 
 func TestClusterAPILibraryLoads(t *testing.T) {
@@ -111,6 +113,23 @@ func TestClusterAPIContractsAgainstProviderFixture(t *testing.T) {
 		{name: "missing providerID", contract: "capi.infrastructure-machine/v1beta1", goType: "MachineWithoutProviderID", wantErr: "field spec.providerID: missing contract field spec.providerID"},
 		{name: "ready is a string", contract: "capi.infrastructure-machine/v1beta1", goType: "MachineWithStringReady", wantErr: "field status.ready: expected bool, got string"},
 		{name: "optional field with wrong type", contract: "capi.infrastructure-machine/v1beta1", goType: "MachineWithBoolFailureReason", wantErr: "field status.failureReason: expected *string, got bool"},
+		{
+			name: "cluster with endpoint", contract: "capi.infrastructure-cluster/v1beta1", goType: "InfraCluster",
+			wantPaths: map[string]string{"status.ready": "status.ready", "spec.controlPlaneEndpoint.host": "spec.controlPlaneEndpoint.host", "spec.controlPlaneEndpoint.port": "spec.controlPlaneEndpoint.port", "status.failureReason": "status.failureReason", "status.failureMessage": "status.failureMessage"},
+		},
+		{
+			name: "cluster with external endpoint", contract: "capi.infrastructure-cluster/v1beta1", goType: "ExternalEndpointCluster",
+			wantPaths:  map[string]string{"status.ready": "status.ready"},
+			wantAbsent: []string{"spec.controlPlaneEndpoint.host", "spec.controlPlaneEndpoint.port", "status.failureMessage", "status.failureReason"},
+		},
+		{name: "cluster port is a Go int", contract: "capi.infrastructure-cluster/v1beta1", goType: "ClusterWithIntPort", wantErr: "field spec.controlPlaneEndpoint.port: expected int32, got int"},
+		{name: "cluster without ready", contract: "capi.infrastructure-cluster/v1beta1", goType: "ClusterWithoutReady", wantErr: "field status.ready: missing contract field status.ready"},
+		{
+			name: "bootstrap config", contract: "capi.bootstrap-config/v1beta1", goType: "BootstrapConfig",
+			wantPaths: map[string]string{"status.ready": "status.ready", "status.dataSecretName": "status.dataSecretName", "status.failureReason": "status.failureReason", "status.failureMessage": "status.failureMessage"},
+		},
+		{name: "bootstrap without data secret", contract: "capi.bootstrap-config/v1beta1", goType: "BootstrapWithoutDataSecretName", wantErr: "field status.dataSecretName: missing contract field status.dataSecretName"},
+		{name: "machine is not a bootstrap config", contract: "capi.bootstrap-config/v1beta1", goType: "InfraMachine", wantErr: "field status.dataSecretName: missing contract field"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			impl := Implementation{Contract: tc.contract, Package: "example.org/capiprovider", Type: tc.goType}
