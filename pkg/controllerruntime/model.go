@@ -85,7 +85,10 @@ func BuildGroupModel(p GroupProfile) (GroupModel, error) {
 			return out, err
 		}
 		if queue == QueuePriority {
-			return out, fmt.Errorf("controller %s: priority queue profile not yet modelled (M3-02)", c.Name)
+			if err := addPriorityController(add, &out.Spec, c); err != nil {
+				return out, err
+			}
+			continue
 		}
 		next := c.Name + "_next"
 		out.Spec.State[next] = model.Variable{Type: "int", Initial: "0"}
