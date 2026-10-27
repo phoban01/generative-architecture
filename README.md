@@ -40,7 +40,7 @@ These commands use the saved, hash-checked evidence and require no running clust
 | Structure | Go types, GVKs, fields, controller/action markers and checked semantic mappings | `pkg/sourcegen`, `pkg/contracts` |
 | Process | Restricted Go AST extraction of reconcile control flow, with independent requirements and source mutations | `pkg/goflow`, `pkg/process`, `examples/database` |
 | Watches and API access | Extracted builder registrations, key mappings, predicates and dynamic-client resource operations | `pkg/watchgen`, `pkg/dynamicgen` |
-| Runtime | Real controller-runtime workers and client-go FIFO queues; controlled cache delivery, retries and conflicts | `pkg/controllerruntime`, `examples/runtimegroup` |
+| Runtime | Real controller-runtime workers with client-go FIFO queues or controller-runtime priority queues; controlled cache delivery, startup sync, deletion events, retries and conflicts | `pkg/controllerruntime`, `examples/runtimegroup` |
 | Composition | Processes namespaced and joined through versioned contract ports | `pkg/composition` |
 
 Authored documents use KRM `apiVersion`, `kind`, `metadata` and `spec`; generated observations use `status`. See [KRM documents](KRM.md) and the [CEL subset](CEL.md). No architecture CRDs or live cluster are required.

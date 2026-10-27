@@ -27,7 +27,10 @@ type ControllerOptions struct {
 	Name string
 	// Queue selects the native queue: QueueFIFO (the default) runs client-go's
 	// rate-limited FIFO queue, QueuePriority controller-runtime's priority queue.
-	Queue      string
+	Queue string
+	// Startup gives the controller a source that syncs only on Sync, so
+	// controller-runtime starts no worker before then.
+	Startup    bool
 	Workers    int
 	Keys       []reconcile.Request
 	RetryTicks int
@@ -42,6 +45,7 @@ type Controller struct {
 	permits chan struct{}
 	delay   *keyDelays    // FIFO timers
 	pq      *priorityGate // priority queue, nil for FIFO
+	sync    *syncSource   // nil without Startup
 	entered chan *Invocation
 	stopped chan error
 	mu      sync.Mutex
@@ -144,6 +148,10 @@ func (g *Group) Add(o ControllerOptions) (*Controller, error) {
 			}
 		}),
 	})
+	if err == nil && o.Startup {
+		c.sync = &syncSource{group: g, synced: make(chan struct{})}
+		err = ctrl.Watch(c.sync)
+	}
 	if err != nil {
 		c.queue.ShutDown()
 		return nil, err
@@ -266,6 +274,9 @@ func (c *Controller) Start() (*Invocation, error) {
 	startable := c.Ready() > 0
 	if c.pq != nil {
 		startable = c.pq.startable()
+	}
+	if !c.Synced() {
+		return nil, fmt.Errorf("caches not synced")
 	}
 	if !startable || c.Active() >= c.workers {
 		return nil, fmt.Errorf("no ready key or all workers busy")

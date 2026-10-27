@@ -88,3 +88,53 @@ func TestPriorityModelOrdersAddsDuringProcessing(t *testing.T) {
 		t.Fatalf("fire order %v", s["c_a_order"])
 	}
 }
+
+func lifecycleProfile(queue string) cr.GroupProfile {
+	p := priorityProfile()
+	p.Queue = queue
+	p.Controllers[0].Startup = true
+	p.Controllers[0].Deletion = true
+	return p
+}
+
+func TestLifecycleModelStartsNothingBeforeSync(t *testing.T) {
+	for _, queue := range []string{cr.QueueFIFO, cr.QueuePriority} {
+		t.Run(queue, func(t *testing.T) {
+			g, err := cr.BuildGroupModel(lifecycleProfile(queue))
+			if err != nil {
+				t.Fatal(err)
+			}
+			m, err := model.Compile(g.Spec)
+			if err != nil {
+				t.Fatal(err)
+			}
+			s := steps(t, m, "c_a_list", "c_b_enqueue", "c_b_tombstone")
+			for _, start := range []string{"c_a_start", "c_b_start"} {
+				if _, err := m.Next(s, start); err == nil {
+					t.Fatalf("%s enabled before sync", start)
+				}
+			}
+			if s["c_b_deleted"] != true {
+				t.Fatal("tombstone did not mark the key deleted")
+			}
+			if _, err := m.Next(s, "c_b_tombstone"); err == nil {
+				t.Fatal("key deleted twice")
+			}
+			s = steps(t, m, "c_a_list", "c_b_enqueue", "c_sync")
+			if _, err := m.Next(s, "c_a_list"); err == nil {
+				t.Fatal("initial list after sync")
+			}
+			// The priority queue starts the normal key before the listed one.
+			first, second := "c_a_start", "c_b_start"
+			if queue == cr.QueuePriority {
+				first, second = second, first
+			}
+			if _, err := m.Next(s, first); err != nil {
+				t.Fatalf("%s after sync: %v", first, err)
+			}
+			if _, err := m.Next(s, second); err == nil {
+				t.Fatalf("%s overtook %s", second, first)
+			}
+		})
+	}
+}

@@ -14,12 +14,12 @@ import (
 func (a *runtimeAdapter) applyPriority(ctx context.Context, e RuntimeEvent, prefix string, c *Controller, key reconcile.Request) error {
 	present := c.Queued(key) || c.Due(key) >= 0
 	switch e.Kind {
-	case "enqueue":
+	case "enqueue", "tombstone":
 		if err := c.Enqueue(key); err != nil {
 			return err
 		}
 		a.merge(prefix, e.Controller, present, 0)
-	case "enqueueLow":
+	case "enqueueLow", "list":
 		if err := c.EnqueueLow(key); err != nil {
 			return err
 		}

@@ -21,6 +21,11 @@ type ModelController struct {
 	RetryTicks int        `yaml:"retryTicks"`
 	AfterTicks int        `yaml:"afterTicks"`
 	Keys       []ModelKey `yaml:"keys"`
+	// Startup models the initial list and the cache sync: no key starts
+	// before the controller's caches sync.
+	Startup bool `yaml:"startup,omitempty"`
+	// Deletion models delete events, including tombstones.
+	Deletion bool `yaml:"deletion,omitempty"`
 }
 
 // Queue kinds. QueueFIFO is client-go's rate-limited FIFO work queue;
@@ -151,6 +156,9 @@ func BuildGroupModel(p GroupProfile) (GroupModel, error) {
 			out.Spec.Properties = append(out.Spec.Properties, model.Property{Name: prefix + "_exclusive", Expression: expr.Expression("!(" + ready + " && " + processing + ") && (!" + ready + " || " + dirty + ")")})
 		}
 		out.Spec.Properties = append(out.Spec.Properties, model.Property{Name: c.Name + "_capacity", Expression: expr.Expression("(" + strings.Join(active, " + ") + ") <= " + strconv.Itoa(c.Workers))})
+	}
+	for _, c := range p.Controllers {
+		addLifecycle(add, &out.Spec, c)
 	}
 	_, err := model.Compile(out.Spec)
 	return out, err

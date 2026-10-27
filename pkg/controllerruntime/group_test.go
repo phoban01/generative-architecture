@@ -131,6 +131,77 @@ func TestInvocationEffectsRemainIsolated(t *testing.T) {
 	}
 }
 
+func TestLifecycleReplaysAgainstNativeQueue(t *testing.T) {
+	p := mixedProfile()
+	p.Name = "Lifecycle"
+	for i := range p.Controllers {
+		p.Controllers[i].Startup = true
+		p.Controllers[i].Deletion = true
+	}
+	g, err := cr.BuildGroupModel(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, err := model.Compile(g.Spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scenarios := map[string][]string{
+		"startup": {"writer_a_list", "writer_b_list", "writer_b_enqueue", "reader_b_list", "reader_a_list", "writer_sync", "reader_sync", "writer_b_start", "writer_a_start", "reader_b_start", "writer_a_tombstone", "writer_a_success", "writer_a_start", "writer_a_success", "writer_b_success", "reader_b_success", "reader_a_start", "reader_a_success"},
+		// A trace that ends before sync shuts down cleanly.
+		"unsynced": {"writer_a_list", "reader_a_tombstone"},
+	}
+	for i := range 3 {
+		scenarios[fmt.Sprintf("sampled %d", i)] = sampleActions(t, g, m, int64(i), 80)
+	}
+	for name, actions := range scenarios {
+		t.Run(name, func(t *testing.T) {
+			trace, err := conformance.Scenario(m, actions...)
+			if err != nil {
+				t.Fatal(err)
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+			defer cancel()
+			if _, err := cr.ReplayGroup(ctx, g, trace); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestStartupWaitsForSync(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	g := cr.NewGroup(ctx)
+	defer g.Close()
+	key := reconcile.Request{NamespacedName: client.ObjectKey{Name: "a"}}
+	c, err := g.Add(cr.ControllerOptions{Name: "startup", Queue: cr.QueuePriority, Startup: true, Workers: 1, Keys: []reconcile.Request{key}, RetryTicks: 1, Reconciler: reconcile.Func(func(context.Context, reconcile.Request) (reconcile.Result, error) {
+		return reconcile.Result{}, nil
+	})})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := c.EnqueueLow(key); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Start(); err == nil {
+		t.Fatal("started before sync")
+	}
+	if err := c.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	inv, err := c.Start()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if inv.Priority != cr.LowPriority {
+		t.Fatalf("initial-list key handed out at priority %d", inv.Priority)
+	}
+	if _, _, err := inv.Finish(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // mixedProfile runs a priority queue controller beside a FIFO controller.
 func mixedProfile() cr.GroupProfile {
 	p := groupProfile()
