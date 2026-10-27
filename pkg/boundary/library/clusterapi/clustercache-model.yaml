@@ -1,0 +1,38 @@
+apiVersion: architecture.local/v1alpha1
+kind: TransitionModel
+metadata:
+  name: capi-clustercache
+spec:
+  name: CAPIClusterCache
+  # State names start with the cluster ID of the workload cluster they belong
+  # to: workload_a and workload_b.
+  state:
+    workload_a_connected: {type: bool, initial: 'false'}
+    workload_a_cached: {type: int, initial: '0'}
+    workload_b_connected: {type: bool, initial: 'false'}
+    workload_b_cached: {type: int, initial: '0'}
+  actions:
+  - name: connect_workload_a
+    guard: '!workload_a_connected'
+    updates: {workload_a_connected: 'true'}
+  - name: sync_workload_a
+    guard: workload_a_connected && workload_a_cached < 2
+    updates: {workload_a_cached: workload_a_cached + 1}
+  # A connection loss drops the cache.
+  - name: disconnect_workload_a
+    guard: workload_a_connected
+    updates: {workload_a_connected: 'false', workload_a_cached: '0'}
+  - name: connect_workload_b
+    guard: '!workload_b_connected'
+    updates: {workload_b_connected: 'true'}
+  - name: sync_workload_b
+    guard: workload_b_connected && workload_b_cached < 2
+    updates: {workload_b_cached: workload_b_cached + 1}
+  - name: disconnect_workload_b
+    guard: workload_b_connected
+    updates: {workload_b_connected: 'false', workload_b_cached: '0'}
+  properties:
+  - name: workload_a_cacheNeedsConnection
+    expression: workload_a_connected || workload_a_cached == 0
+  - name: workload_b_cacheNeedsConnection
+    expression: workload_b_connected || workload_b_cached == 0

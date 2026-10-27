@@ -44,6 +44,7 @@ spec:
 | `pkg/boundary/library/flux/kustomization.yaml`, `kustomization-model.yaml` | BoundaryModel, TransitionModel | spec | Flux kustomize-controller v1.4.0: `interval` as a periodic requeue, `dependsOn` as an ordering guard, server-side apply and prune as declared assumptions (EXT-4) |
 | `pkg/boundary/library/flux/gitrepository.yaml`, `gitrepository-model.yaml` | BoundaryModel, TransitionModel | spec | Flux source-controller v1.4.1: the artifact revision advances on fetch after `interval`; Ready follows the stored artifact (EXT-4) |
 | `pkg/boundary/library/flux/helmrelease.yaml`, `helmrelease-model.yaml` | BoundaryModel, TransitionModel | spec | Flux helm-controller v1.1.0: install, then upgrade on a chart change, after `interval` and `dependsOn`; release storage Secrets as effects (EXT-4) |
+| `pkg/boundary/library/clusterapi/clustercache.yaml`, `clustercache-model.yaml` | BoundaryModel, TransitionModel | spec | Cluster API v1.9.0 cluster cache: runs in cluster `management` and reads Nodes in `workload_a` and `workload_b` as assumed cross-cluster facts; per-cluster connect, sync and connection loss; consumers bind a workload cluster with an explicit link (EXT-3, ARCH-3) |
 | An interaction contract document | InteractionContract | spec | `pkg/contracts` (`+arch:implements` checks) |
 | `examples/database/generated/process.yaml` | ExtractedProcess | status | control-flow graph and source evidence |
 | `examples/database/generated/watches.yaml` | ExtractedWatches | status | registrations, mapper field paths, predicates, hashes |
