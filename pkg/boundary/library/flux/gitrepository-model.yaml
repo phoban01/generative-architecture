@@ -1,0 +1,30 @@
+apiVersion: architecture.local/v1alpha1
+kind: TransitionModel
+metadata:
+  name: flux-gitrepository
+spec:
+  name: FluxGitRepository
+  state:
+    now: {type: int, initial: '0'}
+    due: {type: bool, initial: 'true'}
+    upstream: {type: int, initial: '1'}
+    revision: {type: int, initial: '0'}
+    ready: {type: bool, initial: 'false'}
+  actions:
+  # tick is the periodic requeue after spec.interval, bounded to three rounds.
+  - name: tick
+    guard: now < 3
+    updates: {now: now + 1, due: 'true'}
+  # commit is the environment step in which the remote branch gains a commit.
+  - name: commit
+    guard: upstream < 3
+    updates: {upstream: upstream + 1}
+  # fetch stores the artifact of the remote head and advances the revision.
+  - name: fetch
+    guard: due
+    updates: {revision: upstream, due: 'false', ready: 'true'}
+  properties:
+  - name: revisionNeverAhead
+    expression: revision <= upstream
+  - name: readyMeansArtifact
+    expression: '!ready || revision > 0'

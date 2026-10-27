@@ -1,0 +1,75 @@
+apiVersion: architecture.local/v1alpha1
+kind: BoundaryModel
+metadata:
+  name: flux-helm-controller
+spec:
+  upstream: github.com/fluxcd/helm-controller
+  version: v1.1.0
+  model: helmrelease-model.yaml
+  owns:
+  - {group: helm.toolkit.fluxcd.io, version: v2, kind: HelmRelease}
+  watches:
+  - id: helmReleases
+    resource: {group: helm.toolkit.fluxcd.io, version: v2, kind: HelmRelease}
+  - id: helmCharts
+    resource: {group: source.toolkit.fluxcd.io, version: v1, kind: HelmChart}
+  effects:
+  - id: readHelmRelease
+    resource: {group: helm.toolkit.fluxcd.io, version: v2, kind: HelmRelease}
+    operation: get
+    consistency: cached
+  - id: readHelmChart
+    resource: {group: source.toolkit.fluxcd.io, version: v1, kind: HelmChart}
+    operation: get
+    consistency: cached
+  - id: patchStatus
+    resource: {group: helm.toolkit.fluxcd.io, version: v2, kind: HelmRelease}
+    operation: patch
+    consistency: direct
+    subresource: status
+  - id: createReleaseSecret
+    resource: {version: v1, kind: Secret}
+    operation: create
+    consistency: direct
+  - id: updateReleaseSecret
+    resource: {version: v1, kind: Secret}
+    operation: update
+    consistency: direct
+  ports:
+    # The released objects depend on the chart, so the port names an
+    # authored contract instead of one resource. The state is the Helm
+    # release version.
+    released:
+      state: releaseVersion
+      contract: helm.toolkit.fluxcd.io/released
+      version: v1
+      direction: out
+    ready:
+      state: ready
+      resource: {group: helm.toolkit.fluxcd.io, version: v2, kind: HelmRelease}
+      direction: out
+  assumptions:
+  - id: interval
+    statement: The controller reconciles each HelmRelease again after spec.interval, which the model shows as a periodic requeue (tick).
+    evidence: declared
+    reference: https://fluxcd.io/flux/components/helm/helmreleases/#interval
+    conformance: {kind: documentation, reference: https://fluxcd.io/flux/components/helm/helmreleases/#interval}
+  - id: dependsOn
+    statement: The controller does not install or upgrade a HelmRelease until every HelmRelease in spec.dependsOn is ready.
+    evidence: declared
+    reference: https://fluxcd.io/flux/components/helm/helmreleases/#dependencies
+    conformance: {kind: documentation, reference: https://fluxcd.io/flux/components/helm/helmreleases/#dependencies}
+  - id: installOrUpgrade
+    statement: The controller installs the chart when no release exists and upgrades it when the chart or values change; otherwise it leaves the release alone.
+    evidence: declared
+    reference: https://fluxcd.io/flux/components/helm/helmreleases/#helm-release-lifecycle
+    conformance: {kind: documentation, reference: https://fluxcd.io/flux/components/helm/helmreleases/#helm-release-lifecycle}
+  - id: releaseStorage
+    statement: Helm stores each release version in a Secret in the storage namespace, so every install or upgrade writes a Secret.
+    evidence: declared
+    reference: https://fluxcd.io/flux/components/helm/helmreleases/#storage-namespace
+    conformance: {kind: documentation, reference: https://fluxcd.io/flux/components/helm/helmreleases/#storage-namespace}
+  - id: noRemediation
+    statement: Install and upgrade succeed; failure remediation, rollback and uninstall are outside the model.
+    evidence: assumed
+    conformance: {kind: none}
