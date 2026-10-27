@@ -6,6 +6,8 @@ import (
 	"context"
 	"fmt"
 	"generative-architecture/pkg/effect"
+	"reflect"
+
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -22,44 +24,73 @@ type Observer struct {
 	Scheme   *runtime.Scheme
 }
 
-func (o Observer) invoke(ctx context.Context, operation, consistency string, key client.ObjectKey, obj client.Object, fn func() error) error {
-	var gvk schema.GroupVersionKind
-	var err error
+// gvkFor resolves an object's identity. An unstructured object must carry an
+// explicit GVK. A typed object needs the scheme.
+func (o Observer) gvkFor(obj runtime.Object) (schema.GroupVersionKind, error) {
 	if u, ok := obj.(*unstructured.Unstructured); ok && u != nil {
-		gvk = u.GroupVersionKind()
+		gvk := u.GroupVersionKind()
 		if gvk.Version == "" || gvk.Kind == "" {
-			return fmt.Errorf("unstructured observation requires explicit GVK")
+			return gvk, fmt.Errorf("unstructured observation requires explicit GVK")
 		}
-	} else {
-		if o.Scheme == nil {
-			return fmt.Errorf("typed observation requires a scheme")
-		}
-		gvk, err = apiutil.GVKForObject(obj, o.Scheme)
-		if err != nil {
-			return err
-		}
+		return gvk, nil
 	}
+	if o.Scheme == nil {
+		return schema.GroupVersionKind{}, fmt.Errorf("typed observation requires a scheme")
+	}
+	return apiutil.GVKForObject(obj, o.Scheme)
+}
+
+// observe looks up the effect and runs fn through the hook. fn returns the
+// detached snapshot of a successful call, or nil when the call has none.
+func (o Observer) observe(ctx context.Context, gvk schema.GroupVersionKind, operation, consistency string, key client.ObjectKey, submitted map[string]any, fn func() (map[string]any, error)) error {
 	d, err := o.Registry.LookupFor(o.Actor, effect.Resource{Group: gvk.Group, Version: gvk.Version, Kind: gvk.Kind}, operation, consistency)
-	if err != nil {
-		return err
-	}
-	submitted, err := runtime.DefaultUnstructuredConverter.ToUnstructured(obj.DeepCopyObject())
 	if err != nil {
 		return err
 	}
 	call := effect.Call{Descriptor: d, Key: effect.Key{Namespace: key.Namespace, Name: key.Name}, Submitted: submitted}
 	execute := func() effect.Result {
-		err := fn()
+		snapshot, err := fn()
 		if err != nil {
 			return effect.Result{Err: err}
 		}
-		snapshot, err := runtime.DefaultUnstructuredConverter.ToUnstructured(obj.DeepCopyObject())
-		return effect.Result{Snapshot: snapshot, Err: err}
+		return effect.Result{Snapshot: snapshot}
 	}
 	if o.Hook == nil {
 		return execute().Err
 	}
 	return o.Hook(ctx, call, execute).Err
+}
+
+// invoke observes a call on one object. The object is the submitted value
+// before the call and the snapshot after it.
+func (o Observer) invoke(ctx context.Context, operation, consistency string, key client.ObjectKey, obj client.Object, fn func() error) error {
+	gvk, err := o.gvkFor(obj)
+	if err != nil {
+		return err
+	}
+	submitted, err := detach(obj)
+	if err != nil {
+		return err
+	}
+	return o.observe(ctx, gvk, operation, consistency, key, submitted, func() (map[string]any, error) {
+		if err := fn(); err != nil {
+			return nil, err
+		}
+		return detach(obj)
+	})
+}
+
+func detach(obj runtime.Object) (map[string]any, error) {
+	return runtime.DefaultUnstructuredConverter.ToUnstructured(obj.DeepCopyObject())
+}
+
+// rejectDryRun refuses a dry run by name. A dry run writes nothing, so
+// recording it as a write would misstate the effect.
+func rejectDryRun(op string, dryRun []string) error {
+	if len(dryRun) > 0 {
+		return fmt.Errorf("unsupported controller-runtime effect: %s with dry run %v: a dry run writes nothing and is not observed", op, dryRun)
+	}
+	return nil
 }
 func unsupported(op string) error { return fmt.Errorf("unsupported controller-runtime effect: %s", op) }
 
@@ -111,14 +142,43 @@ func (c *clientProxy) Create(ctx context.Context, obj client.Object, opts ...cli
 	}
 	return c.o.invoke(ctx, "create", "direct", client.ObjectKeyFromObject(obj), obj, func() error { return c.Client.Create(ctx, obj) })
 }
-func (c *clientProxy) Delete(context.Context, client.Object, ...client.DeleteOption) error {
-	return unsupported("Delete")
+
+// Delete records a direct delete keyed by the object. Both snapshots carry
+// the object as the caller held it before deletion.
+func (c *clientProxy) Delete(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
+	options := &client.DeleteOptions{}
+	options.ApplyOptions(opts)
+	if err := rejectDryRun("Delete", options.DryRun); err != nil {
+		return err
+	}
+	if len(opts) > 0 {
+		return unsupported("Delete options")
+	}
+	return c.o.invoke(ctx, "delete", "direct", client.ObjectKeyFromObject(obj), obj, func() error { return c.Client.Delete(ctx, obj) })
 }
 func (c *clientProxy) Patch(context.Context, client.Object, client.Patch, ...client.PatchOption) error {
 	return unsupported("Patch")
 }
-func (c *clientProxy) DeleteAllOf(context.Context, client.Object, ...client.DeleteAllOfOption) error {
-	return unsupported("DeleteAllOf")
+
+// DeleteAllOf records a direct deleteAllOf keyed by the namespace option,
+// with no name. It sends and returns no object, so it has no snapshots.
+// Options other than the namespace fail closed.
+func (c *clientProxy) DeleteAllOf(ctx context.Context, obj client.Object, opts ...client.DeleteAllOfOption) error {
+	options := &client.DeleteAllOfOptions{}
+	options.ApplyOptions(opts)
+	if err := rejectDryRun("DeleteAllOf", options.DryRun); err != nil {
+		return err
+	}
+	if !reflect.DeepEqual(*options, client.DeleteAllOfOptions{ListOptions: client.ListOptions{Namespace: options.Namespace}}) {
+		return unsupported("DeleteAllOf options other than the namespace")
+	}
+	gvk, err := c.o.gvkFor(obj)
+	if err != nil {
+		return err
+	}
+	return c.o.observe(ctx, gvk, "deleteAllOf", "direct", client.ObjectKey{Namespace: options.Namespace}, nil, func() (map[string]any, error) {
+		return nil, c.Client.DeleteAllOf(ctx, obj, opts...)
+	})
 }
 func (c *clientProxy) Apply(context.Context, runtime.ApplyConfiguration, ...client.ApplyOption) error {
 	return unsupported("Apply")

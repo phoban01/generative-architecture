@@ -6,6 +6,7 @@ import (
 	cr "generative-architecture/pkg/controllerruntime"
 	"generative-architecture/pkg/effect"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -128,5 +129,128 @@ func TestTypedCreateIsObservedAndGated(t *testing.T) {
 	}
 	if len(calls) != 1 {
 		t.Fatal("rejected create reached the hook")
+	}
+}
+
+// recorder is a hook that keeps every call and its result.
+type recorder struct {
+	calls   []effect.Call
+	results []effect.Result
+}
+
+func (r *recorder) hook(ctx context.Context, c effect.Call, next func() effect.Result) effect.Result {
+	r.calls = append(r.calls, c)
+	result := next()
+	r.results = append(r.results, result)
+	return result
+}
+
+func coreScheme(t *testing.T) *runtime.Scheme {
+	t.Helper()
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	return scheme
+}
+
+// configMapRegistry declares one ConfigMap effect per operation/consistency
+// pair. The pair is also the effect ID.
+func configMapRegistry(t *testing.T, pairs ...[2]string) *effect.Registry {
+	t.Helper()
+	var entries []effect.Descriptor
+	for _, p := range pairs {
+		entries = append(entries, effect.Descriptor{ID: p[0] + "/" + p[1], Resource: effect.Resource{Version: "v1", Kind: "ConfigMap"}, Operation: p[0], Consistency: p[1]})
+	}
+	registry, err := effect.NewRegistry(entries)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return registry
+}
+
+func configMap(namespace, name string, labels map[string]string) *corev1.ConfigMap {
+	return &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace, Labels: labels}, Data: map[string]string{"value": name}}
+}
+
+// expectRejected fails unless err is a rejection whose message contains want.
+func expectRejected(t *testing.T, err error, want string) {
+	t.Helper()
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("expected rejection containing %q, got %v", want, err)
+	}
+}
+
+func TestTypedDeleteIsObserved(t *testing.T) {
+	ctx := context.Background()
+	scheme := coreScheme(t)
+	base := fake.NewClientBuilder().WithScheme(scheme).WithObjects(configMap("test", "one", nil)).Build()
+	rec := &recorder{}
+	wrapped := cr.Observer{Scheme: scheme, Registry: configMapRegistry(t, [2]string{"delete", "direct"}), Hook: rec.hook}.Client(base, "cached")
+	held := &corev1.ConfigMap{}
+	if err := base.Get(ctx, client.ObjectKey{Namespace: "test", Name: "one"}, held); err != nil {
+		t.Fatal(err)
+	}
+	if err := wrapped.Delete(ctx, held); err != nil {
+		t.Fatal(err)
+	}
+	if len(rec.calls) != 1 {
+		t.Fatalf("expected one observed call, got %d", len(rec.calls))
+	}
+	call := rec.calls[0]
+	if call.Descriptor.Operation != "delete" || call.Key != (effect.Key{Namespace: "test", Name: "one"}) {
+		t.Fatalf("wrong call: %+v", call)
+	}
+	for name, snapshot := range map[string]map[string]any{"submitted": call.Submitted, "result": rec.results[0].Snapshot} {
+		if snapshot["data"].(map[string]any)["value"] != "one" || snapshot["metadata"].(map[string]any)["resourceVersion"] == nil {
+			t.Fatalf("%s snapshot is not the object before deletion: %+v", name, snapshot)
+		}
+	}
+	if err := base.Get(ctx, client.ObjectKeyFromObject(held), &corev1.ConfigMap{}); !apierrors.IsNotFound(err) {
+		t.Fatalf("object not deleted through the base client: %v", err)
+	}
+	if err := wrapped.Delete(ctx, held); !apierrors.IsNotFound(err) {
+		t.Fatalf("API error not preserved: %v", err)
+	}
+	expectRejected(t, wrapped.Delete(ctx, held, client.DryRunAll), "Delete with dry run")
+	expectRejected(t, wrapped.Delete(ctx, held, client.PropagationPolicy(metav1.DeletePropagationForeground)), "unsupported controller-runtime effect: Delete options")
+	if len(rec.calls) != 2 {
+		t.Fatal("rejected delete reached the hook")
+	}
+}
+
+func TestTypedDeleteAllOfIsObserved(t *testing.T) {
+	ctx := context.Background()
+	scheme := coreScheme(t)
+	base := fake.NewClientBuilder().WithScheme(scheme).WithObjects(configMap("test", "one", nil), configMap("test", "two", nil), configMap("other", "three", nil)).Build()
+	rec := &recorder{}
+	wrapped := cr.Observer{Scheme: scheme, Registry: configMapRegistry(t, [2]string{"deleteAllOf", "direct"}), Hook: rec.hook}.Client(base, "cached")
+	if err := wrapped.DeleteAllOf(ctx, &corev1.ConfigMap{}, client.InNamespace("test")); err != nil {
+		t.Fatal(err)
+	}
+	if len(rec.calls) != 1 {
+		t.Fatalf("expected one observed call, got %d", len(rec.calls))
+	}
+	call := rec.calls[0]
+	if call.Descriptor.Operation != "deleteAllOf" || call.Descriptor.Consistency != "direct" || call.Key != (effect.Key{Namespace: "test"}) || call.Submitted != nil || rec.results[0].Snapshot != nil {
+		t.Fatalf("wrong call: %+v, result %+v", call, rec.results[0])
+	}
+	remaining := &corev1.ConfigMapList{}
+	if err := base.List(ctx, remaining); err != nil {
+		t.Fatal(err)
+	}
+	if len(remaining.Items) != 1 || remaining.Items[0].Namespace != "other" {
+		t.Fatalf("deleteAllOf did not reach the base client: %+v", remaining.Items)
+	}
+	if err := wrapped.DeleteAllOf(ctx, &corev1.ConfigMap{}); err != nil {
+		t.Fatal(err)
+	}
+	if rec.calls[1].Key != (effect.Key{}) {
+		t.Fatalf("empty options must give an empty key: %+v", rec.calls[1].Key)
+	}
+	expectRejected(t, wrapped.DeleteAllOf(ctx, &corev1.ConfigMap{}, client.InNamespace("test"), client.DryRunAll), "DeleteAllOf with dry run")
+	expectRejected(t, wrapped.DeleteAllOf(ctx, &corev1.ConfigMap{}, client.MatchingLabels{"app": "x"}), "DeleteAllOf options other than the namespace")
+	if len(rec.calls) != 2 {
+		t.Fatal("rejected deleteAllOf reached the hook")
 	}
 }
