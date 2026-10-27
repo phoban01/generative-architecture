@@ -2,13 +2,13 @@ package controllerruntime_test
 
 import (
 	"context"
-	"generative-architecture/pkg/effect"
+	"github.com/phoban01/generative-architecture/pkg/effect"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	"generative-architecture/pkg/conformance"
-	cr "generative-architecture/pkg/controllerruntime"
-	"generative-architecture/pkg/model"
+	"github.com/phoban01/generative-architecture/pkg/conformance"
+	cr "github.com/phoban01/generative-architecture/pkg/controllerruntime"
+	"github.com/phoban01/generative-architecture/pkg/model"
 
 	"fmt"
 	"math/rand"

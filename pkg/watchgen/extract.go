@@ -4,8 +4,8 @@ package watchgen
 
 import (
 	"fmt"
-	"generative-architecture/pkg/effect"
-	"generative-architecture/pkg/goflow"
+	"github.com/phoban01/generative-architecture/pkg/effect"
+	"github.com/phoban01/generative-architecture/pkg/goflow"
 	"go/ast"
 	"go/parser"
 	"go/token"

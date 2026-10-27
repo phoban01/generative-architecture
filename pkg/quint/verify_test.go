@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"generative-architecture/pkg/expr"
-	"generative-architecture/pkg/model"
-	"generative-architecture/pkg/quint"
+	"github.com/phoban01/generative-architecture/pkg/expr"
+	"github.com/phoban01/generative-architecture/pkg/model"
+	"github.com/phoban01/generative-architecture/pkg/quint"
 )
 
 // counterModel counts from 0 to 3. Nothing forces it to count: without a

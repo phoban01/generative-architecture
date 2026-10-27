@@ -1,8 +1,8 @@
 package controllerruntime
 
 import (
-	"generative-architecture/pkg/expr"
-	"generative-architecture/pkg/model"
+	"github.com/phoban01/generative-architecture/pkg/expr"
+	"github.com/phoban01/generative-architecture/pkg/model"
 	"maps"
 )
 

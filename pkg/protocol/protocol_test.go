@@ -1,7 +1,7 @@
 package protocol_test
 
 import (
-	"generative-architecture/pkg/protocol"
+	"github.com/phoban01/generative-architecture/pkg/protocol"
 	"os"
 	"path/filepath"
 	"strings"

@@ -3,8 +3,8 @@ package likec4
 import (
 	"testing"
 
-	"generative-architecture/pkg/composition"
-	"generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/composition"
+	"github.com/phoban01/generative-architecture/pkg/ir"
 )
 
 func twoComponents() ([]composition.Component, map[string]ir.Evidence, []composition.Link, map[string]ir.Source) {

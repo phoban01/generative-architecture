@@ -2,10 +2,10 @@ package quint_test
 
 import (
 	"context"
-	"generative-architecture/pkg/conformance"
-	"generative-architecture/pkg/krm"
-	"generative-architecture/pkg/model"
-	"generative-architecture/pkg/quint"
+	"github.com/phoban01/generative-architecture/pkg/conformance"
+	"github.com/phoban01/generative-architecture/pkg/krm"
+	"github.com/phoban01/generative-architecture/pkg/model"
+	"github.com/phoban01/generative-architecture/pkg/quint"
 	"os"
 	"path/filepath"
 	"strings"

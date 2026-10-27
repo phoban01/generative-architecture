@@ -3,8 +3,8 @@ package likec4
 import (
 	"testing"
 
-	"generative-architecture/pkg/effect"
-	"generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/effect"
+	"github.com/phoban01/generative-architecture/pkg/ir"
 )
 
 // EffectsOf splits subresource operations, keeps the evidence and source,

@@ -6,11 +6,11 @@ import (
 	"strings"
 	"testing"
 
-	"generative-architecture/pkg/dynamicgen"
-	"generative-architecture/pkg/effect"
-	"generative-architecture/pkg/goflow"
-	"generative-architecture/pkg/krm"
-	"generative-architecture/pkg/model"
+	"github.com/phoban01/generative-architecture/pkg/dynamicgen"
+	"github.com/phoban01/generative-architecture/pkg/effect"
+	"github.com/phoban01/generative-architecture/pkg/goflow"
+	"github.com/phoban01/generative-architecture/pkg/krm"
+	"github.com/phoban01/generative-architecture/pkg/model"
 )
 
 func TestExtractDynamicResourceDependenciesAndRejectDrift(t *testing.T) {

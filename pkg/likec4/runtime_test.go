@@ -3,8 +3,8 @@ package likec4
 import (
 	"testing"
 
-	cr "generative-architecture/pkg/controllerruntime"
-	"generative-architecture/pkg/ir"
+	cr "github.com/phoban01/generative-architecture/pkg/controllerruntime"
+	"github.com/phoban01/generative-architecture/pkg/ir"
 )
 
 func profile() cr.GroupProfile {

@@ -1,8 +1,8 @@
 package boundary_test
 
 import (
-	"generative-architecture/pkg/boundary"
-	"generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/boundary"
+	"github.com/phoban01/generative-architecture/pkg/ir"
 	"os"
 	"path/filepath"
 	"strings"

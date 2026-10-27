@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/ir"
 )
 
 // diffDocuments writes two IR documents that differ in the field path of

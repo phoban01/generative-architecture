@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"generative-architecture/pkg/expr"
-	"generative-architecture/pkg/model"
+	"github.com/phoban01/generative-architecture/pkg/expr"
+	"github.com/phoban01/generative-architecture/pkg/model"
 )
 
 func TestDeclaredDomains(t *testing.T) {

@@ -20,7 +20,7 @@ import (
 	"strings"
 	"text/template"
 
-	"generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/ir"
 )
 
 // Header is the first line of every generated file.

@@ -5,7 +5,7 @@ metadata:
 spec:
   # The ConfigMirror sample with the model declarations its generate.go
   # holds in Go. The other documents link to examples/configmirror.
-  module: generative-architecture
+  module: github.com/phoban01/generative-architecture
   packages:
     - ./examples/configmirror
   catalog:
@@ -34,7 +34,7 @@ spec:
         - call: sigs.k8s.io/controller-runtime/pkg/client.Client.Update
           effect: writeTarget
       objectKeys:
-        generative-architecture/examples/configmirror.Reconciler.Target: copy
+        github.com/phoban01/generative-architecture/examples/configmirror.Reconciler.Target: copy
       locals:
         source.data.value: snapshot
   initial:

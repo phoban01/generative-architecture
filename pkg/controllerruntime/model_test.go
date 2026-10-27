@@ -3,8 +3,8 @@ package controllerruntime_test
 import (
 	"testing"
 
-	cr "generative-architecture/pkg/controllerruntime"
-	"generative-architecture/pkg/model"
+	cr "github.com/phoban01/generative-architecture/pkg/controllerruntime"
+	"github.com/phoban01/generative-architecture/pkg/model"
 )
 
 func priorityProfile() cr.GroupProfile {

@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"generative-architecture/pkg/goflow"
+	"github.com/phoban01/generative-architecture/pkg/goflow"
 )
 
 // configMirror is the ConfigMirror sample with its model declarations in

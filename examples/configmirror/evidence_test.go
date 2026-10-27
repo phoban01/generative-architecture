@@ -9,11 +9,11 @@ import (
 	"strings"
 	"testing"
 
-	"generative-architecture/pkg/abstraction"
-	"generative-architecture/pkg/model"
-	"generative-architecture/pkg/mutation"
-	"generative-architecture/pkg/receipt"
-	"generative-architecture/pkg/report"
+	"github.com/phoban01/generative-architecture/pkg/abstraction"
+	"github.com/phoban01/generative-architecture/pkg/model"
+	"github.com/phoban01/generative-architecture/pkg/mutation"
+	"github.com/phoban01/generative-architecture/pkg/receipt"
+	"github.com/phoban01/generative-architecture/pkg/report"
 )
 
 func readReport(t *testing.T) report.Verification {

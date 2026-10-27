@@ -2,10 +2,10 @@ package consumer_test
 
 import (
 	"context"
-	"generative-architecture/pkg/conformance"
-	cr "generative-architecture/pkg/controllerruntime"
-	"generative-architecture/pkg/expr"
-	"generative-architecture/pkg/model"
+	"github.com/phoban01/generative-architecture/pkg/conformance"
+	cr "github.com/phoban01/generative-architecture/pkg/controllerruntime"
+	"github.com/phoban01/generative-architecture/pkg/expr"
+	"github.com/phoban01/generative-architecture/pkg/model"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"testing"

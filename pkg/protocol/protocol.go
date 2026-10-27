@@ -7,8 +7,8 @@ package protocol
 
 import (
 	"fmt"
-	"generative-architecture/pkg/expr"
-	"generative-architecture/pkg/krm"
+	"github.com/phoban01/generative-architecture/pkg/expr"
+	"github.com/phoban01/generative-architecture/pkg/krm"
 	"regexp"
 )
 

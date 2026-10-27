@@ -1,7 +1,7 @@
 package goflow
 
 import (
-	"generative-architecture/pkg/expr"
+	"github.com/phoban01/generative-architecture/pkg/expr"
 	"go/ast"
 )
 

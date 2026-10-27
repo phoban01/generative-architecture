@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"generative-architecture/pkg/project"
+	"github.com/phoban01/generative-architecture/pkg/project"
 )
 
 // cronJobDir holds the pinned kubebuilder CronJob tutorial controller

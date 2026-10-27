@@ -7,11 +7,11 @@ import (
 	"strings"
 	"testing"
 
-	"generative-architecture/pkg/expr"
-	"generative-architecture/pkg/model"
-	"generative-architecture/pkg/project"
-	"generative-architecture/pkg/quint"
-	"generative-architecture/pkg/report"
+	"github.com/phoban01/generative-architecture/pkg/expr"
+	"github.com/phoban01/generative-architecture/pkg/model"
+	"github.com/phoban01/generative-architecture/pkg/project"
+	"github.com/phoban01/generative-architecture/pkg/quint"
+	"github.com/phoban01/generative-architecture/pkg/report"
 )
 
 // counterEvidence is evidence for a model that counts from 0 to 3 and may

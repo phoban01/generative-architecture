@@ -4,10 +4,10 @@ import (
 	"strings"
 	"testing"
 
-	"generative-architecture/pkg/composition"
-	"generative-architecture/pkg/model"
-	"generative-architecture/pkg/protocol"
-	"generative-architecture/pkg/report"
+	"github.com/phoban01/generative-architecture/pkg/composition"
+	"github.com/phoban01/generative-architecture/pkg/model"
+	"github.com/phoban01/generative-architecture/pkg/protocol"
+	"github.com/phoban01/generative-architecture/pkg/report"
 )
 
 // A composed link whose consumer writes out of order is bound and violates

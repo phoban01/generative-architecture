@@ -2,8 +2,8 @@ package sourcegen
 
 import (
 	"fmt"
-	"generative-architecture/pkg/contracts"
-	"generative-architecture/pkg/krm"
+	"github.com/phoban01/generative-architecture/pkg/contracts"
+	"github.com/phoban01/generative-architecture/pkg/krm"
 	"go/ast"
 	"go/token"
 	"go/types"

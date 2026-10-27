@@ -7,11 +7,11 @@ import (
 	"sort"
 	"testing"
 
-	"generative-architecture/pkg/abstraction"
-	"generative-architecture/pkg/goflow"
-	"generative-architecture/pkg/ir"
-	"generative-architecture/pkg/krm"
-	"generative-architecture/pkg/project"
+	"github.com/phoban01/generative-architecture/pkg/abstraction"
+	"github.com/phoban01/generative-architecture/pkg/goflow"
+	"github.com/phoban01/generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/krm"
+	"github.com/phoban01/generative-architecture/pkg/project"
 )
 
 // Set CONFIGMIRROR_REGENERATE=1 to rewrite the committed generated files

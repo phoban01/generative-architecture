@@ -13,10 +13,10 @@
 #
 #   jobs:
 #     architecture:
-#       uses: <owner>/<repo>/.github/workflows/arch.yml@<ref>
+#       uses: phoban01/generative-architecture/.github/workflows/arch.yml@<ref>
 #       with:
 #         project: path/to/project.yaml
-#         arch-package: <module>/cmd/arch@<version>
+#         arch-package: github.com/phoban01/generative-architecture/cmd/arch@<ref>
 #
 # Every step reads its inputs from the job environment, never from an
 # expression inside a script, so input values cannot inject shell code.
@@ -34,7 +34,7 @@ on:
         type: string
         default: arch-out
       arch-package:
-        description: Package that go install builds arch from, such as ./cmd/arch or <module>/cmd/arch@<version>.
+        description: Package that go install builds arch from, such as ./cmd/arch or github.com/phoban01/generative-architecture/cmd/arch@<ref>.
         type: string
         required: true
       go-version-file:

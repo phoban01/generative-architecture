@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/ir"
 )
 
 func TestLoadReferenceSystem(t *testing.T) {
@@ -14,7 +14,7 @@ func TestLoadReferenceSystem(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Name != "refsystem" || p.Spec.Module != "generative-architecture" || len(p.Spec.Packages) != 1 || p.Spec.Runtime.Profile != "controller-runtime" {
+	if p.Name != "refsystem" || p.Spec.Module != "github.com/phoban01/generative-architecture" || len(p.Spec.Packages) != 1 || p.Spec.Runtime.Profile != "controller-runtime" {
 		t.Fatalf("unexpected document %+v", p.Spec)
 	}
 	if p.Spec.Bounds["maxInvocations"] != 4 {

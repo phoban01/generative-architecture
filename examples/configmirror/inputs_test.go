@@ -5,13 +5,13 @@ import (
 	"reflect"
 	"testing"
 
-	"generative-architecture/pkg/abstraction"
-	"generative-architecture/pkg/conformance"
-	"generative-architecture/pkg/effect"
-	"generative-architecture/pkg/ir"
-	"generative-architecture/pkg/krm"
-	"generative-architecture/pkg/model"
-	"generative-architecture/pkg/project"
+	"github.com/phoban01/generative-architecture/pkg/abstraction"
+	"github.com/phoban01/generative-architecture/pkg/conformance"
+	"github.com/phoban01/generative-architecture/pkg/effect"
+	"github.com/phoban01/generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/krm"
+	"github.com/phoban01/generative-architecture/pkg/model"
+	"github.com/phoban01/generative-architecture/pkg/project"
 )
 
 // The Project and Abstraction documents are the authored inputs the model,

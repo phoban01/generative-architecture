@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/ir"
 )
 
 // The example's diagram is one pkg/likec4 workspace: every extracted

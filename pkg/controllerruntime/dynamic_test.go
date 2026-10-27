@@ -5,9 +5,9 @@ import (
 	"errors"
 	"testing"
 
-	cr "generative-architecture/pkg/controllerruntime"
-	"generative-architecture/pkg/dynamicgen"
-	"generative-architecture/pkg/effect"
+	cr "github.com/phoban01/generative-architecture/pkg/controllerruntime"
+	"github.com/phoban01/generative-architecture/pkg/dynamicgen"
+	"github.com/phoban01/generative-architecture/pkg/effect"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

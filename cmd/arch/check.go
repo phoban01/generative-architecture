@@ -12,12 +12,12 @@ import (
 	"strings"
 	"time"
 
-	"generative-architecture/pkg/conformance"
-	"generative-architecture/pkg/krm"
-	"generative-architecture/pkg/model"
-	"generative-architecture/pkg/mutation"
-	"generative-architecture/pkg/quint"
-	"generative-architecture/pkg/report"
+	"github.com/phoban01/generative-architecture/pkg/conformance"
+	"github.com/phoban01/generative-architecture/pkg/krm"
+	"github.com/phoban01/generative-architecture/pkg/model"
+	"github.com/phoban01/generative-architecture/pkg/mutation"
+	"github.com/phoban01/generative-architecture/pkg/quint"
+	"github.com/phoban01/generative-architecture/pkg/report"
 )
 
 // checkTimeout bounds one arch check run, Quint included.

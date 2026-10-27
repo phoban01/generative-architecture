@@ -9,14 +9,14 @@ import (
 	"os"
 	"path/filepath"
 
-	"generative-architecture/pkg/catalog"
-	"generative-architecture/pkg/effect"
-	"generative-architecture/pkg/goflow"
-	"generative-architecture/pkg/ir"
-	"generative-architecture/pkg/project"
-	"generative-architecture/pkg/report"
-	"generative-architecture/pkg/sourcegen"
-	"generative-architecture/pkg/watchgen"
+	"github.com/phoban01/generative-architecture/pkg/catalog"
+	"github.com/phoban01/generative-architecture/pkg/effect"
+	"github.com/phoban01/generative-architecture/pkg/goflow"
+	"github.com/phoban01/generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/project"
+	"github.com/phoban01/generative-architecture/pkg/report"
+	"github.com/phoban01/generative-architecture/pkg/sourcegen"
+	"github.com/phoban01/generative-architecture/pkg/watchgen"
 )
 
 // Output file names under the --out directory.

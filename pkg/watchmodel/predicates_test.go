@@ -4,11 +4,11 @@ import (
 	"strings"
 	"testing"
 
-	"generative-architecture/pkg/expr"
-	"generative-architecture/pkg/goflow"
-	"generative-architecture/pkg/ir"
-	"generative-architecture/pkg/model"
-	"generative-architecture/pkg/watchmodel"
+	"github.com/phoban01/generative-architecture/pkg/expr"
+	"github.com/phoban01/generative-architecture/pkg/goflow"
+	"github.com/phoban01/generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/model"
+	"github.com/phoban01/generative-architecture/pkg/watchmodel"
 )
 
 // predicateSpec watches the child through a field reference to the key,

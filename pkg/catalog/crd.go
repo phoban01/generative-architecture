@@ -6,7 +6,7 @@ import (
 	"io"
 	"os"
 
-	"generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/ir"
 
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	utilyaml "k8s.io/apimachinery/pkg/util/yaml"

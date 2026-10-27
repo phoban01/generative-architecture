@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strconv"
 
-	"generative-architecture/pkg/abstraction"
-	"generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/abstraction"
+	"github.com/phoban01/generative-architecture/pkg/ir"
 )
 
 // Projection maps one model state variable to one scalar JSON path of one

@@ -6,7 +6,7 @@ import (
 	"context"
 	"fmt"
 
-	"generative-architecture/pkg/effect"
+	"github.com/phoban01/generative-architecture/pkg/effect"
 )
 
 // StoreProxy gates the effects of Store: a call of a gated

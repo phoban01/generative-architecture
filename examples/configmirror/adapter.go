@@ -6,11 +6,11 @@ import (
 	"sort"
 	"time"
 
-	"generative-architecture/examples/configmirror/generated"
-	"generative-architecture/pkg/conformance"
-	cr "generative-architecture/pkg/controllerruntime"
-	"generative-architecture/pkg/effect"
-	"generative-architecture/pkg/model"
+	"github.com/phoban01/generative-architecture/examples/configmirror/generated"
+	"github.com/phoban01/generative-architecture/pkg/conformance"
+	cr "github.com/phoban01/generative-architecture/pkg/controllerruntime"
+	"github.com/phoban01/generative-architecture/pkg/effect"
+	"github.com/phoban01/generative-architecture/pkg/model"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

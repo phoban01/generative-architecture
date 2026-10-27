@@ -13,8 +13,8 @@ import (
 
 	"golang.org/x/tools/go/packages"
 
-	"generative-architecture/pkg/goflow"
-	"generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/goflow"
+	"github.com/phoban01/generative-architecture/pkg/ir"
 )
 
 // Generator names this frontend in provenance records.

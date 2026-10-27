@@ -11,8 +11,8 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"generative-architecture/examples/refsystem/api/v1alpha1"
-	"generative-architecture/pkg/envtest"
+	"github.com/phoban01/generative-architecture/examples/refsystem/api/v1alpha1"
+	"github.com/phoban01/generative-architecture/pkg/envtest"
 )
 
 // TestEnvtestCreatesTenant installs the reference system's three CRDs in a

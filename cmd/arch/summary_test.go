@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"generative-architecture/pkg/report"
+	"github.com/phoban01/generative-architecture/pkg/report"
 )
 
 // The summary of a composed run prints the binding and protocol sections

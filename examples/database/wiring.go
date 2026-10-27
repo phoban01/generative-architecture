@@ -2,7 +2,7 @@ package database
 
 import (
 	context "context"
-	apiv1 "generative-architecture/examples/database/api/v1alpha1"
+	apiv1 "github.com/phoban01/generative-architecture/examples/database/api/v1alpha1"
 	unstructured "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"

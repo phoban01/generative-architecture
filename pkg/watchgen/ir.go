@@ -3,7 +3,7 @@ package watchgen
 import (
 	"strings"
 
-	"generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/ir"
 )
 
 // Generator names this frontend in provenance records.

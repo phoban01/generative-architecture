@@ -11,7 +11,7 @@ import (
 	"sort"
 	"strings"
 
-	"generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/ir"
 )
 
 // Error classes an outcome may report. An empty Outcome.Error means success.

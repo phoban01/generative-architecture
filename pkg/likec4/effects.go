@@ -3,8 +3,8 @@ package likec4
 import (
 	"strings"
 
-	"generative-architecture/pkg/effect"
-	"generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/effect"
+	"github.com/phoban01/generative-architecture/pkg/ir"
 )
 
 // EffectsOf turns the effect descriptors of a model into IR api effects of

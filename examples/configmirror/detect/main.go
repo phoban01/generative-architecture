@@ -12,7 +12,7 @@ import (
 	"os"
 	"time"
 
-	"generative-architecture/examples/configmirror"
+	"github.com/phoban01/generative-architecture/examples/configmirror"
 )
 
 func main() {

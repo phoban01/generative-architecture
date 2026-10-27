@@ -8,13 +8,13 @@ import (
 	"sort"
 	"strings"
 
-	"generative-architecture/pkg/abstraction"
-	"generative-architecture/pkg/adaptergen"
-	"generative-architecture/pkg/catalog"
-	"generative-architecture/pkg/expr"
-	"generative-architecture/pkg/goflow"
-	"generative-architecture/pkg/ir"
-	"generative-architecture/pkg/project"
+	"github.com/phoban01/generative-architecture/pkg/abstraction"
+	"github.com/phoban01/generative-architecture/pkg/adaptergen"
+	"github.com/phoban01/generative-architecture/pkg/catalog"
+	"github.com/phoban01/generative-architecture/pkg/expr"
+	"github.com/phoban01/generative-architecture/pkg/goflow"
+	"github.com/phoban01/generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/project"
 )
 
 // This file lowers a reconciler's Reconcile method with the typed frontend.

@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"reflect"
 
-	"generative-architecture/pkg/krm"
-	"generative-architecture/pkg/receipt"
+	"github.com/phoban01/generative-architecture/pkg/krm"
+	"github.com/phoban01/generative-architecture/pkg/receipt"
 )
 
 // VerificationKind is the KRM kind of a verification report.

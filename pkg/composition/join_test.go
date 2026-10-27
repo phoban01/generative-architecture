@@ -1,10 +1,10 @@
 package composition_test
 
 import (
-	"generative-architecture/pkg/composition"
-	"generative-architecture/pkg/expr"
-	"generative-architecture/pkg/ir"
-	"generative-architecture/pkg/model"
+	"github.com/phoban01/generative-architecture/pkg/composition"
+	"github.com/phoban01/generative-architecture/pkg/expr"
+	"github.com/phoban01/generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/model"
 	"reflect"
 	"strings"
 	"testing"

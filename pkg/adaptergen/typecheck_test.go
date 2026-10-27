@@ -74,7 +74,7 @@ func assertNoModelState(t *testing.T, p *packages.Package) {
 	t.Helper()
 	for _, imp := range p.Syntax[0].Imports {
 		path := strings.Trim(imp.Path.Value, `"`)
-		for _, forbidden := range []string{"generative-architecture/pkg/model", "generative-architecture/pkg/conformance", "generative-architecture/pkg/quint", "generative-architecture/pkg/expr"} {
+		for _, forbidden := range []string{"github.com/phoban01/generative-architecture/pkg/model", "github.com/phoban01/generative-architecture/pkg/conformance", "github.com/phoban01/generative-architecture/pkg/quint", "github.com/phoban01/generative-architecture/pkg/expr"} {
 			if path == forbidden {
 				t.Errorf("generated source imports %s: adapters must not read expected model state", path)
 			}

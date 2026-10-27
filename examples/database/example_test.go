@@ -2,9 +2,9 @@ package database
 
 import (
 	"context"
-	"generative-architecture/pkg/conformance"
-	"generative-architecture/pkg/goflow"
-	"generative-architecture/pkg/report"
+	"github.com/phoban01/generative-architecture/pkg/conformance"
+	"github.com/phoban01/generative-architecture/pkg/goflow"
+	"github.com/phoban01/generative-architecture/pkg/report"
 	"os"
 	"path/filepath"
 	"strings"

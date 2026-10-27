@@ -3,8 +3,8 @@ package controllerruntime
 import (
 	"context"
 	"fmt"
-	"generative-architecture/pkg/effect"
 	"github.com/go-logr/logr"
+	"github.com/phoban01/generative-architecture/pkg/effect"
 	"k8s.io/client-go/util/workqueue"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/priorityqueue"

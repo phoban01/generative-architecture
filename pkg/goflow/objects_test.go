@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"generative-architecture/pkg/expr"
+	"github.com/phoban01/generative-architecture/pkg/expr"
 )
 
 // copyOptions summarizes read and write by callee and maps the value entry
@@ -17,7 +17,7 @@ func copyOptions() Options {
 		Returns: []Return{{Zero: true}, {Error: true}},
 	}
 	opts.Call = func(c Callee, call *ast.CallExpr, convert Convert) (Node, bool, error) {
-		if c.Package != "generative-architecture/pkg/goflow/testdata/typed" || c.Receiver != "Reconciler" {
+		if c.Package != "github.com/phoban01/generative-architecture/pkg/goflow/testdata/typed" || c.Receiver != "Reconciler" {
 			return Node{}, false, nil
 		}
 		switch c.Method {

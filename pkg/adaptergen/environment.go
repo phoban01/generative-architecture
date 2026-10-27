@@ -6,8 +6,8 @@ import (
 	"sort"
 	"strconv"
 
-	"generative-architecture/pkg/abstraction"
-	"generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/abstraction"
+	"github.com/phoban01/generative-architecture/pkg/ir"
 )
 
 // FieldAction is the environment action name that applies operation

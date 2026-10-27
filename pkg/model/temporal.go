@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	"generative-architecture/pkg/expr"
+	"github.com/phoban01/generative-architecture/pkg/expr"
 )
 
 // Temporal is a liveness property over the states of a model. Exactly one

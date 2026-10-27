@@ -5,12 +5,12 @@ import (
 	"os"
 	"path/filepath"
 
-	"generative-architecture/pkg/conformance"
-	"generative-architecture/pkg/dynamicgen"
-	"generative-architecture/pkg/goflow"
-	"generative-architecture/pkg/ir"
-	"generative-architecture/pkg/model"
-	"generative-architecture/pkg/watchgen"
+	"github.com/phoban01/generative-architecture/pkg/conformance"
+	"github.com/phoban01/generative-architecture/pkg/dynamicgen"
+	"github.com/phoban01/generative-architecture/pkg/goflow"
+	"github.com/phoban01/generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/model"
+	"github.com/phoban01/generative-architecture/pkg/watchgen"
 )
 
 type Example struct {

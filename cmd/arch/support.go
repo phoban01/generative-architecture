@@ -8,9 +8,9 @@ import (
 	"strconv"
 	"text/tabwriter"
 
-	"generative-architecture/pkg/ir"
-	"generative-architecture/pkg/project"
-	"generative-architecture/pkg/report"
+	"github.com/phoban01/generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/project"
+	"github.com/phoban01/generative-architecture/pkg/report"
 )
 
 // errStrict marks a run that verification mode (--strict) refused because

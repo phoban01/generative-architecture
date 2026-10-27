@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"generative-architecture/pkg/expr"
+	"github.com/phoban01/generative-architecture/pkg/expr"
 )
 
 // bareBindings binds every placeholder of a summary to its own name without

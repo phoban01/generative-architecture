@@ -6,8 +6,8 @@ import (
 	"context"
 	"fmt"
 
-	"generative-architecture/pkg/effect"
-	"generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/effect"
+	"github.com/phoban01/generative-architecture/pkg/ir"
 )
 
 // ApplyProcessEvent gates the node of process database-reconcile named event at its

@@ -14,11 +14,11 @@ import (
 
 	"golang.org/x/tools/go/packages"
 
-	"generative-architecture/pkg/abstraction"
-	"generative-architecture/pkg/adaptergen"
-	"generative-architecture/pkg/catalog"
-	cr "generative-architecture/pkg/controllerruntime"
-	"generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/abstraction"
+	"github.com/phoban01/generative-architecture/pkg/adaptergen"
+	"github.com/phoban01/generative-architecture/pkg/catalog"
+	cr "github.com/phoban01/generative-architecture/pkg/controllerruntime"
+	"github.com/phoban01/generative-architecture/pkg/ir"
 )
 
 // Package is the package name the fixtures are generated into.
@@ -107,7 +107,7 @@ type Provisioner interface {
 }
 
 // ProvisionerPath is the import path of Provisioner.
-const ProvisionerPath = "generative-architecture/pkg/adaptergen/internal/fixture"
+const ProvisionerPath = "github.com/phoban01/generative-architecture/pkg/adaptergen/internal/fixture"
 
 // ProvisionerType loads the type of Provisioner, as a generator sees it.
 func ProvisionerType() (*types.Named, error) {

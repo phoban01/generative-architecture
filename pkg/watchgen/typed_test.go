@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"generative-architecture/pkg/effect"
-	"generative-architecture/pkg/goflow"
-	"generative-architecture/pkg/watchgen"
+	"github.com/phoban01/generative-architecture/pkg/effect"
+	"github.com/phoban01/generative-architecture/pkg/goflow"
+	"github.com/phoban01/generative-architecture/pkg/watchgen"
 )
 
 func load(t *testing.T, pkg, receiver string) goflow.Loaded {

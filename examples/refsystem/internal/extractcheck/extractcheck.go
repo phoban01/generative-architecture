@@ -21,12 +21,12 @@ import (
 	"slices"
 	"strings"
 
-	"generative-architecture/pkg/effect"
-	"generative-architecture/pkg/expr"
-	"generative-architecture/pkg/goflow"
-	"generative-architecture/pkg/ir"
-	"generative-architecture/pkg/sourcegen"
-	"generative-architecture/pkg/watchgen"
+	"github.com/phoban01/generative-architecture/pkg/effect"
+	"github.com/phoban01/generative-architecture/pkg/expr"
+	"github.com/phoban01/generative-architecture/pkg/goflow"
+	"github.com/phoban01/generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/sourcegen"
+	"github.com/phoban01/generative-architecture/pkg/watchgen"
 )
 
 // clientPackage declares the controller-runtime client interfaces.
@@ -39,9 +39,9 @@ var resources = map[string]effect.Resource{
 	"k8s.io/api/core/v1.ResourceQuota": {Version: "v1", Kind: "ResourceQuota"},
 	"k8s.io/api/core/v1.Secret":        {Version: "v1", Kind: "Secret"},
 	"k8s.io/api/batch/v1.Job":          {Group: "batch", Version: "v1", Kind: "Job"},
-	"generative-architecture/examples/refsystem/api/v1alpha1.Tenant":   {Group: "refsystem.example.org", Version: "v1alpha1", Kind: "Tenant"},
-	"generative-architecture/examples/refsystem/api/v1alpha1.Database": {Group: "refsystem.example.org", Version: "v1alpha1", Kind: "Database"},
-	"generative-architecture/examples/refsystem/api/v1alpha1.Backup":   {Group: "refsystem.example.org", Version: "v1alpha1", Kind: "Backup"},
+	"github.com/phoban01/generative-architecture/examples/refsystem/api/v1alpha1.Tenant":   {Group: "refsystem.example.org", Version: "v1alpha1", Kind: "Tenant"},
+	"github.com/phoban01/generative-architecture/examples/refsystem/api/v1alpha1.Database": {Group: "refsystem.example.org", Version: "v1alpha1", Kind: "Database"},
+	"github.com/phoban01/generative-architecture/examples/refsystem/api/v1alpha1.Backup":   {Group: "refsystem.example.org", Version: "v1alpha1", Kind: "Backup"},
 }
 
 // Result is what the frontends read from one controller package.

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	cr "generative-architecture/pkg/controllerruntime"
+	cr "github.com/phoban01/generative-architecture/pkg/controllerruntime"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/util/workqueue"
 	"sigs.k8s.io/controller-runtime/pkg/client"

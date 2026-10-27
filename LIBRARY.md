@@ -2,14 +2,20 @@
 
 Start with [the source-to-model walkthrough](START-HERE.md). The intended workflow is **implementation → generated system model → independent constraints → counterexamples and implementation replay**. The library supports bounded pieces of this workflow. Arbitrary-system discovery and full Go verification are not implemented.
 
-Public packages live under `pkg/`. Example-specific wiring stays under `examples/`. The repository is a local, unpublished module named `generative-architecture`. Another module can consume this checkout with:
+Public packages live under `pkg/`. Example-specific wiring stays under `examples/`. The module path is `github.com/phoban01/generative-architecture`. Add it to another module with:
 
-```go
-require generative-architecture v0.0.0
-replace generative-architecture => /absolute/path/to/generative-architecture
+```sh
+go get github.com/phoban01/generative-architecture@<version>
 ```
 
-Choose a hosting/module path before publishing. KRM documents use `architecture.local/v1alpha1`; public APIs are experimental.
+No version is tagged yet. v0.1.0 is the first planned release. Until then, use a commit hash as the version, or point at a local checkout:
+
+```go
+require github.com/phoban01/generative-architecture v0.0.0
+replace github.com/phoban01/generative-architecture => /absolute/path/to/generative-architecture
+```
+
+KRM documents use `architecture.local/v1alpha1`; public APIs are experimental.
 
 ## Extraction and generation
 

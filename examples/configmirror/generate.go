@@ -11,17 +11,17 @@ import (
 	"strconv"
 	"strings"
 
-	"generative-architecture/pkg/abstraction"
-	"generative-architecture/pkg/adaptergen"
-	cr "generative-architecture/pkg/controllerruntime"
-	"generative-architecture/pkg/effect"
-	"generative-architecture/pkg/expr"
-	"generative-architecture/pkg/goflow"
-	"generative-architecture/pkg/ir"
-	"generative-architecture/pkg/krm"
-	"generative-architecture/pkg/model"
-	"generative-architecture/pkg/process"
-	"generative-architecture/pkg/summaries"
+	"github.com/phoban01/generative-architecture/pkg/abstraction"
+	"github.com/phoban01/generative-architecture/pkg/adaptergen"
+	cr "github.com/phoban01/generative-architecture/pkg/controllerruntime"
+	"github.com/phoban01/generative-architecture/pkg/effect"
+	"github.com/phoban01/generative-architecture/pkg/expr"
+	"github.com/phoban01/generative-architecture/pkg/goflow"
+	"github.com/phoban01/generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/krm"
+	"github.com/phoban01/generative-architecture/pkg/model"
+	"github.com/phoban01/generative-architecture/pkg/process"
+	"github.com/phoban01/generative-architecture/pkg/summaries"
 )
 
 // This file derives the ConfigMirror model from its authored inputs. The
@@ -52,8 +52,8 @@ var reconcileEffects = map[goflow.Callee]clientEffect{
 // key (the controller is driven by that object), and the reconciler's
 // Target field holds the copy's key.
 var keyObjects = map[string]string{
-	"sigs.k8s.io/controller-runtime/pkg/reconcile.Request.NamespacedName": "source",
-	"generative-architecture/examples/configmirror.Reconciler.Target":     "copy",
+	"sigs.k8s.io/controller-runtime/pkg/reconcile.Request.NamespacedName":                 "source",
+	"github.com/phoban01/generative-architecture/examples/configmirror.Reconciler.Target": "copy",
 }
 
 // localFields keeps a selected field of a Go object local in a declared

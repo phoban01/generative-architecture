@@ -2,9 +2,9 @@ package model_test
 
 import (
 	"context"
-	"generative-architecture/pkg/conformance"
-	"generative-architecture/pkg/expr"
-	"generative-architecture/pkg/model"
+	"github.com/phoban01/generative-architecture/pkg/conformance"
+	"github.com/phoban01/generative-architecture/pkg/expr"
+	"github.com/phoban01/generative-architecture/pkg/model"
 	"strings"
 	"testing"
 )

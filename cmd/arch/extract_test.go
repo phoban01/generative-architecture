@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"generative-architecture/pkg/ir"
-	"generative-architecture/pkg/report"
+	"github.com/phoban01/generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/report"
 )
 
 // extractTo runs arch extract on a project document into a temporary

@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	refv1 "generative-architecture/examples/refsystem/api/v1alpha1"
-	"generative-architecture/pkg/ir"
+	refv1 "github.com/phoban01/generative-architecture/examples/refsystem/api/v1alpha1"
+	"github.com/phoban01/generative-architecture/pkg/ir"
 
 	"k8s.io/apimachinery/pkg/runtime"
 )

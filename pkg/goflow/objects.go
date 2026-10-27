@@ -7,7 +7,7 @@ import (
 	"go/types"
 	"strings"
 
-	"generative-architecture/pkg/expr"
+	"github.com/phoban01/generative-architecture/pkg/expr"
 )
 
 // ReturnedError is the error symbol a call in the error position of a

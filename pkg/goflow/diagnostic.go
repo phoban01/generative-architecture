@@ -6,7 +6,7 @@ import (
 	"go/ast"
 	"go/token"
 
-	"generative-architecture/pkg/report"
+	"github.com/phoban01/generative-architecture/pkg/report"
 )
 
 // Diagnostic is an extraction failure located in the source. Construct is a

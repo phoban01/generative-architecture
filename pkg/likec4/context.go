@@ -5,8 +5,8 @@ import (
 	"sort"
 	"strings"
 
-	"generative-architecture/pkg/composition"
-	"generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/composition"
+	"github.com/phoban01/generative-architecture/pkg/ir"
 )
 
 // ContextView draws a composition as a system context: one element per

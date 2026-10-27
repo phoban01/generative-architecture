@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/ir"
 )
 
 // GenerationVar names the generation counter of the object of resource.

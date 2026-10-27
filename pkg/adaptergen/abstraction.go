@@ -5,8 +5,8 @@ import (
 	"strconv"
 	"strings"
 
-	"generative-architecture/pkg/abstraction"
-	"generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/abstraction"
+	"github.com/phoban01/generative-architecture/pkg/ir"
 )
 
 // CachedVariable names the state a variable projects to when its object is

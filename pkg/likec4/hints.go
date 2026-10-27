@@ -8,7 +8,7 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
-	"generative-architecture/pkg/krm"
+	"github.com/phoban01/generative-architecture/pkg/krm"
 )
 
 // HintsKind is the KRM kind of a presentation hints document.

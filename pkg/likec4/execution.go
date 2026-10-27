@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"strings"
 
-	"generative-architecture/pkg/conformance"
-	"generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/conformance"
+	"github.com/phoban01/generative-architecture/pkg/ir"
 )
 
 // idleEvent is the stutter action; it changes nothing and is not drawn.

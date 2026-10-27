@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"generative-architecture/pkg/likec4"
+	"github.com/phoban01/generative-architecture/pkg/likec4"
 )
 
 // siteDir is the default build output under --out.

@@ -15,14 +15,14 @@ import (
 	"runtime"
 	"time"
 
-	"generative-architecture/examples/configmirror"
-	"generative-architecture/pkg/abstraction"
-	"generative-architecture/pkg/conformance"
-	"generative-architecture/pkg/krm"
-	"generative-architecture/pkg/model"
-	"generative-architecture/pkg/quint"
-	"generative-architecture/pkg/receipt"
-	"generative-architecture/pkg/report"
+	"github.com/phoban01/generative-architecture/examples/configmirror"
+	"github.com/phoban01/generative-architecture/pkg/abstraction"
+	"github.com/phoban01/generative-architecture/pkg/conformance"
+	"github.com/phoban01/generative-architecture/pkg/krm"
+	"github.com/phoban01/generative-architecture/pkg/model"
+	"github.com/phoban01/generative-architecture/pkg/quint"
+	"github.com/phoban01/generative-architecture/pkg/receipt"
+	"github.com/phoban01/generative-architecture/pkg/report"
 )
 
 func main() {

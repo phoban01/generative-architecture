@@ -1,11 +1,11 @@
 package composition_test
 
 import (
-	"generative-architecture/pkg/composition"
-	"generative-architecture/pkg/expr"
-	"generative-architecture/pkg/krm"
-	"generative-architecture/pkg/model"
-	"generative-architecture/pkg/protocol"
+	"github.com/phoban01/generative-architecture/pkg/composition"
+	"github.com/phoban01/generative-architecture/pkg/expr"
+	"github.com/phoban01/generative-architecture/pkg/krm"
+	"github.com/phoban01/generative-architecture/pkg/model"
+	"github.com/phoban01/generative-architecture/pkg/protocol"
 	"os"
 	"os/exec"
 	"path/filepath"

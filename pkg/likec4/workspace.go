@@ -15,7 +15,7 @@ import (
 	"strconv"
 	"strings"
 
-	"generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/ir"
 )
 
 // Element kinds of the shared specification.

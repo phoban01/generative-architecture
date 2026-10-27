@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"generative-architecture/pkg/goflow"
-	"generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/goflow"
+	"github.com/phoban01/generative-architecture/pkg/ir"
 )
 
 // stubRoot writes a module that stands in for controller-runtime: discovery
@@ -66,7 +66,7 @@ func TestDiscoverControllersFromExamplesWithoutMarkers(t *testing.T) {
 		t.Fatalf("expected the two example reconcilers, got %+v", d.Controllers)
 	}
 	mirror, database := d.Controllers[0], d.Controllers[1]
-	if mirror.ID != "generative-architecture/examples/configmirror.Reconciler" || mirror.Name != "Reconciler" || mirror.Package != "generative-architecture/examples/configmirror" || mirror.Receiver != "Reconciler" {
+	if mirror.ID != "github.com/phoban01/generative-architecture/examples/configmirror.Reconciler" || mirror.Name != "Reconciler" || mirror.Package != "github.com/phoban01/generative-architecture/examples/configmirror" || mirror.Receiver != "Reconciler" {
 		t.Fatalf("configmirror reconciler not discovered: %+v", mirror)
 	}
 	if mirror.Setup != nil {
@@ -77,7 +77,7 @@ func TestDiscoverControllersFromExamplesWithoutMarkers(t *testing.T) {
 	if !reflect.DeepEqual(mirror.Injection, want) {
 		t.Fatalf("injection = %+v, want %+v", mirror.Injection, want)
 	}
-	if mirror.Provenance.Source.File != "examples/configmirror/controller.go" || mirror.Provenance.Source.Line == 0 || mirror.Provenance.Module != "generative-architecture" {
+	if mirror.Provenance.Source.File != "examples/configmirror/controller.go" || mirror.Provenance.Source.Line == 0 || mirror.Provenance.Module != "github.com/phoban01/generative-architecture" {
 		t.Fatalf("wrong provenance: %+v", mirror.Provenance)
 	}
 	b, err := os.ReadFile("../../examples/configmirror/controller.go")
@@ -90,7 +90,7 @@ func TestDiscoverControllersFromExamplesWithoutMarkers(t *testing.T) {
 	if err := mirror.Provenance.Validate(); err != nil {
 		t.Fatal(err)
 	}
-	if database.ID != "generative-architecture/examples/database.DatabaseReconciler" || database.Name != "DatabaseReconciler" {
+	if database.ID != "github.com/phoban01/generative-architecture/examples/database.DatabaseReconciler" || database.Name != "DatabaseReconciler" {
 		t.Fatalf("database reconciler not discovered: %+v", database)
 	}
 	if database.Setup == nil || database.Setup.File != "examples/database/wiring.go" || database.Setup.Line != lineOf(t, "../../examples/database/wiring.go", "SetupWithManager(mgr ctrl.Manager)") || database.Setup.SHA256 == "" {

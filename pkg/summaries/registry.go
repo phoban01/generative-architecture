@@ -7,7 +7,7 @@ import (
 	"path"
 	"sort"
 
-	"generative-architecture/pkg/krm"
+	"github.com/phoban01/generative-architecture/pkg/krm"
 )
 
 // Kind is the KRM kind of a summary library document. One document holds
