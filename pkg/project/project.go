@@ -35,6 +35,8 @@ type Catalog struct {
 // Runtime selects the runtime profile the controllers run under.
 type Runtime struct {
 	Profile string `yaml:"profile,omitempty"`
+	// MaxTicks bounds the model clock of the runtime profile.
+	MaxTicks int `yaml:"maxTicks,omitempty"`
 }
 
 // Spec is the payload of a Project document. Package patterns are Go package
@@ -48,6 +50,15 @@ type Spec struct {
 	Boundaries  []string       `yaml:"boundaries,omitempty"`
 	Runtime     Runtime        `yaml:"runtime,omitempty"`
 	Bounds      map[string]int `yaml:"bounds,omitempty"`
+	// Abstraction names the Abstraction document that maps objects to
+	// bounded model state (ADR-0005).
+	Abstraction string `yaml:"abstraction,omitempty"`
+	// Controllers declares the model facts of each reconciler that the
+	// source and the abstraction do not carry.
+	Controllers []Controller `yaml:"controllers,omitempty"`
+	// Initial is the initial value of each abstracted object's selected
+	// field, by object ID, as a model literal.
+	Initial map[string]string `yaml:"initial,omitempty"`
 }
 
 // Project is a loaded document with its resolved locations and input hashes.
@@ -131,17 +142,21 @@ func (s Spec) Validate() error {
 			return fmt.Errorf("bound %s must be positive, got %d", name, v)
 		}
 	}
-	return nil
+	return s.validateModel()
 }
 
 // Documents lists every referenced document path (relative to Dir) in a
-// stable order: catalog CRDs, discovery snapshots, constraints, boundaries.
+// stable order: catalog CRDs, discovery snapshots, constraints, boundaries
+// and the abstraction.
 func (p Project) Documents() []string {
 	var out []string
 	out = append(out, p.Spec.Catalog.CRDs...)
 	out = append(out, p.Spec.Catalog.Discovery...)
 	out = append(out, p.Spec.Constraints...)
 	out = append(out, p.Spec.Boundaries...)
+	if p.Spec.Abstraction != "" {
+		out = append(out, p.Spec.Abstraction)
+	}
 	return out
 }
 

@@ -1,0 +1,40 @@
+apiVersion: architecture.local/v1alpha1
+kind: Project
+metadata:
+  name: config-mirror-undeclared
+spec:
+  # ConfigMirror without a declaration for Client.Update, which
+  # generation must report at the call.
+  module: generative-architecture
+  packages:
+    - ./examples/configmirror
+  catalog:
+    discovery:
+      - discovery.json
+  constraints:
+    - constraints.yaml
+  abstraction: abstraction.yaml
+  runtime:
+    profile: controller-runtime
+    maxTicks: 20
+  bounds:
+    maxObjectsPerResource: 2
+    maxInvocations: 3
+  controllers:
+    - receiver: Reconciler
+      name: mirror
+      workers: 1
+      retryTicks: 2
+      key: source
+      effects:
+        - call: sigs.k8s.io/controller-runtime/pkg/client.Client.Get
+          effect: readSource
+        - call: sigs.k8s.io/controller-runtime/pkg/client.Reader.Get
+          effect: readTarget
+      objectKeys:
+        generative-architecture/examples/configmirror.Reconciler.Target: copy
+      locals:
+        source.data.value: snapshot
+  initial:
+    source: '"a"'
+    copy: '""'
