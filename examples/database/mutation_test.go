@@ -4,9 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"reflect"
-	"sort"
-	"strings"
 	"testing"
 	"time"
 
@@ -17,7 +16,10 @@ import (
 
 var schedules = []string{"absent", "unsupported", "pending", "provisioned", "repeated"}
 
-// TestMutationSuite runs mutations.yaml. Every expected detector must fire.
+// TestMutationSuite runs mutations.yaml with the model and replay
+// detectors. Every expected detector must fire, and the test records which
+// detector caught each mutation: a controller change reaches only the
+// model, a wiring change the model, the native handlers or both.
 func TestMutationSuite(t *testing.T) {
 	suite, err := mutation.Load("mutations.yaml")
 	if err != nil {
@@ -27,85 +29,91 @@ func TestMutationSuite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var mutated Example
-	build := func(files map[string][]byte) error {
-		sources := map[string][]byte{}
-		for _, name := range []string{"controller.go", "wiring.go"} {
-			if sources[name], err = os.ReadFile(name); err != nil {
-				return err
-			}
-		}
-		for name, b := range files {
-			if _, ok := sources[name]; !ok {
-				return fmt.Errorf("mutation of %s has no detector", name)
-			}
-			sources[name] = b
-		}
-		mutated, err = LoadSources(".", sources["controller.go"], sources["wiring.go"])
+	load := func(overlay map[string][]byte) (Example, error) {
+		mutated, err := loadOverlay(overlay)
 		if err != nil {
-			return err
+			return Example{}, err
 		}
 		if mutated.Constrained.Quint() == base.Constrained.Quint() {
-			return fmt.Errorf("mutation leaves the model unchanged")
+			return Example{}, fmt.Errorf("mutation leaves the model unchanged")
 		}
-		return nil
+		return mutated, nil
 	}
-	check := func() []string {
-		detected := map[string]bool{}
-		for _, c := range violatedConstraints(t, mutated) {
-			detected[c] = true
+	rebuilt := mutation.ModelDetector(func(overlay map[string][]byte) (*model.Compiled, []conformance.Trace, error) {
+		mutated, err := load(overlay)
+		if err != nil {
+			return nil, nil, err
 		}
-		for _, v := range nativeDivergence(t, base, mutated) {
-			detected[v] = true
+		traces, err := scheduleTraces(mutated)
+		return mutated.Constrained, traces, err
+	})
+	replay := mutation.Detector{Name: "replay", Detect: func(overlay map[string][]byte) ([]string, error) {
+		mutated, err := load(overlay)
+		if err != nil {
+			return nil, err
 		}
-		var out []string
-		for name := range detected {
-			out = append(out, name)
-		}
-		sort.Strings(out)
-		return out
-	}
-	matrix, err := mutation.Run(suite, build, check)
+		return nativeDivergence(t, base, mutated), nil
+	}}
+	matrix, detections, err := mutation.RunDetectors(suite, rebuilt, replay)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Logf("detection matrix:\n%s", matrix)
+	t.Logf("detection matrix:\n%s\ndetections:\n%s", matrix, detections)
 	if escaped := suite.Escaped(matrix); len(escaped) != 0 {
 		t.Fatalf("mutations escaped their detectors: %v\n%s", escaped, matrix)
 	}
+	want := map[string][]string{
+		"contract-check":         {"model"},
+		"provisioning-check":     {"model"},
+		"wrong-endpoint":         {"model"},
+		"missing-instance-watch": {"replay"},
+		"wrong-mapping":          {"model"},
+		"generation-predicate":   {"model", "replay"},
+	}
+	if got := suite.CaughtBy(detections); !reflect.DeepEqual(got, want) {
+		t.Fatalf("caught by %v, want %v\n%s", got, want, detections)
+	}
 }
 
-// violatedConstraints runs each schedule of the mutated model up to the
-// first step it cannot take, and names the constraints its states violate.
-func violatedConstraints(t *testing.T, e Example) []string {
-	t.Helper()
-	var out []string
+// loadOverlay generates the example from controller.go and wiring.go, each
+// replaced by its overlay entry when it has one. The overlay is keyed by
+// absolute path; a mutation of any other file has no detector.
+func loadOverlay(overlay map[string][]byte) (Example, error) {
+	sources := map[string][]byte{}
+	used := 0
+	for _, name := range []string{"controller.go", "wiring.go"} {
+		path, err := filepath.Abs(name)
+		if err != nil {
+			return Example{}, err
+		}
+		if b, ok := overlay[path]; ok {
+			sources[name] = b
+			used++
+			continue
+		}
+		if sources[name], err = os.ReadFile(name); err != nil {
+			return Example{}, err
+		}
+	}
+	if used != len(overlay) {
+		return Example{}, fmt.Errorf("the overlay replaces a file other than controller.go and wiring.go")
+	}
+	return LoadSources(".", sources["controller.go"], sources["wiring.go"])
+}
+
+// scheduleTraces runs each schedule of the model up to the first step it
+// cannot take.
+func scheduleTraces(e Example) ([]conformance.Trace, error) {
+	var out []conformance.Trace
 	for _, name := range schedules {
 		actions, _ := e.scheduleActions(name)
 		trace, err := conformance.Scenario(e.Model, actions...)
 		if err != nil {
-			t.Fatalf("%s: %v", name, err)
+			return nil, fmt.Errorf("schedule %s: %w", name, err)
 		}
-		for _, s := range trace.States {
-			out = append(out, violated(t, e.Constrained, s)...)
-		}
+		out = append(out, trace)
 	}
-	return out
-}
-
-// violated names every constraint that state s violates.
-func violated(t *testing.T, m *model.Compiled, s conformance.State) []string {
-	t.Helper()
-	err := m.Check(s.Values, s.Event)
-	if err == nil {
-		return nil
-	}
-	name, ok := strings.CutPrefix(err.Error(), "property ")
-	name, found := strings.CutSuffix(name, " violated")
-	if !ok || !found {
-		t.Fatalf("constraint check failed: %v", err)
-	}
-	return []string{name}
+	return out, nil
 }
 
 // nativeDivergence replays each schedule of the unchanged model through the

@@ -223,57 +223,102 @@ func Detect(ctx context.Context, root string) ([]string, error) {
 // Detect's result for a root directory.
 const detectPackage = "./examples/configmirror/detect"
 
-// RunMutations runs the MutationSuite at root/mutations.yaml. Each mutated
-// file is placed in a build overlay, so nothing is written to the tree; the
-// detect command is compiled with the overlay by the go command found on
-// PATH, run from moduleRoot, and replays root's committed evidence. A
-// mutation's row lists what Detect reported.
+// RunMutations runs the MutationSuite at root/mutations.yaml with the
+// model and replay detectors (see RunMutationDetectors). A mutation's row
+// lists what either detector reported.
 func RunMutations(ctx context.Context, moduleRoot, root string) (mutation.Suite, mutation.Matrix, error) {
+	s, matrix, _, err := RunMutationDetectors(ctx, moduleRoot, root)
+	return s, matrix, err
+}
+
+// RunMutationDetectors runs the MutationSuite at root/mutations.yaml and
+// records which detector reported each name. Nothing is written to the
+// tree. The model detector regenerates the model from the mutated source
+// and checks its properties on every Scenario. The replay detector replays
+// the committed evidence through the mutated implementation (see
+// ReplayDetector).
+func RunMutationDetectors(ctx context.Context, moduleRoot, root string) (mutation.Suite, mutation.Matrix, mutation.Detections, error) {
 	s, err := mutation.Load(filepath.Join(root, MutationsFile))
 	if err != nil {
-		return s, nil, err
+		return s, nil, nil, err
 	}
+	replay, err := ReplayDetector(ctx, moduleRoot, root)
+	if err != nil {
+		return s, nil, nil, err
+	}
+	matrix, detections, err := mutation.RunDetectors(s, ModelDetector(root), replay)
+	return s, matrix, detections, err
+}
+
+// ModelDetector regenerates the model of the example at root from the
+// mutated source and checks its properties on every Scenario of the
+// regenerated model. A scenario the mutant cannot run is an error.
+func ModelDetector(root string) mutation.Detector {
+	return mutation.ModelDetector(func(overlay map[string][]byte) (*model.Compiled, []conformance.Trace, error) {
+		spec, err := GenerateOverlay(root, overlay)
+		if err != nil {
+			return nil, nil, err
+		}
+		m, err := model.Compile(spec)
+		if err != nil {
+			return nil, nil, err
+		}
+		names := make([]string, 0, len(Scenarios))
+		for name := range Scenarios {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		var traces []conformance.Trace
+		for _, name := range names {
+			t, err := Scenario(spec, Scenarios[name]...)
+			if err != nil {
+				return nil, nil, fmt.Errorf("scenario %s: %w", name, err)
+			}
+			traces = append(traces, t)
+		}
+		return m, traces, nil
+	})
+}
+
+// ReplayDetector is the detector named "replay". It places each mutated
+// file in a build overlay and compiles the detect command with it, using
+// the go command found on PATH from moduleRoot. The command replays root's
+// committed evidence and prints what Detect reported.
+func ReplayDetector(ctx context.Context, moduleRoot, root string) (mutation.Detector, error) {
 	absRoot, err := filepath.Abs(root)
 	if err != nil {
-		return s, nil, err
+		return mutation.Detector{}, err
 	}
-	var detected []string
-	build := func(mutated map[string][]byte) error {
+	detect := func(mutated map[string][]byte) ([]string, error) {
 		dir, err := os.MkdirTemp("", "configmirror-mutant-")
 		if err != nil {
-			return err
+			return nil, err
 		}
 		defer os.RemoveAll(dir)
 		replace := map[string]string{}
-		for file, contents := range mutated {
-			original, err := filepath.Abs(filepath.Join(s.Root, filepath.FromSlash(file)))
-			if err != nil {
-				return err
-			}
+		for original, contents := range mutated {
 			mutant := filepath.Join(dir, fmt.Sprintf("%d-%s", len(replace), filepath.Base(original)))
 			if err = os.WriteFile(mutant, contents, 0o600); err != nil {
-				return err
+				return nil, err
 			}
 			replace[original] = mutant
 		}
 		overlay, err := json.Marshal(map[string]any{"Replace": replace})
 		if err != nil {
-			return err
+			return nil, err
 		}
 		overlayPath := filepath.Join(dir, "overlay.json")
 		if err = os.WriteFile(overlayPath, overlay, 0o600); err != nil {
-			return err
+			return nil, err
 		}
 		var stdout, stderr bytes.Buffer
 		cmd := exec.CommandContext(ctx, "go", "run", "-overlay", overlayPath, detectPackage, "-root", absRoot)
 		cmd.Dir = moduleRoot
 		cmd.Stdout, cmd.Stderr = &stdout, &stderr
 		if err = cmd.Run(); err != nil {
-			return fmt.Errorf("%w\n%s", err, stderr.String())
+			return nil, fmt.Errorf("build: %w\n%s", err, stderr.String())
 		}
-		detected = strings.Fields(stdout.String())
-		return nil
+		return strings.Fields(stdout.String()), nil
 	}
-	matrix, err := mutation.Run(s, build, func() []string { return detected })
-	return s, matrix, err
+	return mutation.Detector{Name: "replay", Detect: detect}, nil
 }

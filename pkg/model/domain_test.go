@@ -43,6 +43,38 @@ func TestDeclaredDomains(t *testing.T) {
 	}
 }
 
+// Violations names every violated property in declaration order; Check
+// reports the first.
+func TestViolationsNamesEveryProperty(t *testing.T) {
+	m, err := model.Compile(model.Spec{
+		Name:    "Flags",
+		State:   map[string]model.Variable{"a": {Type: "bool", Initial: "false"}, "b": {Type: "bool", Initial: "false"}},
+		Actions: []model.Action{{Name: "flip", Guard: "true", Updates: map[string]expr.Expression{"a": "!a"}}},
+		Properties: []model.Property{
+			{Name: "first", Expression: "a"},
+			{Name: "holds", Expression: "true"},
+			{Name: "second", Expression: `b || event == "skip"`},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := map[string]any{"a": false, "b": false}
+	got, err := m.Violations(state, "go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(got, ",") != "first,second" {
+		t.Fatalf("violations %v", got)
+	}
+	if got, _ = m.Violations(state, "skip"); strings.Join(got, ",") != "first" {
+		t.Fatalf("event not bound: %v", got)
+	}
+	if err = m.Check(state, "go"); err == nil || err.Error() != "property first violated" {
+		t.Fatalf("check %v", err)
+	}
+}
+
 func TestRejectsInvalidDomains(t *testing.T) {
 	for name, domains := range map[string]map[string][]string{
 		"empty":     {"Keys": nil},
