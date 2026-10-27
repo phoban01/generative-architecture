@@ -12,6 +12,38 @@ import (
 
 var key = object(primary, "p")
 
+func TestOwnerMapping(t *testing.T) {
+	queued := watchmodel.QueuedVar(key)
+	child := object(secondary, "c")
+	owner := func(name string, controller bool) watchmodel.OwnerRef {
+		return watchmodel.OwnerRef{Ref: ir.ObjectRef{GVK: ir.GVK{Group: primary.Group, Version: "v2", Kind: primary.Kind}, Name: name}, Controller: controller}
+	}
+	otherKind := watchmodel.OwnerRef{Ref: object(secondary, "p"), Controller: true}
+	for _, tc := range []struct {
+		name           string
+		onlyController bool
+		owners         []watchmodel.OwnerRef
+		want           map[string]any
+	}{
+		{"controller owner", true, []watchmodel.OwnerRef{owner("p", true)}, map[string]any{queued: true, "wrongKey": false}},
+		{"non-controller owner ignored", true, []watchmodel.OwnerRef{owner("p", false)}, map[string]any{queued: false, "wrongKey": false}},
+		{"non-controller owner routed", false, []watchmodel.OwnerRef{owner("p", false)}, map[string]any{queued: true, "wrongKey": false}},
+		{"controller owner elsewhere", true, []watchmodel.OwnerRef{owner("other", true)}, map[string]any{queued: false, "wrongKey": true}},
+		{"owner of another kind", false, []watchmodel.OwnerRef{otherKind}, map[string]any{queued: false, "wrongKey": false}},
+		{"no owners", false, nil, map[string]any{queued: false, "wrongKey": false}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mapping := ir.KeyMapping{Kind: ir.MappingOwner, OwnerGVK: &primary, OnlyController: tc.onlyController}
+			owners := map[ir.ObjectRef][]watchmodel.OwnerRef{child: tc.owners}
+			spec, err := watchmodel.Add(baseSpec(t, secondary), []ir.Watch{watch(secondary, mapping)}, []ir.ObjectRef{child}, []ir.ObjectRef{key}, watchmodel.WithOwners(owners))
+			if err != nil {
+				t.Fatal(err)
+			}
+			check(t, run(t, spec, "createChild", "deliverChild"), tc.want)
+		})
+	}
+}
+
 func TestFieldMapping(t *testing.T) {
 	queued := watchmodel.QueuedVar(key)
 	child := object(secondary, "c")

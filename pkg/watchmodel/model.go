@@ -96,6 +96,7 @@ type generator struct {
 	queued    map[request]string // declared key -> its queued variable
 	fields    map[ir.ObjectRef]map[string]string
 	declared  map[string]bool // state variables Add declared
+	owners    map[ir.ObjectRef][]OwnerRef
 }
 
 var boolFalse = model.Variable{Type: "bool", Initial: "false"}

@@ -73,8 +73,43 @@ func (g *generator) route(r *resource, w ir.Watch) (target, error) {
 		return t, nil
 	case ir.MappingField:
 		return t, g.routeField(&t, r, w)
+	case ir.MappingOwner:
+		g.routeOwner(&t, r, w)
+		return t, nil
 	}
 	return t, diagnose(w, "mapping", fmt.Sprintf("%s key mapping is not modelled", w.Mapping.Kind))
+}
+
+// OwnerRef is an owner reference of an object. Controller marks the
+// controlling owner.
+type OwnerRef struct {
+	Ref        ir.ObjectRef
+	Controller bool
+}
+
+// WithOwners supplies the owner references of each object.
+func WithOwners(owners map[ir.ObjectRef][]OwnerRef) Option {
+	return func(g *generator) { g.owners = owners }
+}
+
+// routeOwner enqueues each owner whose group and kind match the mapping, as
+// controller-runtime's owner handler does; the version is not compared. An
+// owner without a namespace takes the object's namespace. With
+// OnlyController, owners that are not the controller are ignored.
+func (g *generator) routeOwner(t *target, r *resource, w ir.Watch) {
+	for _, o := range g.owners[r.object] {
+		if o.Ref.GVK.Group != w.Mapping.OwnerGVK.Group || o.Ref.GVK.Kind != w.Mapping.OwnerGVK.Kind {
+			continue
+		}
+		if w.Mapping.OnlyController && !o.Controller {
+			continue
+		}
+		req := request{cluster: r.object.Cluster, namespace: o.Ref.Namespace, name: o.Ref.Name}
+		if req.namespace == "" {
+			req.namespace = r.object.Namespace
+		}
+		g.enqueue(t, req, "true")
+	}
 }
 
 // FieldVar names the state that holds the value of a field-mapping path on

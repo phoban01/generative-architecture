@@ -45,6 +45,8 @@ type KeyMapping struct {
 	Kind      string   `yaml:"kind"`
 	FieldPath []string `yaml:"fieldPath,omitempty"`
 	OwnerGVK  *GVK     `yaml:"ownerGVK,omitempty"`
+	// OnlyController limits an owner mapping to the controlling owner.
+	OnlyController bool `yaml:"onlyController,omitempty"`
 }
 
 // Validate checks the mapping kind and its required arguments.
