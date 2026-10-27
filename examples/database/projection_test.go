@@ -145,7 +145,7 @@ func TestAdapterProjectsThroughGeneratedProjection(t *testing.T) {
 	if _, err := a.api.Resource(inst.GVR()).Namespace(databaseKey.Namespace).Create(ctx, wrong, metav1.CreateOptions{}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := a.projectAPI(); err == nil || !strings.Contains(err.Error(), "wrong Database") {
+	if _, err := a.projectAPI(); err == nil || !strings.Contains(err.Error(), "names no declared Database") {
 		t.Fatalf("wrong reference not rejected: %v", err)
 	}
 }

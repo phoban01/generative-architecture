@@ -32,23 +32,40 @@ func adapterProjection() ([]byte, error) {
 	return adaptergen.GenerateProjection("generated", adaptergen.FromAbstraction(a))
 }
 
+// adapterReferences generates the check of every reference the abstraction
+// declares.
+func adapterReferences() ([]byte, error) {
+	a, err := abstraction.Load("abstraction.yaml")
+	if err != nil {
+		return nil, err
+	}
+	return adaptergen.GenerateReferenceCheck("generated", a.Spec)
+}
+
 func TestAdapterGeneratedFilesUpToDate(t *testing.T) {
-	src, err := adapterProjection()
-	if err != nil {
-		t.Fatal(err)
-	}
-	path := filepath.Join("generated", "projection_generated.go")
-	if *regenerateAdapter {
-		if err := os.WriteFile(path, src, 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	have, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(have) != string(src) {
-		t.Fatalf("%s is stale; run go test ./examples/database -run TestAdapterGeneratedFilesUpToDate -regenerate-adapter", path)
+	for file, generate := range map[string]func() ([]byte, error){
+		"projection_generated.go": adapterProjection,
+		"references_generated.go": adapterReferences,
+	} {
+		t.Run(file, func(t *testing.T) {
+			src, err := generate()
+			if err != nil {
+				t.Fatal(err)
+			}
+			path := filepath.Join("generated", file)
+			if *regenerateAdapter {
+				if err := os.WriteFile(path, src, 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			have, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(have) != string(src) {
+				t.Fatalf("%s is stale; run go test ./examples/database -run TestAdapterGeneratedFilesUpToDate -regenerate-adapter", path)
+			}
+		})
 	}
 }
 

@@ -1,7 +1,6 @@
 package database
 
 import (
-	"fmt"
 	"generative-architecture/examples/database/generated"
 	"generative-architecture/pkg/abstraction"
 	cr "generative-architecture/pkg/controllerruntime"
@@ -42,9 +41,7 @@ var (
 	databaseEndpointVariable = abstraction.VariableName("Database", "db1", []string{"status", "endpoint"})
 	contractVariable         = abstraction.FieldVariable("Database", "db1", abstraction.Field{Name: "contractSatisfied"})
 	instanceExistsVariable   = abstraction.ExistsVariable("DatabaseInstance", "inst1")
-	instanceEndpointVariable = abstraction.VariableName("DatabaseInstance", "inst1", []string{"status", "endpoint"})
-	instanceReference        = abstraction.VariableName("DatabaseInstance", "inst1", []string{"spec", "databaseName"})
-)
+	instanceEndpointVariable = abstraction.VariableName("DatabaseInstance", "inst1", []string{"status", "endpoint"}))
 
 func (a *Adapter) discoverDynamic(contractSatisfied bool) error {
 	obj := &unstructured.Unstructured{}
@@ -78,15 +75,12 @@ func (a *Adapter) removeDynamic() error {
 // generated from abstraction.yaml, independently of the model and cached
 // Store snapshots. It reads the underlying fake API, not the observed client
 // DatabaseReconciler uses, so projecting crosses no boundary gate. The
-// projected names are the model's names. The instance's reference to its
-// Database is still checked by hand here (#137).
+// projected names are the model's names. The generated reference check
+// rejects an instance that names a Database the abstraction does not
+// declare.
 func (a *Adapter) projectAPI() (map[string]any, error) {
-	projected, err := generated.Project(a.ctx, a.api, a.mapper)
-	if err != nil {
+	if err := generated.CheckReferences(a.ctx, a.api, a.mapper); err != nil {
 		return nil, err
 	}
-	if projected[instanceExistsVariable] == true && projected[instanceReference] != databaseKey.Name {
-		return nil, fmt.Errorf("instance points at the wrong Database: %v", projected[instanceReference])
-	}
-	return projected, nil
+	return generated.Project(a.ctx, a.api, a.mapper)
 }
