@@ -1,0 +1,12 @@
+apiVersion: architecture.local/v1alpha1
+kind: Project
+metadata:
+  name: partial
+spec:
+  module: generative-architecture
+  packages:
+    - ./cmd/arch/testdata/watched
+  catalog:
+    # Lists ConfigMap only, so the watch on Secret has no catalog kind.
+    discovery:
+      - configmaps.json

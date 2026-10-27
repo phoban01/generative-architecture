@@ -15,7 +15,18 @@ import (
 type globals struct {
 	project string
 	out     string
+	stdout  io.Writer
+	stderr  io.Writer
 }
+
+// exitError ends arch with a given status. A nonzero status other than 1
+// carries a result, not a failure, so main prints no message for it.
+type exitError struct {
+	code int
+	msg  string
+}
+
+func (e exitError) Error() string { return e.msg }
 
 // command is a subcommand entry point. It receives the global options and
 // the remaining arguments after the subcommand name.
@@ -63,7 +74,7 @@ func usage(w io.Writer, fs *flag.FlagSet) {
 func run(args []string, stdout, stderr io.Writer) error {
 	fs := flag.NewFlagSet("arch", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	var g globals
+	g := globals{stdout: stdout, stderr: stderr}
 	fs.StringVar(&g.project, "project", "project.yaml", "project document to operate on")
 	fs.StringVar(&g.out, "out", "generated", "directory for generated artifacts")
 	fs.Usage = func() { usage(stderr, fs) }
@@ -87,6 +98,10 @@ func main() {
 	err := run(os.Args[1:], os.Stdout, os.Stderr)
 	if err == nil || errors.Is(err, flag.ErrHelp) {
 		return
+	}
+	var exit exitError
+	if errors.As(err, &exit) {
+		os.Exit(exit.code)
 	}
 	fmt.Fprintln(os.Stderr, err)
 	os.Exit(1)

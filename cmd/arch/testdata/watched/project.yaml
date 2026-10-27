@@ -1,0 +1,11 @@
+apiVersion: architecture.local/v1alpha1
+kind: Project
+metadata:
+  name: watched
+spec:
+  module: generative-architecture
+  packages:
+    - ./cmd/arch/testdata/watched
+  catalog:
+    discovery:
+      - discovery.json
