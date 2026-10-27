@@ -15,8 +15,12 @@ import (
 type globals struct {
 	project string
 	out     string
-	stdout  io.Writer
-	stderr  io.Writer
+	// strict selects verification mode: unsupported constructs and
+	// unresolved facts in the selected packages fail the run. Without it
+	// arch runs in inventory mode and reports them (EVID-3).
+	strict bool
+	stdout io.Writer
+	stderr io.Writer
 }
 
 // exitError ends arch with a given status. A nonzero status other than 1
@@ -54,7 +58,7 @@ func notImplemented(name string) error {
 }
 
 func usage(w io.Writer, fs *flag.FlagSet) {
-	fmt.Fprintln(w, "usage: arch [--project <path>] [--out <dir>] <command> [args]")
+	fmt.Fprintln(w, "usage: arch [--project <path>] [--out <dir>] [--strict] <command> [args]")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "commands:")
 	names := make([]command, len(commands))
@@ -77,6 +81,7 @@ func run(args []string, stdout, stderr io.Writer) error {
 	g := globals{stdout: stdout, stderr: stderr}
 	fs.StringVar(&g.project, "project", "project.yaml", "project document to operate on")
 	fs.StringVar(&g.out, "out", "generated", "directory for generated artifacts")
+	fs.BoolVar(&g.strict, "strict", false, "verification mode: fail on unsupported constructs and unresolved facts in the selected packages (extract, generate, check, support)")
 	fs.Usage = func() { usage(stderr, fs) }
 	if err := fs.Parse(args); err != nil {
 		return err

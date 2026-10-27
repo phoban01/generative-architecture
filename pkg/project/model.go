@@ -148,6 +148,27 @@ func (s Spec) Controller(receiver string) (Controller, bool) {
 	return Controller{}, false
 }
 
+// Selects reports whether a file, given relative to the module root with
+// slashes, lies in one of the selected packages: in the directory of a
+// plain pattern, or under the directory of a pattern ending in /... .
+func (s Spec) Selects(file string) bool {
+	dir := "."
+	if i := strings.LastIndex(file, "/"); i >= 0 {
+		dir = file[:i]
+	}
+	for _, pattern := range s.Packages {
+		tree := strings.HasSuffix(pattern, "/...")
+		pd := strings.TrimPrefix(strings.TrimSuffix(pattern, "/..."), "./")
+		if pd == "." && tree {
+			return true
+		}
+		if dir == pd || tree && strings.HasPrefix(dir, pd+"/") {
+			return true
+		}
+	}
+	return false
+}
+
 func sortedNames(m map[string]string) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {

@@ -69,6 +69,30 @@ func TestEmptyReportHasExplicitBuckets(t *testing.T) {
 	}
 }
 
+func TestBlockingInScope(t *testing.T) {
+	var s Support
+	for bucket, file := range map[string]string{Unsupported: "in/a.go", Unresolved: "in/b.go", Summarized: "in/c.go", Included: "in/d.go"} {
+		if err := s.Add(bucket, Item{Kind: "watch", Construct: bucket, Location: Location{File: file, Line: 1}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.Add(Unsupported, Item{Kind: "watch", Construct: "outside", Location: Location{File: "out/a.go"}}); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "support.yaml")
+	if err := s.Write(path); err != nil {
+		t.Fatal(err)
+	}
+	back, err := Read(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := back.Blocking(func(l Location) bool { return l.File[:3] == "in/" })
+	if len(got) != 2 || got[0].Construct != Unsupported || got[1].Construct != Unresolved {
+		t.Fatalf("blocking items %+v", got)
+	}
+}
+
 func itoa(i int) string {
 	if i == 0 {
 		return "0"

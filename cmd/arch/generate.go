@@ -22,6 +22,7 @@ import (
 	"generative-architecture/pkg/model"
 	"generative-architecture/pkg/project"
 	"generative-architecture/pkg/receipt"
+	"generative-architecture/pkg/report"
 )
 
 // Files arch generate writes under the --out directory.
@@ -40,12 +41,12 @@ type generated struct {
 	project     project.Project
 	projectPath string // absolute
 	doc         ir.Document
-	abs      *abstraction.Abstraction
-	spec     *model.Spec // nil when the project has no controller
-	process  ir.Process
-	profile  cr.GroupProfile
-	effects  []ir.Effect
-	irSHA256 string
+	abs         *abstraction.Abstraction
+	spec        *model.Spec // nil when the project has no controller
+	process     ir.Process
+	profile     cr.GroupProfile
+	effects     []ir.Effect
+	irSHA256    string
 }
 
 // runGenerate reads <out>/ir.yaml, which arch extract writes, and the
@@ -99,6 +100,9 @@ func generate(g globals) (generated, error) {
 	if gen.doc, err = ir.Read(irPath); err != nil {
 		return gen, err
 	}
+	if err := checkSupport(g, p, gen.doc); err != nil {
+		return gen, err
+	}
 	switch n := len(gen.doc.Controllers); {
 	case n == 0:
 		return gen, nil
@@ -150,6 +154,25 @@ func generate(g globals) (generated, error) {
 	}
 	gen.effects = irEffects(c, effects)
 	return gen, nil
+}
+
+// checkSupport applies the mode to the support report arch extract wrote
+// beside the IR, with the unresolved facts of doc. Verification mode
+// needs the report; inventory mode goes on without it.
+func checkSupport(g globals, p project.Project, doc ir.Document) error {
+	path := filepath.Join(g.out, supportFile)
+	var support report.Support
+	if _, err := os.Stat(path); err == nil {
+		if support, err = report.Read(path); err != nil {
+			return err
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	} else if g.strict {
+		return fmt.Errorf("%w: %s not found; run arch extract first", errStrict, path)
+	}
+	support.Unresolved = unresolvedFacts(doc)
+	return enforce(g, p, support)
 }
 
 // located makes the file of a frontend diagnostic relative to the module

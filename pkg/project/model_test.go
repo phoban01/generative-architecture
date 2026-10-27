@@ -29,21 +29,23 @@ func TestValidateModelDeclarations(t *testing.T) {
 		edit func(*Spec)
 		want string
 	}{
-		"no abstraction":     {func(s *Spec) { s.Abstraction = "" }, "no abstraction document"},
-		"escaping path":      {func(s *Spec) { s.Abstraction = "../a.yaml" }, "inside its directory"},
-		"no clock bound":     {func(s *Spec) { s.Runtime.MaxTicks = 0 }, "maxTicks"},
-		"bad name":           {func(s *Spec) { s.Controllers[0].Name = "my-controller" }, "identifiers"},
-		"duplicate":          {func(s *Spec) { s.Controllers = append(s.Controllers, s.Controllers[0]) }, "twice"},
-		"no workers":         {func(s *Spec) { s.Controllers[0].Workers = 0 }, "positive"},
-		"no key":             {func(s *Spec) { s.Controllers[0].Key = "" }, "reconcile request"},
-		"no effects":         {func(s *Spec) { s.Controllers[0].Effects = nil }, "at least one"},
-		"function call":      {func(s *Spec) { s.Controllers[0].Effects[0].Call = "example.org/pkg.Get" }, "<Receiver>"},
-		"bad effect":         {func(s *Spec) { s.Controllers[0].Effects[0].Effect = "read-primary" }, "identifier"},
-		"bad consistency":    {func(s *Spec) { s.Controllers[0].Effects[0].Consistency = "eventual" }, "cached or direct"},
-		"bad object key":     {func(s *Spec) { s.Controllers[0].ObjectKeys = map[string]string{"Target": "secondary"} }, "<Type>.<Field>"},
-		"bad local":          {func(s *Spec) { s.Controllers[0].Locals = map[string]string{"primary": "snapshot"} }, "<go local>"},
-		"empty initial":      {func(s *Spec) { s.Initial["primary"] = " " }, "empty"},
-		"duplicate callee":   {func(s *Spec) { s.Controllers[0].Effects = append(s.Controllers[0].Effects, s.Controllers[0].Effects[0]) }, "declared twice"},
+		"no abstraction":  {func(s *Spec) { s.Abstraction = "" }, "no abstraction document"},
+		"escaping path":   {func(s *Spec) { s.Abstraction = "../a.yaml" }, "inside its directory"},
+		"no clock bound":  {func(s *Spec) { s.Runtime.MaxTicks = 0 }, "maxTicks"},
+		"bad name":        {func(s *Spec) { s.Controllers[0].Name = "my-controller" }, "identifiers"},
+		"duplicate":       {func(s *Spec) { s.Controllers = append(s.Controllers, s.Controllers[0]) }, "twice"},
+		"no workers":      {func(s *Spec) { s.Controllers[0].Workers = 0 }, "positive"},
+		"no key":          {func(s *Spec) { s.Controllers[0].Key = "" }, "reconcile request"},
+		"no effects":      {func(s *Spec) { s.Controllers[0].Effects = nil }, "at least one"},
+		"function call":   {func(s *Spec) { s.Controllers[0].Effects[0].Call = "example.org/pkg.Get" }, "<Receiver>"},
+		"bad effect":      {func(s *Spec) { s.Controllers[0].Effects[0].Effect = "read-primary" }, "identifier"},
+		"bad consistency": {func(s *Spec) { s.Controllers[0].Effects[0].Consistency = "eventual" }, "cached or direct"},
+		"bad object key":  {func(s *Spec) { s.Controllers[0].ObjectKeys = map[string]string{"Target": "secondary"} }, "<Type>.<Field>"},
+		"bad local":       {func(s *Spec) { s.Controllers[0].Locals = map[string]string{"primary": "snapshot"} }, "<go local>"},
+		"empty initial":   {func(s *Spec) { s.Initial["primary"] = " " }, "empty"},
+		"duplicate callee": {func(s *Spec) {
+			s.Controllers[0].Effects = append(s.Controllers[0].Effects, s.Controllers[0].Effects[0])
+		}, "declared twice"},
 		"negative max ticks": {func(s *Spec) { s.Runtime.MaxTicks = -1 }, "positive"},
 	}
 	for name, tc := range cases {
@@ -54,6 +56,26 @@ func TestValidateModelDeclarations(t *testing.T) {
 				t.Fatalf("got %v, want error containing %q", err, tc.want)
 			}
 		})
+	}
+}
+
+func TestSelects(t *testing.T) {
+	s := Spec{Packages: []string{"./controllers", "./api/..."}}
+	for file, want := range map[string]bool{
+		"controllers/a.go":       true,
+		"controllers/sub/a.go":   false,
+		"api/v1/types.go":        true,
+		"api/types.go":           true,
+		"apis/types.go":          false,
+		"main.go":                false,
+		"other/controllers/a.go": false,
+	} {
+		if got := s.Selects(file); got != want {
+			t.Errorf("Selects(%s) = %v, want %v", file, got, want)
+		}
+	}
+	if !(Spec{Packages: []string{"./..."}}).Selects("main.go") {
+		t.Error("./... selects the whole module")
 	}
 }
 
