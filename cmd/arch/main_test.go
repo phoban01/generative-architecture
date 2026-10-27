@@ -11,7 +11,7 @@ import (
 )
 
 // implemented lists the subcommands that no longer report not implemented.
-var implemented = map[string]bool{"extract": true, "init": true, "diff": true, "generate": true, "support": true}
+var implemented = map[string]bool{"extract": true, "init": true, "diff": true, "generate": true, "support": true, "check": true, "replay": true}
 
 func TestUnknownCommand(t *testing.T) {
 	var out, errOut bytes.Buffer

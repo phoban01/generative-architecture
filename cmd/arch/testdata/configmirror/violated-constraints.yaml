@@ -1,0 +1,14 @@
+apiVersion: architecture.local/v1alpha1
+kind: ModelConstraints
+metadata:
+  name: config-mirror-violated
+spec:
+  # The sample's constraints with boundedRetries tightened to
+  # retries <= 0, so a trace with one retry violates it.
+  properties:
+    - name: queueSafety
+      expression: '!(ready && processing) && (!ready || dirty)'
+    - name: writesObservedValue
+      expression: 'event != "writeTarget_ok" || ConfigMap_copy_data_value == snapshot'
+    - name: boundedRetries
+      expression: 'retries >= 0 && retries <= 0'

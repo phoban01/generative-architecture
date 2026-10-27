@@ -46,8 +46,8 @@ var commands = []command{
 	{"generate", "generate models and workspaces from the extracted IR", runGenerate},
 	{"render", "build the LikeC4 site for a generated workspace", runRender},
 	{"serve", "serve the LikeC4 workspace for interactive viewing", runServe},
-	{"check", "replay hash-checked evidence without external tools", runCheck},
-	{"replay", "replay recorded traces against the implementation", runReplay},
+	{"check", "sample the generated model with Quint and check its properties", runCheck},
+	{"replay", "replay saved traces against the generated model", runReplay},
 	{"diff", "compare generated artifacts with the committed ones", runDiff},
 	{"support", "report included, summarized and unsupported constructs", runSupport},
 }
