@@ -2,7 +2,9 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -76,5 +78,40 @@ func TestExternalCronJobProject(t *testing.T) {
 	}
 	if _, err := p.LoadCatalog(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestExternalCronJobSupportReportIsCurrent runs arch extract on the pinned
+// controller and checks that the committed support report matches it byte
+// for byte. Extraction fails closed, so no IR may exist next to it, and
+// every unsupported construct must carry a file and a line.
+func TestExternalCronJobSupportReportIsCurrent(t *testing.T) {
+	out, err := extractTo(t, filepath.Join(cronJobDir, "project.yaml"))
+	if !errors.Is(err, errUnsupported) {
+		t.Fatalf("expected extraction to fail closed on unsupported constructs, got %v", err)
+	}
+	got, err := os.ReadFile(filepath.Join(out, supportFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	committed := filepath.Join(cronJobDir, "generated", supportFile)
+	want, err := os.ReadFile(committed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Fatalf("%s is stale; regenerate it with arch --project project.yaml --out generated extract\ngot:\n%s", committed, got)
+	}
+	if _, err := os.Stat(filepath.Join(cronJobDir, "generated", irFile)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("no IR may be committed while constructs are unsupported: %v", err)
+	}
+	s := readSupport(t, out)
+	if len(s.Unsupported) == 0 {
+		t.Fatal("expected unsupported constructs; update FOLLOWUPS.md and commit ir.yaml once the controller extracts")
+	}
+	for _, u := range s.Unsupported {
+		if u.Location.File == "" || u.Location.Line == 0 {
+			t.Errorf("unsupported %s %q has no file:line", u.Kind, u.Construct)
+		}
 	}
 }

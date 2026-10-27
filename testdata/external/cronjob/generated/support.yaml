@@ -1,0 +1,22 @@
+apiVersion: architecture.local/v1alpha1
+kind: SupportReport
+metadata:
+  name: cronjob
+status:
+  included:
+    - kind: controller
+      construct: tutorial.kubebuilder.io/project/internal/controller.CronJobReconciler
+      location:
+        file: internal/controller/cronjob_controller.go
+        line: 49
+  summarized: []
+  unsupported:
+    - kind: preamble
+      construct: |-
+        if r.Clock == nil {
+        	r.Clock = realClock{}
+        }
+      reason: expected an unstructured object declaration
+      location:
+        file: internal/controller/cronjob_controller.go
+        line: 553
