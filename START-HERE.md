@@ -92,7 +92,7 @@ Reconciliation requires a queued key. Merely changing an object does not start t
 | `controller.go` | **Extracted:** branches, operation order, publication argument and return paths |
 | `wiring.go` | **Extracted:** `For`/`Watches` registrations, supported predicates and the mapper's reference field |
 | `process.yaml` | **Authored effect summaries:** what Store reads and writes mean in model state |
-| `model.yaml` | **Authored domain:** initial state, effect identities and external actions such as discovery and provisioning |
+| `abstraction.yaml` | **Declared abstraction:** selected fields, value domains, identity keys and references. `generate.go` builds the model, its effects and its environment actions from it, from `process.yaml` and from the extracted process |
 | `watches.go` | **Handwritten integration:** typed-resource identities, fixed object keys, event/queue semantics, and composition with extracted watch rules |
 | `example.go` | **Handwritten integration:** selection of the process, Store-call summaries, bounded scheduling and the Go replay adapter |
 | `dynamic_store.go` | **Extracted access dependencies:** dynamic-client GVR expressions and API verbs; this is also the real Store implementation used in replay |
