@@ -23,7 +23,7 @@ func (r Result) IR(controller, file string) []ir.Watch {
 		switch rule.Mapping {
 		case "self":
 		case "owner":
-			mapping = ir.KeyMapping{Kind: ir.MappingOwner}
+			mapping = ir.KeyMapping{Kind: ir.MappingOwner, OnlyController: rule.OnlyController}
 			if rule.Owner != nil {
 				mapping.OwnerGVK = &ir.GVK{Group: rule.Owner.Group, Version: rule.Owner.Version, Kind: rule.Owner.Kind}
 			}

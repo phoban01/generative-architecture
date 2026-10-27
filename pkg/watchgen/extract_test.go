@@ -199,7 +199,7 @@ func TestWatchesOwnerAndObjectHandlers(t *testing.T) {
 		t.Fatalf("unexpected owner rule %+v", rule)
 	}
 	w := result.IR("database", "wiring.go")[1]
-	if w.Mapping.Kind != ir.MappingOwner || w.Mapping.OwnerGVK == nil || w.Mapping.OwnerGVK.Kind != "Database" || w.Mapping.OwnerGVK.Group != "test.example" {
+	if w.Mapping.Kind != ir.MappingOwner || w.Mapping.OwnerGVK == nil || w.Mapping.OwnerGVK.Kind != "Database" || w.Mapping.OwnerGVK.Group != "test.example" || !w.Mapping.OnlyController {
 		t.Fatalf("owner mapping lost in IR: %+v", w)
 	}
 	// Without OnlyControllerOwner every owner reference is enqueued.
@@ -209,6 +209,9 @@ func TestWatchesOwnerAndObjectHandlers(t *testing.T) {
 	}
 	if rule := result.Rules[1]; rule.Mapping != "owner" || rule.OwnerKind != "Database" || rule.OnlyController {
 		t.Fatalf("unexpected owner rule %+v", rule)
+	}
+	if w := result.IR("database", "wiring.go")[1]; w.Mapping.OnlyController {
+		t.Fatalf("IR mapping should enqueue every owner: %+v", w)
 	}
 	// The declared unstructured primary may also name the owner.
 	result, err = extract(strings.Replace(owner, "&apiv1.Database{}", "database", 1))
