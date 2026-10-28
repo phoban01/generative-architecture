@@ -34,11 +34,15 @@ type evidence struct {
 	model    *model.Compiled
 	modelSHA string
 	receipt  generationReceipt
+	// warnings lists the library inputs that drifted (ADR-0009).
+	warnings []string
 }
 
 // loadEvidence reads what arch generate wrote and compares the receipt
-// with the current inputs. Each drifted input is a tool finding: the model
-// no longer derives from the inputs, so evidence about it is invalid.
+// with the current inputs. Each drifted owned input is a tool finding: the
+// model no longer derives from the inputs, so evidence about it is
+// invalid. A drifted library input is a warning on stderr and in the
+// report. It does not block the run (ADR-0009).
 func loadEvidence(g globals) (evidence, []report.Finding, error) {
 	var ev evidence
 	p, err := project.Load(g.project)
@@ -76,9 +80,15 @@ func loadEvidence(g globals) (evidence, []report.Finding, error) {
 	if err != nil {
 		return ev, nil, err
 	}
+	owned, library := receipt.Split(drift)
 	var findings []report.Finding
-	for _, d := range drift {
+	for _, d := range owned {
 		findings = append(findings, report.Finding{Category: report.CategoryTool, Message: fmt.Sprintf("input %s since arch generate; run arch generate again", d)})
+	}
+	for _, d := range library {
+		w := fmt.Sprintf("library input %s since arch generate", d)
+		ev.warnings = append(ev.warnings, w)
+		fmt.Fprintf(g.stderr, "warning: %s; run arch generate again before a release\n", w)
 	}
 	for _, f := range ev.receipt.Generated {
 		b, err := os.ReadFile(filepath.Join(g.out, f.Path))
@@ -102,7 +112,7 @@ func (ev evidence) verification(scope string, tools map[string]string) report.Ve
 	for name, version := range tools {
 		r.Tools[name] = version
 	}
-	return report.Verification{Name: ev.project.Name, Scope: scope, Model: modelFile, ModelSHA256: ev.modelSHA, Coverage: map[string]int{}, TraceHashes: map[string]string{}, Receipt: r, Generated: ev.receipt.Generated}
+	return report.Verification{Name: ev.project.Name, Scope: scope, Model: modelFile, ModelSHA256: ev.modelSHA, Coverage: map[string]int{}, TraceHashes: map[string]string{}, Receipt: r, Generated: ev.receipt.Generated, Warnings: ev.warnings}
 }
 
 // replayModel replays one trace through the original CEL of m. A state

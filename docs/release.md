@@ -19,7 +19,7 @@ every file and `make` target this checklist names exists.
 | Compatibility policy for `pkg/` | Done: written below |
 | Tool version ranges | Done (ADR-0003) |
 | Go versions | Open: decision needed |
-| Receipt drift scope | Open: #142 |
+| Receipt drift scope | Done (#142, ADR-0009) |
 | Stray `devbox.lock` change | Open: decision needed |
 | Adoption guides | Done (#110) |
 | Tag and release notes | Open: the owner's act |
@@ -127,9 +127,10 @@ job to 1.26, or add 1.25 to the README and the matrix.
 
 ## 9. Receipt drift scope
 
-Open: #142. Receipts hash the selected inputs of each example, not the
-full package closure (EVID-1, EVID-5). The issue decides which one the
-release promises. The release notes state the scope that ships.
+Done: #142, ADR-0009. Receipts hash the full in-module closure and list
+the owned inputs: the selected packages and the extra documents. Owned
+drift fails; library drift warns and is recorded in the report. `make
+verify` refreshes every receipt before the tag, so no drift remains.
 
 ## 10. Stray devbox.lock change
 
@@ -180,7 +181,7 @@ verification.
   `ProtocolContract`, `BoundaryModel`, Cluster API contracts, Flux
   boundaries.
 - M5 Generated adapters and evidence: `adaptergen`, envtest, report
-  categories, the mutation registry. #142 is still open.
+  categories, the mutation registry.
 - M6 Visualization: one LikeC4 workspace with five of the six views.
 - M7 CLI, CI and release: nine subcommands, `arch diff`, strict mode, the
   reusable workflow, the module path and the adoption guides.

@@ -3,6 +3,12 @@
 // module definition, the extra documents consumed (schemas, configuration,
 // abstraction and boundary documents) and the exact resolved tool versions
 // (EVID-1, EVID-5). Verify re-collects the closure and reports drift.
+//
+// The closure has two scopes (ADR-0009). Owned inputs are the files of the
+// selected packages and the extra paths. Drift there means the evidence no
+// longer derives from its inputs. Library inputs are the rest of the
+// closure: the in-module imports outside the selected packages, go.mod and
+// go.sum. Callers fail on owned drift and warn on library drift.
 package receipt
 
 import (
@@ -10,6 +16,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -31,6 +38,14 @@ const (
 	Tool    = "tool"
 )
 
+// Drift scopes set by Compare.
+const (
+	// ScopeOwned marks drift of an owned input or of a tool version.
+	ScopeOwned = "owned"
+	// ScopeLibrary marks drift of a library input.
+	ScopeLibrary = "library"
+)
+
 var (
 	hexHash = regexp.MustCompile(`^[0-9a-f]{64}$`)
 	// Exact versions carry no range operators or wildcards. Compatibility
@@ -49,12 +64,19 @@ type File struct {
 type Receipt struct {
 	// Root is the directory paths are relative to. It is not part of the
 	// document: a receipt is read back against a checkout.
-	Root     string            `yaml:"-"`
-	Module   string            `yaml:"module"`
-	Packages []string          `yaml:"packages"`
-	Extra    []string          `yaml:"extra,omitempty"`
-	Files    []File            `yaml:"files"`
-	Tools    map[string]string `yaml:"tools"`
+	Root     string   `yaml:"-"`
+	Module   string   `yaml:"module"`
+	Packages []string `yaml:"packages"`
+	Extra    []string `yaml:"extra,omitempty"`
+	// Owned lists the owned inputs: slash-separated paths relative to the
+	// root, sorted. An entry owns the file it names and every file under
+	// it. The entry "." owns the whole root. Collect records the directory
+	// of each selected package and each extra path. Every other file is a
+	// library input. A receipt without Owned owns every file, so drift in
+	// an older receipt always fails.
+	Owned []string          `yaml:"owned,omitempty"`
+	Files []File            `yaml:"files"`
+	Tools map[string]string `yaml:"tools"`
 	// Bounds and Excludes qualify the evidence (ADR-0005): the bounds the
 	// run explored within and the behaviours it deliberately left out,
 	// repeated from the abstraction the caller consumed. Collect leaves them
@@ -111,6 +133,8 @@ func (s Sampling) Validate() error {
 type Drift struct {
 	Kind string
 	Path string
+	// Scope is ScopeOwned or ScopeLibrary.
+	Scope string
 	// Want is the recorded hash or version, Got the current one; either is
 	// empty when the entry exists on one side only.
 	Want, Got string
@@ -128,6 +152,33 @@ func (d Drift) String() string {
 	return fmt.Sprintf("tool %s: recorded %q, now %q", d.Path, d.Want, d.Got)
 }
 
+// Split separates drift into owned and library drift and keeps the order.
+func Split(drift []Drift) (owned, library []Drift) {
+	for _, d := range drift {
+		if d.Scope == ScopeLibrary {
+			library = append(library, d)
+		} else {
+			owned = append(owned, d)
+		}
+	}
+	return owned, library
+}
+
+// Owns reports whether path, slash-separated and relative to the root, is
+// an owned input. Every path is owned when the receipt lists no owned
+// entries.
+func (r Receipt) Owns(path string) bool {
+	if len(r.Owned) == 0 {
+		return true
+	}
+	for _, o := range r.Owned {
+		if o == "." || path == o || strings.HasPrefix(path, o+"/") {
+			return true
+		}
+	}
+	return false
+}
+
 func short(h string) string {
 	if len(h) > 12 {
 		return h[:12]
@@ -139,7 +190,8 @@ func short(h string) string {
 // other build input of the selected package patterns and of their
 // transitive imports from the same module, the module's go.mod and go.sum,
 // plus the extra paths (files, or directories walked recursively), each with
-// its SHA-256, and the exact tool versions.
+// its SHA-256, and the exact tool versions. It records as Owned the
+// directory of each package the patterns match and each extra path.
 func Collect(root string, patterns []string, extra []string, tools map[string]string) (Receipt, error) {
 	if len(patterns) == 0 {
 		return Receipt{}, fmt.Errorf("receipt: at least one package is required")
@@ -168,6 +220,24 @@ func Collect(root string, patterns []string, extra []string, tools map[string]st
 		} else if p.Module.Path != module {
 			return Receipt{}, fmt.Errorf("receipt: packages span modules %s and %s", module, p.Module.Path)
 		}
+	}
+	owned := map[string]bool{}
+	for _, rel := range extra {
+		owned[path.Clean(filepath.ToSlash(rel))] = true
+	}
+	for _, p := range pkgs {
+		dir := p.Dir
+		if dir == "" && len(p.GoFiles) > 0 {
+			dir = filepath.Dir(p.GoFiles[0])
+		}
+		if dir == "" {
+			return Receipt{}, fmt.Errorf("receipt: package %s has no directory", p.PkgPath)
+		}
+		rel, err := filepath.Rel(abs, dir)
+		if err != nil {
+			return Receipt{}, err
+		}
+		owned[filepath.ToSlash(rel)] = true
 	}
 	paths := map[string]bool{}
 	seen := map[string]bool{}
@@ -217,6 +287,10 @@ func Collect(root string, patterns []string, extra []string, tools map[string]st
 	for name, version := range tools {
 		r.Tools[name] = version
 	}
+	for o := range owned {
+		r.Owned = append(r.Owned, o)
+	}
+	sort.Strings(r.Owned)
 	for path := range paths {
 		rel, err := filepath.Rel(abs, path)
 		if err != nil {
@@ -297,7 +371,8 @@ func Verify(r Receipt) ([]Drift, error) {
 
 // Compare reports the differences between a recorded receipt and a current
 // one: changed, missing and added files and tool version differences, in a
-// stable order.
+// stable order. The owned entries of want set the scope of each file.
+// Tool drift is owned, because the tools are what ran.
 func Compare(want, got Receipt) []Drift {
 	var out []Drift
 	recorded := map[string]string{}
@@ -332,6 +407,12 @@ func Compare(want, got Receipt) []Drift {
 			out = append(out, Drift{Kind: Tool, Path: name, Got: version})
 		}
 	}
+	for i := range out {
+		out[i].Scope = ScopeOwned
+		if out[i].Kind != Tool && !want.Owns(out[i].Path) {
+			out[i].Scope = ScopeLibrary
+		}
+	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].Kind != out[j].Kind {
 			return out[i].Kind < out[j].Kind
@@ -342,7 +423,8 @@ func Compare(want, got Receipt) []Drift {
 }
 
 // Validate checks a receipt's shape: a module, packages, well-formed
-// relative paths with hex hashes, and exact tool versions.
+// relative paths with hex hashes, well-formed owned entries, and exact
+// tool versions.
 func (r Receipt) Validate() error {
 	if r.Module == "" || len(r.Packages) == 0 {
 		return fmt.Errorf("receipt: module and packages are required")
@@ -358,6 +440,11 @@ func (r Receipt) Validate() error {
 		seen[f.Path] = true
 		if !hexHash.MatchString(f.SHA256) {
 			return fmt.Errorf("receipt: %s: invalid sha256 %q", f.Path, f.SHA256)
+		}
+	}
+	for _, o := range r.Owned {
+		if o == "" || filepath.IsAbs(o) || o == ".." || strings.HasPrefix(o, "../") || path.Clean(o) != o {
+			return fmt.Errorf("receipt: invalid owned path %q", o)
 		}
 	}
 	for name, n := range r.Bounds {

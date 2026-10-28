@@ -155,7 +155,7 @@ func TestWriteRead(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if back.Root != r.Root || !reflect.DeepEqual(back.Files, r.Files) || !reflect.DeepEqual(back.Tools, r.Tools) || !reflect.DeepEqual(back.Packages, r.Packages) || !reflect.DeepEqual(back.Extra, r.Extra) || back.Module != r.Module || !reflect.DeepEqual(back.Bounds, r.Bounds) || !reflect.DeepEqual(back.Excludes, r.Excludes) {
+	if back.Root != r.Root || !reflect.DeepEqual(back.Files, r.Files) || !reflect.DeepEqual(back.Tools, r.Tools) || !reflect.DeepEqual(back.Packages, r.Packages) || !reflect.DeepEqual(back.Extra, r.Extra) || !reflect.DeepEqual(back.Owned, r.Owned) || back.Module != r.Module || !reflect.DeepEqual(back.Bounds, r.Bounds) || !reflect.DeepEqual(back.Excludes, r.Excludes) {
 		t.Fatalf("round trip changed the receipt:\n%+v\n%+v", r, back)
 	}
 	bad := r
@@ -210,5 +210,77 @@ func TestSamplingValidate(t *testing.T) {
 		if err := r.Validate(); (err == nil) != c.ok {
 			t.Errorf("%s: receipt Validate() = %v", name, err)
 		}
+	}
+}
+
+// Collect owns the directories of the matched packages and the extra
+// paths. Their imports, go.mod and go.sum are library inputs.
+func TestCollectOwned(t *testing.T) {
+	r := collect(t)
+	want := []string{"examples/configmirror", "examples/configmirror/abstraction.yaml"}
+	if !reflect.DeepEqual(r.Owned, want) {
+		t.Fatalf("owned %v, want %v", r.Owned, want)
+	}
+	for path, owned := range map[string]bool{
+		"examples/configmirror/controller.go": true, "examples/configmirror/abstraction.yaml": true,
+		"examples/configmirrorx/a.go": false, "pkg/model/model.go": false, "go.mod": false, "go.sum": false,
+	} {
+		if r.Owns(path) != owned {
+			t.Errorf("Owns(%s) = %v, want %v", path, !owned, owned)
+		}
+	}
+	if err := r.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	for _, bad := range []string{"", "/abs", "..", "../up", "a/../b", "a/"} {
+		b := r
+		b.Owned = []string{bad}
+		if err := b.Validate(); err == nil || !strings.Contains(err.Error(), "owned") {
+			t.Errorf("owned %q accepted: %v", bad, err)
+		}
+	}
+	whole := Receipt{Owned: []string{"."}}
+	if !whole.Owns("go.mod") {
+		t.Error(`"." does not own the root`)
+	}
+}
+
+// Compare marks drift of owned files and of tools as owned, and drift of
+// every other file as library drift. Split separates the two.
+func TestCompareScopes(t *testing.T) {
+	r := collect(t)
+	later := r
+	later.Files = nil
+	for _, f := range r.Files {
+		switch f.Path {
+		case "examples/configmirror/controller.go", "pkg/model/model.go":
+			f.SHA256 = strings.Repeat("1", 64)
+		case "go.sum":
+			continue
+		}
+		later.Files = append(later.Files, f)
+	}
+	later.Tools = map[string]string{"quint": "0.33.2", "likec4": "1.59.2"}
+	owned, library := Split(Compare(r, later))
+	got := func(drift []Drift) []string {
+		var out []string
+		for _, d := range drift {
+			out = append(out, d.Kind+" "+d.Path+" "+d.Scope)
+		}
+		return out
+	}
+	if want := []string{"changed examples/configmirror/controller.go owned", "tool quint owned"}; !reflect.DeepEqual(got(owned), want) {
+		t.Errorf("owned drift %v, want %v", got(owned), want)
+	}
+	if want := []string{"changed pkg/model/model.go library", "missing go.sum library"}; !reflect.DeepEqual(got(library), want) {
+		t.Errorf("library drift %v, want %v", got(library), want)
+	}
+	// A receipt written before Owned existed owns every file, so all its
+	// drift fails.
+	older := r
+	older.Owned = nil
+	owned, library = Split(Compare(older, later))
+	if len(owned) != 4 || len(library) != 0 {
+		t.Fatalf("receipt without owned entries: owned %v library %v", owned, library)
 	}
 }

@@ -140,3 +140,36 @@ func TestVerificationWithoutReceipt(t *testing.T) {
 		t.Fatalf("round trip %+v", back)
 	}
 }
+
+// Warnings are recorded and listed, but they do not change the result or
+// block the run in either mode (ADR-0009).
+func TestVerificationWarningsDoNotBlock(t *testing.T) {
+	v := sampleVerification()
+	v.Warnings = []string{"library input pkg/model/model.go changed (000000000000 -> 111111111111)"}
+	for _, mode := range []string{ModeStrict, ModeInventory} {
+		v.Mode = mode
+		if v.Conclude() != Passed || len(v.Blocking()) != 0 || v.Failures[CategoryTool] != 0 {
+			t.Fatalf("%s: result %s, blocking %v, failures %v", mode, v.Result, v.Blocking(), v.Failures)
+		}
+	}
+	path := filepath.Join(t.TempDir(), "report.yaml")
+	if err := v.Write(path); err != nil {
+		t.Fatal(err)
+	}
+	back, err := ReadVerification(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(back.Warnings, v.Warnings) || back.Result != Passed {
+		t.Fatalf("round trip warnings %v result %s", back.Warnings, back.Result)
+	}
+	var b strings.Builder
+	back.WriteSections(&b)
+	if want := "warnings (not blocking):\n  " + v.Warnings[0] + "\n"; b.String() != want {
+		t.Fatalf("sections %q, want %q", b.String(), want)
+	}
+	v.Warnings = []string{""}
+	if err := v.Validate(); err == nil || !strings.Contains(err.Error(), "empty warning") {
+		t.Fatalf("empty warning accepted: %v", err)
+	}
+}

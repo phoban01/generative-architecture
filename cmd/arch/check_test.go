@@ -113,6 +113,55 @@ func TestReplayRefusesChangedInputs(t *testing.T) {
 	}
 }
 
+// Drift of a library input is a warning on stderr and in the report. Drift
+// of an owned input is a blocking tool finding (ADR-0009).
+func TestReplayDriftScopes(t *testing.T) {
+	out, err := generateTo(t, configMirror)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(out, receiptsFile)
+	tamper := func(file string) {
+		t.Helper()
+		r, err := readReceipt(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		found := false
+		for i := range r.Files {
+			if r.Files[i].Path == file {
+				r.Files[i].SHA256 = strings.Repeat("0", 64)
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("receipt does not record %s", file)
+		}
+		if err := r.write(path, "config-mirror"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	tamper("pkg/model/model.go")
+	stderr, err := arch(t, configMirror, out, false, "replay", "--traces", savedTraces)
+	if err != nil {
+		t.Fatalf("library drift must not block: %v", err)
+	}
+	if !strings.Contains(stderr, "warning: library input pkg/model/model.go changed") {
+		t.Fatalf("missing drift warning: %q", stderr)
+	}
+	v := readVerification(t, filepath.Join(out, replayReport))
+	if len(v.Warnings) != 1 || !strings.HasPrefix(v.Warnings[0], "library input pkg/model/model.go changed") || v.Failures[report.CategoryTool] != 0 || v.Result == report.Failed {
+		t.Fatalf("report %s warnings %v failures %v", v.Result, v.Warnings, v.Failures)
+	}
+	tamper("examples/configmirror/controller.go")
+	if _, err := arch(t, configMirror, out, false, "replay", "--traces", savedTraces); err == nil || !strings.Contains(err.Error(), "tool finding: input examples/configmirror/controller.go changed") {
+		t.Fatalf("owned drift must block, got %v", err)
+	}
+	if v := readVerification(t, filepath.Join(out, replayReport)); v.Result != report.Failed || len(v.Warnings) != 1 {
+		t.Fatalf("report %s warnings %v", v.Result, v.Warnings)
+	}
+}
+
 func TestReplayModelCategories(t *testing.T) {
 	spec := model.Spec{Name: "Counter", State: map[string]model.Variable{"n": {Type: "int", Initial: "0"}},
 		Actions:    []model.Action{{Name: "inc", Guard: "n < 3", Updates: map[string]expr.Expression{"n": "n + 1"}}},

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -93,8 +94,9 @@ func TestEvidenceReport(t *testing.T) {
 
 // The receipt records the input closure of the evidence run: the example's
 // packages and their in-module imports, its authored documents, the exact
-// tool versions and the abstraction's bounds and excludes. The example's
-// own inputs have not drifted since.
+// tool versions and the abstraction's bounds and excludes. The owned
+// inputs have not drifted since. Library drift is logged and does not
+// fail.
 func TestEvidenceReceipt(t *testing.T) {
 	root := filepath.Join("..", "..")
 	rec, err := receipt.Read(ReceiptFile, root)
@@ -129,13 +131,31 @@ func TestEvidenceReceipt(t *testing.T) {
 			t.Errorf("receipt does not record %s", want)
 		}
 	}
+	// The example's packages, the demo command and the documents are
+	// owned. The library packages they import, go.mod and go.sum are not
+	// (ADR-0009).
+	for _, want := range []string{
+		"cmd/library-demo", "examples/configmirror", "examples/configmirror/abstraction.yaml", "examples/configmirror/constraints.yaml",
+		"examples/configmirror/discovery.json", "examples/configmirror/mutations.yaml", "examples/configmirror/project.yaml",
+	} {
+		if !slices.Contains(rec.Owned, want) {
+			t.Errorf("receipt does not own %s: %v", want, rec.Owned)
+		}
+	}
+	for _, library := range []string{"pkg/model/model.go", "go.mod", "go.sum"} {
+		if !recorded[library] || rec.Owns(library) {
+			t.Errorf("receipt does not record %s as a library input", library)
+		}
+	}
 	drift, err := receipt.Verify(rec)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, d := range drift {
-		if strings.HasPrefix(d.Path, "examples/configmirror/") {
-			t.Errorf("%s since the evidence run; run make library-demo", d)
-		}
+	owned, library := receipt.Split(drift)
+	for _, d := range owned {
+		t.Errorf("%s since the evidence run; run make library-demo", d)
+	}
+	for _, d := range library {
+		t.Logf("library input %s since the evidence run; make verify refreshes it before a release", d)
 	}
 }

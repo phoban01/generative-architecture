@@ -92,6 +92,10 @@ type Verification struct {
 	Coverage    map[string]int    `yaml:"coverage,omitempty"`
 	TraceHashes map[string]string `yaml:"traceHashes,omitempty"`
 	Findings    []Finding         `yaml:"findings"`
+	// Warnings lists problems that do not block the run, such as drift
+	// of a library input (ADR-0009). They do not change Result, Failures
+	// or Blocking.
+	Warnings []string `yaml:"warnings,omitempty"`
 	// Bindings lists how the inputs of a composed model were bound.
 	// Protocols lists the conformance of bound links to their protocol
 	// contracts. They are separate sections: a binding is never evidence
@@ -182,6 +186,11 @@ func (v Verification) Validate() error {
 		case CategorySafety, CategoryConformance, CategoryUnsupported, CategoryTool:
 		default:
 			return fmt.Errorf("verification report: finding %q has unknown category %q", f.Message, f.Category)
+		}
+	}
+	for _, w := range v.Warnings {
+		if w == "" {
+			return fmt.Errorf("verification report: empty warning")
 		}
 	}
 	if want := countFailures(v.Findings); !reflect.DeepEqual(v.Failures, want) {
