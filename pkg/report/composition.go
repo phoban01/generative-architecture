@@ -113,11 +113,22 @@ func (v Verification) validateComposition() error {
 	return nil
 }
 
-// WriteSections writes the binding and protocol sections as text, each
-// under its own heading. A bound link without a protocol is listed under
-// protocols as unchecked, so a binding never reads as conformance. It
-// writes nothing when the report has no bindings and no protocols.
+// WriteSections writes the binding, protocol and warning sections as
+// text, each under its own heading. A bound link without a protocol is
+// listed under protocols as unchecked, so a binding never reads as
+// conformance. It writes nothing when the report has no bindings, no
+// protocols and no warnings.
 func (v Verification) WriteSections(w io.Writer) {
+	v.writeComposition(w)
+	if len(v.Warnings) > 0 {
+		fmt.Fprintln(w, "warnings (not blocking):")
+		for _, warning := range v.Warnings {
+			fmt.Fprintf(w, "  %s\n", warning)
+		}
+	}
+}
+
+func (v Verification) writeComposition(w io.Writer) {
 	if len(v.Bindings) == 0 && len(v.Protocols) == 0 {
 		return
 	}

@@ -119,7 +119,7 @@ Each requirement has an ID, an acceptance test and a status measured against the
 | --- | --- | --- | --- |
 | EVID-1 | Evidence receipts are immutable and invalidated when any input changes. | Editing a watched file fails replay until regenerated. | Partial. Selected inputs are hashed and checked; the full input closure is not. |
 | EVID-2 | Reports distinguish safety violations, conformance mismatches, unsupported constructs and tool failures. | Each failure has a category field. | Partial. `report.Verification` categorises findings as safety, conformance, unsupported or tool and embeds the receipt (#107); it records the mode and per-category counts, and the CLI and all three example runs write it (#83). |
-| EVID-3 | Inventory mode reports unresolved facts; verification mode refuses incomplete semantics for the selected scope. | `arch check --strict` fails on an `unresolved` fact in scope. | Partial. `--strict` fails on unsupported or unresolved items in the selected packages; inventory mode reports them (#105). The receipt drift scope is undecided (#142). |
+| EVID-3 | Inventory mode reports unresolved facts; verification mode refuses incomplete semantics for the selected scope. | `arch check --strict` fails on an `unresolved` fact in scope. | Partial. `--strict` fails on unsupported or unresolved items in the selected packages; inventory mode reports them (#105). Receipts split the closure: owned drift fails and library drift warns (#142, ADR-0009). |
 | EVID-4 | A CI template runs the pipeline and publishes diagrams, receipts and the diff. | The template runs green on the reference system. | Partial. The reusable workflow `.github/workflows/arch.yml` runs extract, generate, check, replay, render and diff and uploads diagrams, receipts, traces and the IR diff; the repository's `architecture` job runs it on ConfigMirror and `make arch-pipeline` reproduces it locally (#108). Replay runs non-strict until `arch` has a replay adapter, and adopters must build `arch` from source until the module is published (#109). |
 | EVID-5 | Receipts cover the consumed input closure (transitive source of selected packages, schemas, configuration, abstraction, boundary assumptions) and record the exact resolved tool versions. Compatibility (version ranges) and reproducibility (exact versions in receipts) are separate concerns. | A receipt lists every file consumed and the exact Quint and LikeC4 versions; changing a transitive dependency file invalidates it. | Missing. |
 
@@ -243,6 +243,7 @@ Architectural decisions are recorded in `docs/adr/`. Decisions taken by this pla
 - ADR-0006: Integration checkpoints on existing controllers gate expansion of the extraction, composition and diagram surface.
 - ADR-0007: Checkpoint A findings: abstraction gaps, adapter interface changes and the receipt drift-scope decision.
 - [ADR-0008](docs/adr/0008-checkpoint-b-findings.md): Checkpoint B findings: what adopting an unmodified kubebuilder controller required, ranked extractor gaps and the open decisions.
+- [ADR-0009](docs/adr/0009-receipt-drift-scope.md): Receipts split the input closure into owned inputs, whose drift fails, and library inputs, whose drift warns.
 
 ## 10. Glossary
 

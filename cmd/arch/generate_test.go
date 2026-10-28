@@ -75,6 +75,9 @@ func TestGenerateConfigMirror(t *testing.T) {
 			t.Errorf("receipt does not record %s", want)
 		}
 	}
+	if !r.Owns("examples/configmirror/controller.go") || !r.Owns("cmd/arch/testdata/configmirror/project.yaml") || r.Owns("pkg/model/model.go") || r.Owns("go.mod") {
+		t.Errorf("receipt owned entries %v", r.Owned)
+	}
 	if r.Bounds["maxInvocations"] != 3 || r.Tools["go"] == "" {
 		t.Errorf("receipt bounds %v tools %v", r.Bounds, r.Tools)
 	}
