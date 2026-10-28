@@ -1,6 +1,6 @@
 # Reference system
 
-A neutral multi-controller system used as the walkthrough and the subject of milestone exit criteria ([ADR-0004](../../docs/adr/0004-reference-system.md)). Three controllers interact only through Kubernetes resources in the `refsystem.example.org` group:
+A neutral multi-controller system used as the walkthrough and the subject of milestone exit criteria ([ADR-0004](../../docs/adr/0004-reference-system.md)). [docs/adopt-owned-project.md](../../docs/adopt-owned-project.md) uses it as its example. Three controllers interact only through Kubernetes resources in the `refsystem.example.org` group:
 
 | Kind | Spec | Status | Owned by |
 | --- | --- | --- | --- |
@@ -63,9 +63,10 @@ go run ./cmd/arch --project examples/refsystem/project.yaml --out examples/refsy
 
 It reads all three `Reconcile` methods with no unsupported construct. The
 reference system has no abstraction yet, so the support report lists each
-field the methods read or write as `unresolved`. In inventory mode the
-command succeeds. With `--strict` it writes the same files and then fails
-on the unresolved fields. `cmd/arch` checks that the committed files match
+field the methods read or write as `unresolved`: 39 in all. In inventory
+mode the command succeeds. With `--strict` it writes the same files and
+then fails on the unresolved fields. `arch generate` refuses the IR,
+because it takes one controller per project. `cmd/arch` checks that the committed files match
 a fresh run. [docs/supported-patterns.md](../../docs/supported-patterns.md)
 lists the constructs the controllers use.
 

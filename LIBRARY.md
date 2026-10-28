@@ -1,6 +1,6 @@
 # Using the library
 
-Start with [the source-to-model walkthrough](START-HERE.md). The intended workflow is **implementation → generated system model → independent constraints → counterexamples and implementation replay**. The library supports bounded pieces of this workflow. Arbitrary-system discovery and full Go verification are not implemented.
+Start with the adoption guides for [a project you own](docs/adopt-owned-project.md) and [an upstream controller](docs/adopt-upstream-project.md). [START-HERE.md](START-HERE.md) walks a sample controller from source to model. The intended workflow is **implementation → generated system model → independent constraints → counterexamples and implementation replay**. The library supports bounded pieces of this workflow. Arbitrary-system discovery and full Go verification are not implemented.
 
 Public packages live under `pkg/`. Example-specific wiring stays under `examples/`. The module path is `github.com/phoban01/generative-architecture`. Add it to another module with:
 

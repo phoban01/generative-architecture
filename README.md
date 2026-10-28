@@ -2,13 +2,28 @@
 
 A Go library and toolchain that generates architecture artifacts for a system powered by Kubernetes: **Go source + declared semantics + KRM YAML/CEL → Quint models, LikeC4 diagrams and model-based tests**, with controller-runtime and dynamic-client integration. Many controller-runtime projects compose into one system; this toolset captures that architecture from the code as models, lets you write invariants against those models, and verifies contracts and constraints with evidence.
 
-Start with [the source-to-model walkthrough](START-HERE.md). It follows a small sample controller: a `Database` resource appears, the controller checks that the provisioning contract is supported, creates or reuses a `DatabaseInstance`, waits for a separate subsystem to provision it, then publishes the instance endpoint into the `Database` status. The controller's behaviour model is generated from its Go source and checked against independently written constraints.
+## Start with the reference system
+
+The reference system in [`examples/refsystem`](examples/refsystem/README.md) has three controllers: tenant, database and backup. They interact only through Kubernetes resources. Extract it from the repository root:
+
+```sh
+go run ./cmd/arch --strict --project examples/refsystem/project.yaml --out examples/refsystem/generated extract
+```
+
+arch finds the three controllers and their seven watches with no marker. It reads each `Reconcile` with no unsupported construct. The command then fails in strict mode, because the reference system has no abstraction document yet: 39 fields that the controllers read or write are unresolved. Without `--strict` the same command succeeds and writes the same files. `arch generate` does not run on the reference system yet, because it takes one controller per project.
+
+To adopt arch, follow one of the two guides. Every command in them runs in `go test`.
+
+- [Adopting arch in a project you own](docs/adopt-owned-project.md): init, catalog, extract, support, abstraction, generate, check, replay, render and CI.
+- [Adopting arch for an upstream controller](docs/adopt-upstream-project.md): pinning, the support report, boundary models, provider contracts and composition.
+
+[START-HERE.md](START-HERE.md) walks a sample controller from source to model without Quint or a cluster:
 
 ```sh
 go run ./cmd/walkthrough          # no Kubernetes or Quint required
 ```
 
-The goal is **implementation → generated system model → independent constraints → counterexamples and Go replay**. Public packages in `pkg/` support restricted source extraction, structural contract declarations, process/model composition and controller-runtime scheduling. See [Using the library](LIBRARY.md) for APIs and limits. The sample extracts supported `For`/`Watches` registrations, reference-field key mappings and common predicates from Go setup, extracts bounded dynamic-client resource accesses, and feeds event delivery into a native controller-runtime queue harness. Automatic discovery of arbitrary controller wiring remains unfinished.
+The goal is **implementation → generated system model → independent constraints → counterexamples and Go replay**. Public packages in `pkg/` support restricted source extraction, structural contract declarations, process/model composition and controller-runtime scheduling. See [Using the library](LIBRARY.md) for APIs and limits. Automatic discovery of arbitrary controller wiring remains unfinished.
 
 See [the project plan](PROJECT-PLAN.md) for the requirements index, milestones and decision records.
 
@@ -16,10 +31,12 @@ See [the project plan](PROJECT-PLAN.md) for the requirements index, milestones a
 
 | Example | Role |
 | --- | --- |
-| `examples/database/` | The sample controller. Process, watches and dynamic-client accesses are extracted from Go; constraints are authored separately; replay runs the real reconcile against a fake dynamic API through a projection generated from `abstraction.yaml`. |
-| `examples/refsystem/` | Neutral multi-controller reference system: API types and CRDs now, controllers and composition in later milestones |
-| `examples/configmirror/` | The first source-generated controller. Typed extraction of its reconciler, an abstraction document and the built-in client summaries generate its model and its replay projection, environment and boundary gating. Quint traces of that model are replayed against the real controller, a mutation suite checks detection and a receipt records the inputs. |
-| `examples/runtimegroup/` | A multi-controller runtime profile checked against real controller-runtime workers and client-go FIFO queues. |
+| `examples/refsystem/` | The reference system and the adoption walkthrough. Three controllers extract with no unsupported construct; the abstraction, the composed model and the Flux boundary come later. |
+| `cmd/arch/testdata/configmirror/` | The ConfigMirror project document: the one project that runs the whole `arch` pipeline, in the adoption guide and in CI's `architecture` job. |
+| `examples/configmirror/` | Regression fixture. The first source-generated controller: its model, replay projection, environment and boundary gating are generated; Quint traces are replayed against the real controller, a mutation suite checks detection and a receipt records the inputs. |
+| `examples/database/` | Regression fixture and the source of [START-HERE.md](START-HERE.md). Process, watches and dynamic-client accesses are extracted from Go; replay runs the real reconcile against a fake dynamic API through a projection generated from `abstraction.yaml`. |
+| `examples/runtimegroup/` | Regression fixture. A multi-controller runtime profile checked against real controller-runtime workers and client-go FIFO queues. |
+| `testdata/external/cronjob/` | The pinned kubebuilder CronJob controller (Checkpoint B), used by the upstream adoption guide. |
 | `testdata/consumer/` | A separate Go module that imports the public packages. |
 
 ## Quick start
@@ -63,11 +80,11 @@ Go dependencies are pinned in `go.mod` and `go.sum`. The external tools are acce
 | Tool | Supported | Selected by |
 | --- | --- | --- |
 | Go | The two most recent minor releases (currently 1.26 and 1.27); `go.mod` declares the minimum language version | `devbox.json` or your own install |
-| Quint | 0.33.x | `QUINT_BIN` or `--quint` |
-| LikeC4 | 1.59.x | `LIKEC4_BIN` or `--likec4` |
+| Quint | 0.33.x | `QUINT_BIN`, or `quint` on `PATH` |
+| LikeC4 | 1.59.x | `LIKEC4_BIN`, or `likec4` on `PATH` |
 | controller-runtime, client-go | Pinned in `go.mod` | Go modules |
 
-The Go tools call Quint and LikeC4 as executables and never import npm code. `devbox shell` provides all of them and exports `QUINT_BIN` / `LIKEC4_BIN` (see [Development environment](#development-environment)). Outside devbox, set those variables or use the flags.
+The Go tools call Quint and LikeC4 as executables and never import npm code. `devbox shell` provides all of them and exports `QUINT_BIN` / `LIKEC4_BIN` (see [Development environment](#development-environment)). Outside devbox, set those variables or put the CLIs on `PATH`.
 
 ```sh
 make verify
@@ -123,15 +140,15 @@ The generated LikeC4 sources cover the extracted reconcile flow, the watch route
 
 | Path | Purpose |
 | --- | --- |
-| `pkg/`, `LIBRARY.md`, `START-HERE.md` | Public APIs, library reference and first walkthrough |
+| `pkg/`, `LIBRARY.md`, `START-HERE.md` | Public APIs, library reference and the source-to-model walkthrough of the sample controller |
 | `examples/database/` | Sample controller: source, authored semantics, generated models, traces and report |
-| `examples/refsystem/` | Reference system: API types, scheme and CRD manifests |
+| `examples/refsystem/` | Reference system: API types, CRD manifests, three controllers and their committed extraction |
 | `examples/configmirror/`, `examples/runtimegroup/`, `testdata/consumer/` | First source-generated controller (Checkpoint A), runtime profile and external-module smoke test |
 | `pkg/sourcegen/`, `pkg/goflow/`, `pkg/process/`, `pkg/watchgen/`, `pkg/dynamicgen/` | Structure, behaviour, watch and API-access extraction |
 | `pkg/contracts/`, `pkg/composition/`, `pkg/model/`, `pkg/expr/` | Contract checks, composition, model compilation, CEL subset |
 | `pkg/effect/`, `pkg/controllerruntime/`, `pkg/conformance/`, `pkg/quint/`, `pkg/krm/` | Effect gating, runtime harness, replay, Quint driver, strict KRM loading |
 | `cmd/` | `arch`, the generic CLI (subcommands land milestone by milestone), plus the `walkthrough`, `library-demo` and `general-demo` entry points |
-| `docs/adr/`, `docs/reviews/` | Decision records and plan reviews |
+| `docs/` | Adoption guides, supported patterns, decision records (`adr/`) and plan reviews (`reviews/`) |
 
 **Generated models, trace fixtures and YAML reports are intentionally retained.** Native tests and replay commands depend on them, and their hashes detect stale evidence. ITF traces retain Quint's JSON interchange format. Use `make clean` to remove local binaries and the rendered site.
 
