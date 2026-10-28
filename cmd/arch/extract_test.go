@@ -5,6 +5,8 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/phoban01/generative-architecture/pkg/ir"
@@ -30,21 +32,94 @@ func readSupport(t *testing.T, out string) report.Support {
 	return s
 }
 
+// refsystemDir holds the reference system and its committed extraction.
+const refsystemDir = "../../examples/refsystem"
+
+// TestExtractReferenceSystem runs arch --strict extract on the reference
+// system. It finds the three controllers and their seven watches and no
+// unsupported construct. The reference system has no abstraction yet, so
+// every field its Reconcile methods touch is unresolved and verification
+// mode still fails on those, after it writes the IR. The committed IR and
+// support report must match the run byte for byte; regenerate them with
+// go run ./cmd/arch --project examples/refsystem/project.yaml --out examples/refsystem/generated extract.
 func TestExtractReferenceSystem(t *testing.T) {
-	out, err := extractTo(t, "../../examples/refsystem/project.yaml")
-	if err != nil {
-		t.Fatal(err)
+	out := t.TempDir()
+	var stdout, stderr bytes.Buffer
+	err := run([]string{"--project", filepath.Join(refsystemDir, "project.yaml"), "--out", out, "--strict", "extract"}, &stdout, &stderr)
+	if !errors.Is(err, errStrict) || errors.Is(err, errUnsupported) {
+		t.Fatalf("expected verification mode to fail on unresolved fields only, got %v", err)
 	}
 	doc, err := ir.Read(filepath.Join(out, irFile))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(doc.Controllers) != 0 || len(doc.Watches) != 0 {
-		t.Fatalf("reference system has API types only, got %+v", doc)
+	var controllers []string
+	for _, c := range doc.Controllers {
+		controllers = append(controllers, c.Name)
+	}
+	if want := []string{"BackupReconciler", "DatabaseReconciler", "TenantReconciler"}; !slices.Equal(controllers, want) {
+		t.Fatalf("controllers %q, want %q", controllers, want)
+	}
+	var watches []string
+	for _, w := range doc.Watches {
+		m := w.Mapping
+		row := w.Controller[strings.LastIndex(w.Controller, ".")+1:] + " " + w.Resource.Kind + " " + m.Kind
+		switch m.Kind {
+		case ir.MappingOwner:
+			row += " " + m.OwnerGVK.Kind
+		case ir.MappingLabel:
+			row += " " + m.Dependent.Kind + " " + m.Label
+		case ir.MappingReference:
+			row += " " + m.Dependent.Kind + " " + strings.Join(m.DependentPath, ".")
+		}
+		watches = append(watches, row)
+	}
+	want := []string{
+		"BackupReconciler Backup self",
+		"BackupReconciler Job owner Backup",
+		"BackupReconciler Database reference Backup Spec.Database",
+		"DatabaseReconciler Database self",
+		"DatabaseReconciler Secret owner Database",
+		"DatabaseReconciler Tenant label Database refsystem.example.org/tenant",
+		"TenantReconciler Tenant self",
+	}
+	if !slices.Equal(watches, want) {
+		t.Fatalf("watches\n%s\nwant\n%s", strings.Join(watches, "\n"), strings.Join(want, "\n"))
 	}
 	s := readSupport(t, out)
-	if len(s.Included)+len(s.Summarized)+len(s.Unsupported) != 0 {
-		t.Fatalf("expected an empty support report, got %+v", s)
+	if len(s.Unsupported) != 0 {
+		t.Fatalf("unsupported %+v, want none", s.Unsupported)
+	}
+	var reconciles int
+	for _, it := range s.Included {
+		if it.Kind == "reconcile" {
+			reconciles++
+		}
+	}
+	if reconciles != 3 {
+		t.Fatalf("%d Reconcile methods extracted, want 3", reconciles)
+	}
+	if len(s.Unresolved) == 0 {
+		t.Fatal("no unresolved field, but the reference system has no abstraction")
+	}
+	for _, it := range s.Unresolved {
+		if it.Kind != "field" || !strings.HasPrefix(it.Location.File, "examples/refsystem/controllers/") || it.Location.Line == 0 {
+			t.Fatalf("unresolved item %+v is not a located controller field", it)
+		}
+	}
+	for _, name := range []string{irFile, supportFile} {
+		got, err := os.ReadFile(filepath.Join(out, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		committed := filepath.Join(refsystemDir, "generated", name)
+		want, err := os.ReadFile(committed)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(got, want) {
+			t.Errorf("%s is stale; regenerate it with go run ./cmd/arch --project examples/refsystem/project.yaml --out examples/refsystem/generated extract", committed)
+		}
 	}
 }
 
@@ -60,10 +135,23 @@ func TestExtractControllerWithoutSetup(t *testing.T) {
 	if len(doc.Controllers) != 1 || doc.Controllers[0].Receiver != "Reconciler" || len(doc.Watches) != 0 {
 		t.Fatalf("expected one controller and no watches, got %+v", doc)
 	}
-	// The missing setup is reported, not silently dropped.
+	// The missing setup is reported, not silently dropped. Reconcile
+	// extracts, and without an abstraction both map fields it touches are
+	// unresolved. With the abstraction of testdata/configmirror they
+	// resolve.
 	s := readSupport(t, out)
-	if len(s.Included) != 1 || len(s.Summarized) != 1 || s.Summarized[0].Kind != "setup" || s.Summarized[0].Location.File != "examples/configmirror/controller.go" || len(s.Unsupported) != 0 {
+	if len(s.Included) != 2 || s.Included[1].Kind != "reconcile" || len(s.Summarized) != 1 || s.Summarized[0].Kind != "setup" || s.Summarized[0].Location.File != "examples/configmirror/controller.go" || len(s.Unsupported) != 0 {
 		t.Fatalf("unexpected support report %+v", s)
+	}
+	if got := constructs(s.Unresolved); len(got) != 2 || !strings.HasPrefix(got[0], "source.data.value at ") || !strings.HasPrefix(got[1], "target.data.value at ") {
+		t.Fatalf("unresolved %q", got)
+	}
+	out, err = extractTo(t, configMirror)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s := readSupport(t, out); len(s.Unsupported)+len(s.Unresolved) != 0 {
+		t.Fatalf("abstracted support report %+v", s)
 	}
 }
 
@@ -91,7 +179,8 @@ func TestExtractWatches(t *testing.T) {
 		t.Fatalf("watch provenance %+v", primary.Provenance)
 	}
 	s := readSupport(t, out)
-	if len(s.Included) != 3 || len(s.Summarized) != 0 || len(s.Unsupported) != 0 {
+	// The controller, its two watches and its Reconcile method.
+	if len(s.Included) != 4 || len(s.Summarized) != 0 || len(s.Unsupported) != 0 || len(s.Unresolved) != 0 {
 		t.Fatalf("unexpected support report %+v", s)
 	}
 	again, err := extractTo(t, "testdata/watched/project.yaml")

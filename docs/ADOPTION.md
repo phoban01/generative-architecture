@@ -83,7 +83,7 @@ match, a watch is reported as an unknown resource with its location.
 
 A missing catalog does not always show at once. On the CronJob controller,
 `arch extract` stops at the setup preamble before it reads any watch, so
-the report is the same with and without a catalog.
+the catalog changes no watch in the report.
 
 ## 4. Extract and read the support report
 
@@ -92,25 +92,25 @@ arch extract
 ```
 
 `arch extract` discovers the reconcilers in the selected packages and reads
-each `SetupWithManager`. It writes `generated/support.yaml` and, when
+each `SetupWithManager` and each `Reconcile`. It needs no abstraction to
+read `Reconcile` (ADR-0008). It writes `generated/support.yaml` and, when
 nothing is unsupported, `generated/ir.yaml`. Use `--out` for another
-directory. It does not read `Reconcile` yet; `arch generate` does (see
-ADR-0008).
+directory.
 
 On the CronJob controller it prints:
 
 ```text
-arch extract: unsupported constructs: 1 found, listed in generated/support.yaml
+arch extract: unsupported constructs: 54 found, listed in generated/support.yaml
 ```
 
 The support report has four lists:
 
 | List | Meaning |
 | --- | --- |
-| `included` | Extracted constructs: controllers and watches. |
+| `included` | Extracted constructs: controllers, watches and the `Reconcile` methods that extract. |
 | `summarized` | Constructs replaced by a summary, with the reason. |
 | `unsupported` | Constructs arch cannot read. Each has a kind, the source text, a reason and `file:line`. |
-| `unresolved` | IR facts whose evidence is unresolved. |
+| `unresolved` | IR facts whose evidence is unresolved, and object fields that `Reconcile` reads or writes but no abstraction selects. |
 
 `arch support` extracts in memory, prints the same lists as a table and
 writes nothing:
@@ -119,20 +119,24 @@ writes nothing:
 arch support
 ```
 
+On the CronJob controller the table has 54 unsupported rows and one
+unresolved row. It starts and ends like this:
+
 ```text
-STATUS       KIND        CONSTRUCT                                                              LOCATION                                      REASON
-included     controller  tutorial.kubebuilder.io/project/internal/controller.CronJobReconciler  internal/controller/cronjob_controller.go:49
-unsupported  preamble    if r.Clock == nil {
-             r.Clock = realClock{}
-}            internal/controller/cronjob_controller.go:553  expected an unstructured object declaration
-inventory mode: 1 unsupported or unresolved items in the selected packages; --strict fails on them
+STATUS       KIND         CONSTRUCT                                                              LOCATION                                       REASON
+included     controller   tutorial.kubebuilder.io/project/internal/controller.CronJobReconciler  internal/controller/cronjob_controller.go:49
+unsupported  call         log := logf.FromContext(ctx)                                           internal/controller/cronjob_controller.go:101  unsummarized call to sigs.k8s.io/controller-runtime/pkg/log.FromContext; ...
+...
+unsupported  preamble     if r.Clock == nil { ...                                                internal/controller/cronjob_controller.go:553  expected an unstructured object declaration
+unresolved   field        cronJob.spec.concurrencyPolicy                                         internal/controller/cronjob_controller.go:444  no abstraction selects this field
+inventory mode: 55 unsupported or unresolved items in the selected packages; --strict fails on them
 ```
 
-The report shows the first unsupported construct of each method. Fix or
-work around it, and run the command again to see the next one. The
-CronJob controller has more gaps behind line 553. `testdata/external/cronjob/FOLLOWUPS.md`
-lists all of them. [docs/supported-patterns.md](supported-patterns.md)
-lists the supported ways to build and wire a reconciler.
+The report lists every unsupported construct of `Reconcile`, and the first
+one of `SetupWithManager`. `testdata/external/cronjob/FOLLOWUPS.md` groups
+the gaps. [docs/supported-patterns.md](supported-patterns.md) lists the
+supported ways to build and wire a reconciler and the constructs
+`Reconcile` may use.
 
 ## 5. Inventory mode and strict mode
 
@@ -145,9 +149,7 @@ arch --strict support
 ```
 
 ```text
-arch support: verification mode (--strict) refuses incomplete semantics: 1 unsupported or unresolved items in the selected packages, first preamble if r.Clock == nil {
-	r.Clock = realClock{}
-} at internal/controller/cronjob_controller.go:553
+arch support: verification mode (--strict) refuses incomplete semantics: 55 unsupported or unresolved items in the selected packages, first call log := logf.FromContext(ctx) at internal/controller/cronjob_controller.go:101
 ```
 
 `--strict` applies to `extract`, `generate`, `check`, `support` and

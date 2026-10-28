@@ -7,8 +7,11 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/phoban01/generative-architecture/examples/refsystem/api/v1alpha1"
@@ -20,10 +23,16 @@ const QuotaName = "tenant-quota"
 // TenantReconciler creates the Namespace and ResourceQuota of a Tenant.
 type TenantReconciler struct {
 	Client client.Client
+	Scheme *runtime.Scheme
 }
 
 // Reconcile creates the tenant's Namespace and ResourceQuota when they are
 // missing, then marks the Tenant's namespace ready.
+//
+// Neither object can name the Tenant as its owner: a Namespace is
+// cluster-scoped and the quota lives in another namespace than the Tenant,
+// and Kubernetes allows neither owner reference. The Namespace owns the
+// quota instead.
 func (r *TenantReconciler) Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
 	tenant := &v1alpha1.Tenant{}
 	err := r.Client.Get(ctx, req.NamespacedName, tenant)
@@ -52,6 +61,10 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req reconcile.Request)
 		quota.Namespace = tenant.Name
 		quota.Name = QuotaName
 		quota.Labels = map[string]string{"profile": tenant.Spec.Quota}
+		quota.Spec.Hard = corev1.ResourceList{corev1.ResourcePods: resource.MustParse("10")}
+		if err := controllerutil.SetOwnerReference(namespace, quota, r.Scheme); err != nil {
+			return reconcile.Result{}, err
+		}
 		if err := r.Client.Create(ctx, quota); err != nil {
 			return reconcile.Result{}, err
 		}
@@ -66,10 +79,11 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req reconcile.Request)
 	return reconcile.Result{}, r.Client.Status().Update(ctx, tenant)
 }
 
-// SetupWithManager registers the controller with the manager.
+// SetupWithManager registers the controller with the manager. It watches
+// only Tenants: the Namespace and the quota carry no owner reference to
+// the Tenant, so an owner watch would never map to it.
 func (r *TenantReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.Tenant{}).
-		Owns(&corev1.Namespace{}).
 		Complete(r)
 }

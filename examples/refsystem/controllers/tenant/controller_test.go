@@ -30,7 +30,7 @@ func newClient(t *testing.T, objs ...client.Object) client.Client {
 
 func reconcileTenant(t *testing.T, c client.Client) {
 	t.Helper()
-	r := &TenantReconciler{Client: c}
+	r := &TenantReconciler{Client: c, Scheme: c.Scheme()}
 	req := reconcile.Request{NamespacedName: client.ObjectKey{Namespace: "default", Name: "acme"}}
 	res, err := r.Reconcile(context.Background(), req)
 	if err != nil {
@@ -50,8 +50,13 @@ func TestReconcileCreatesNamespaceAndQuota(t *testing.T) {
 	reconcileTenant(t, c)
 	ctx := context.Background()
 
-	if err := c.Get(ctx, client.ObjectKey{Name: "acme"}, &corev1.Namespace{}); err != nil {
+	ns := &corev1.Namespace{}
+	if err := c.Get(ctx, client.ObjectKey{Name: "acme"}, ns); err != nil {
 		t.Fatalf("namespace: %v", err)
+	}
+	// A cluster-scoped Namespace cannot be owned by a namespaced Tenant.
+	if len(ns.OwnerReferences) != 0 {
+		t.Fatalf("namespace owners %+v", ns.OwnerReferences)
 	}
 	quota := &corev1.ResourceQuota{}
 	if err := c.Get(ctx, client.ObjectKey{Namespace: "acme", Name: QuotaName}, quota); err != nil {
@@ -59,6 +64,13 @@ func TestReconcileCreatesNamespaceAndQuota(t *testing.T) {
 	}
 	if quota.Labels["profile"] != "small" {
 		t.Fatalf("quota labels %v", quota.Labels)
+	}
+	if pods := quota.Spec.Hard[corev1.ResourcePods]; pods.String() != "10" {
+		t.Fatalf("quota hard limits %v", quota.Spec.Hard)
+	}
+	owners := quota.OwnerReferences
+	if len(owners) != 1 || owners[0].Kind != "Namespace" || owners[0].Name != "acme" || owners[0].Controller != nil {
+		t.Fatalf("quota owners %+v, want the Namespace as a plain owner", owners)
 	}
 	got := &v1alpha1.Tenant{}
 	if err := c.Get(ctx, client.ObjectKey{Namespace: "default", Name: "acme"}, got); err != nil {
@@ -125,7 +137,7 @@ func TestExtractsWithoutUnsupportedConstructs(t *testing.T) {
 	for _, rule := range res.Watches.Rules {
 		kinds = append(kinds, rule.Resource.Kind+"/"+rule.Mapping)
 	}
-	if want := []string{"Tenant/self", "Namespace/owner"}; !equal(kinds, want) {
+	if want := []string{"Tenant/self"}; !equal(kinds, want) {
 		t.Fatalf("watches %v, want %v", kinds, want)
 	}
 }

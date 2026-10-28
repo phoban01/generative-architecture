@@ -289,9 +289,40 @@ func TestAdoptionGuideWalk(t *testing.T) {
 		t.Fatalf("arch init wrote more than the guide says: %+v", s)
 	}
 
-	// Sections 3 and 4: without a catalog the report is the committed one.
+	// Sections 3 and 4: without a catalog and an abstraction, extraction
+	// reads SetupWithManager and Reconcile and lists every gap, including
+	// the setup preamble and the first Reconcile statement.
 	_, err = arch("extract")
-	wantErr(err, "arch extract: unsupported constructs: 1 found, listed in generated/support.yaml")
+	wantErr(err, "arch extract: unsupported constructs: 54 found, listed in generated/support.yaml")
+	s, err := report.Read(filepath.Join(generatedDir, supportFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(s.Unsupported) != 54 || len(s.Unresolved) != 1 || s.Unresolved[0].Construct != "cronJob.spec.concurrencyPolicy" {
+		t.Fatalf("report without a catalog: %d unsupported, unresolved %+v", len(s.Unsupported), s.Unresolved)
+	}
+	out, err := arch("support")
+	for _, row := range []string{
+		"internal/controller/cronjob_controller.go:553  expected an unstructured object declaration",
+		"internal/controller/cronjob_controller.go:101  unsummarized call to sigs.k8s.io/controller-runtime/pkg/log.FromContext",
+	} {
+		if err != nil || !strings.Contains(out, row) {
+			t.Fatalf("arch support lacks %q: %v\n%s", row, err, out)
+		}
+	}
+
+	// Section 5: strict mode fails on the first construct in file order.
+	_, err = arch("--strict", "support")
+	wantErr(err, "arch support: verification mode (--strict) refuses incomplete semantics: 55 unsupported or unresolved items in the selected packages, first call log := logf.FromContext(ctx) at internal/controller/cronjob_controller.go:101")
+
+	// Sections 6 to 9 with the committed project and abstraction. The
+	// abstraction selects spec.suspend and status.lastScheduleTime, so
+	// the frontend reads further on their lines.
+	for _, name := range []string{projectFile, "abstraction.yaml"} {
+		copyTree(t, filepath.Join(src, name), filepath.Join(dir, name))
+	}
+	_, err = arch("--strict", "extract")
+	wantErr(err, "arch extract: unsupported constructs: 55 found, listed in generated/support.yaml")
 	got, err := os.ReadFile(filepath.Join(generatedDir, supportFile))
 	if err != nil {
 		t.Fatal(err)
@@ -301,23 +332,8 @@ func TestAdoptionGuideWalk(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !bytes.Equal(got, want) {
-		t.Fatalf("the report without a catalog differs from the committed one:\n%s", got)
+		t.Fatalf("the report with the committed project differs from the committed one:\n%s", got)
 	}
-	out, err := arch("support")
-	if err != nil || !strings.Contains(out, "internal/controller/cronjob_controller.go:553  expected an unstructured object declaration") {
-		t.Fatalf("arch support: %v\n%s", err, out)
-	}
-
-	// Section 5: strict mode fails on the same construct.
-	_, err = arch("--strict", "support")
-	wantErr(err, "arch support: verification mode (--strict) refuses incomplete semantics: 1 unsupported or unresolved items in the selected packages, first preamble if r.Clock == nil {\n\tr.Clock = realClock{}\n} at internal/controller/cronjob_controller.go:553")
-
-	// Sections 6 to 9 with the committed project and abstraction.
-	for _, name := range []string{projectFile, "abstraction.yaml"} {
-		copyTree(t, filepath.Join(src, name), filepath.Join(dir, name))
-	}
-	_, err = arch("--strict", "extract")
-	wantErr(err, "arch extract: unsupported constructs: 1 found, listed in generated/support.yaml")
 	_, err = arch("generate")
 	wantErr(err, "arch generate: generated/ir.yaml not found; run arch extract first")
 	_, err = arch("check")

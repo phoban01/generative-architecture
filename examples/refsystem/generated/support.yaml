@@ -1,0 +1,311 @@
+apiVersion: architecture.local/v1alpha1
+kind: SupportReport
+metadata:
+  name: refsystem
+status:
+  included:
+    - kind: controller
+      construct: github.com/phoban01/generative-architecture/examples/refsystem/controllers/backup.BackupReconciler
+      location:
+        file: examples/refsystem/controllers/backup/controller.go
+        line: 34
+    - kind: reconcile
+      construct: github.com/phoban01/generative-architecture/examples/refsystem/controllers/backup.BackupReconciler
+      reason: 39 process nodes
+      location:
+        file: examples/refsystem/controllers/backup/controller.go
+        line: 45
+    - kind: watch
+      construct: github.com/phoban01/generative-architecture/examples/refsystem/controllers/backup.BackupReconciler watches refsystem.example.org/v1alpha1/Backup
+      location:
+        file: examples/refsystem/controllers/backup/controller.go
+        line: 106
+    - kind: watch
+      construct: github.com/phoban01/generative-architecture/examples/refsystem/controllers/backup.BackupReconciler watches batch/v1/Job
+      location:
+        file: examples/refsystem/controllers/backup/controller.go
+        line: 107
+    - kind: watch
+      construct: github.com/phoban01/generative-architecture/examples/refsystem/controllers/backup.BackupReconciler watches refsystem.example.org/v1alpha1/Database
+      location:
+        file: examples/refsystem/controllers/backup/controller.go
+        line: 108
+    - kind: controller
+      construct: github.com/phoban01/generative-architecture/examples/refsystem/controllers/database.DatabaseReconciler
+      location:
+        file: examples/refsystem/controllers/database/controller.go
+        line: 25
+    - kind: reconcile
+      construct: github.com/phoban01/generative-architecture/examples/refsystem/controllers/database.DatabaseReconciler
+      reason: 31 process nodes
+      location:
+        file: examples/refsystem/controllers/database/controller.go
+        line: 34
+    - kind: watch
+      construct: github.com/phoban01/generative-architecture/examples/refsystem/controllers/database.DatabaseReconciler watches refsystem.example.org/v1alpha1/Database
+      location:
+        file: examples/refsystem/controllers/database/controller.go
+        line: 88
+    - kind: watch
+      construct: github.com/phoban01/generative-architecture/examples/refsystem/controllers/database.DatabaseReconciler watches v1/Secret
+      location:
+        file: examples/refsystem/controllers/database/controller.go
+        line: 89
+    - kind: watch
+      construct: github.com/phoban01/generative-architecture/examples/refsystem/controllers/database.DatabaseReconciler watches refsystem.example.org/v1alpha1/Tenant
+      location:
+        file: examples/refsystem/controllers/database/controller.go
+        line: 90
+    - kind: controller
+      construct: github.com/phoban01/generative-architecture/examples/refsystem/controllers/tenant.TenantReconciler
+      location:
+        file: examples/refsystem/controllers/tenant/controller.go
+        line: 24
+    - kind: reconcile
+      construct: github.com/phoban01/generative-architecture/examples/refsystem/controllers/tenant.TenantReconciler
+      reason: 32 process nodes
+      location:
+        file: examples/refsystem/controllers/tenant/controller.go
+        line: 36
+    - kind: watch
+      construct: github.com/phoban01/generative-architecture/examples/refsystem/controllers/tenant.TenantReconciler watches refsystem.example.org/v1alpha1/Tenant
+      location:
+        file: examples/refsystem/controllers/tenant/controller.go
+        line: 87
+  summarized: []
+  unsupported: []
+  unresolved:
+    - kind: field
+      construct: backup.metadata.namespace
+      reason: no abstraction selects this field
+      location:
+        file: examples/refsystem/controllers/backup/controller.go
+        line: 56
+    - kind: field
+      construct: database.status.ready
+      reason: no abstraction selects this field
+      location:
+        file: examples/refsystem/controllers/backup/controller.go
+        line: 63
+    - kind: field
+      construct: backup.metadata.name
+      reason: no abstraction selects this field
+      location:
+        file: examples/refsystem/controllers/backup/controller.go
+        line: 68
+    - kind: field
+      construct: job.metadata.namespace
+      reason: no abstraction selects this field
+      location:
+        file: examples/refsystem/controllers/backup/controller.go
+        line: 70
+    - kind: field
+      construct: job.metadata.name
+      reason: no abstraction selects this field
+      location:
+        file: examples/refsystem/controllers/backup/controller.go
+        line: 71
+    - kind: field
+      construct: job.spec.template.spec.restartPolicy
+      reason: no abstraction selects this field
+      location:
+        file: examples/refsystem/controllers/backup/controller.go
+        line: 72
+    - kind: field
+      construct: job.spec.template.spec.containers
+      reason: written without a model value; no abstraction selects this field
+      location:
+        file: examples/refsystem/controllers/backup/controller.go
+        line: 73
+    - kind: field
+      construct: job.metadata.ownerReferences.blockOwnerDeletion
+      reason: written without a model value; no abstraction selects this field
+      location:
+        file: examples/refsystem/controllers/backup/controller.go
+        line: 74
+    - kind: field
+      construct: job.metadata.ownerReferences.controller
+      reason: written without a model value; no abstraction selects this field
+      location:
+        file: examples/refsystem/controllers/backup/controller.go
+        line: 74
+    - kind: field
+      construct: job.metadata.ownerReferences.name
+      reason: written without a model value; no abstraction selects this field
+      location:
+        file: examples/refsystem/controllers/backup/controller.go
+        line: 74
+    - kind: field
+      construct: job.metadata.ownerReferences.uid
+      reason: written without a model value; no abstraction selects this field
+      location:
+        file: examples/refsystem/controllers/backup/controller.go
+        line: 74
+    - kind: field
+      construct: job.status.succeeded
+      reason: no abstraction selects this field
+      location:
+        file: examples/refsystem/controllers/backup/controller.go
+        line: 85
+    - kind: field
+      construct: backup.status.phase
+      reason: no abstraction selects this field
+      location:
+        file: examples/refsystem/controllers/backup/controller.go
+        line: 86
+    - kind: field
+      construct: job.status.failed
+      reason: no abstraction selects this field
+      location:
+        file: examples/refsystem/controllers/backup/controller.go
+        line: 87
+    - kind: field
+      construct: job.status.active
+      reason: no abstraction selects this field
+      location:
+        file: examples/refsystem/controllers/backup/controller.go
+        line: 89
+    - kind: field
+      construct: database.metadata.namespace
+      reason: no abstraction selects this field
+      location:
+        file: examples/refsystem/controllers/database/controller.go
+        line: 47
+    - kind: field
+      construct: tenant.status.namespaceReady
+      reason: no abstraction selects this field
+      location:
+        file: examples/refsystem/controllers/database/controller.go
+        line: 54
+    - kind: field
+      construct: database.metadata.name
+      reason: no abstraction selects this field
+      location:
+        file: examples/refsystem/controllers/database/controller.go
+        line: 62
+    - kind: field
+      construct: secret.metadata.namespace
+      reason: no abstraction selects this field
+      location:
+        file: examples/refsystem/controllers/database/controller.go
+        line: 64
+    - kind: field
+      construct: secret.metadata.name
+      reason: no abstraction selects this field
+      location:
+        file: examples/refsystem/controllers/database/controller.go
+        line: 65
+    - kind: field
+      construct: secret.stringData.username
+      reason: no abstraction selects this field
+      location:
+        file: examples/refsystem/controllers/database/controller.go
+        line: 66
+    - kind: field
+      construct: secret.metadata.ownerReferences.blockOwnerDeletion
+      reason: written without a model value; no abstraction selects this field
+      location:
+        file: examples/refsystem/controllers/database/controller.go
+        line: 67
+    - kind: field
+      construct: secret.metadata.ownerReferences.controller
+      reason: written without a model value; no abstraction selects this field
+      location:
+        file: examples/refsystem/controllers/database/controller.go
+        line: 67
+    - kind: field
+      construct: secret.metadata.ownerReferences.name
+      reason: written without a model value; no abstraction selects this field
+      location:
+        file: examples/refsystem/controllers/database/controller.go
+        line: 67
+    - kind: field
+      construct: secret.metadata.ownerReferences.uid
+      reason: written without a model value; no abstraction selects this field
+      location:
+        file: examples/refsystem/controllers/database/controller.go
+        line: 67
+    - kind: field
+      construct: database.status.ready
+      reason: no abstraction selects this field
+      location:
+        file: examples/refsystem/controllers/database/controller.go
+        line: 77
+    - kind: field
+      construct: database.status.secretName
+      reason: no abstraction selects this field
+      location:
+        file: examples/refsystem/controllers/database/controller.go
+        line: 77
+    - kind: field
+      construct: tenant.metadata.name
+      reason: no abstraction selects this field
+      location:
+        file: examples/refsystem/controllers/tenant/controller.go
+        line: 47
+    - kind: field
+      construct: namespace.metadata.name
+      reason: no abstraction selects this field
+      location:
+        file: examples/refsystem/controllers/tenant/controller.go
+        line: 49
+    - kind: field
+      construct: quota.metadata.namespace
+      reason: no abstraction selects this field
+      location:
+        file: examples/refsystem/controllers/tenant/controller.go
+        line: 61
+    - kind: field
+      construct: quota.metadata.name
+      reason: no abstraction selects this field
+      location:
+        file: examples/refsystem/controllers/tenant/controller.go
+        line: 62
+    - kind: field
+      construct: quota.metadata.labels.profile
+      reason: no abstraction selects this field
+      location:
+        file: examples/refsystem/controllers/tenant/controller.go
+        line: 63
+    - kind: field
+      construct: tenant.spec.quota
+      reason: no abstraction selects this field
+      location:
+        file: examples/refsystem/controllers/tenant/controller.go
+        line: 63
+    - kind: field
+      construct: quota.spec.hard.pods
+      reason: written without a model value; no abstraction selects this field
+      location:
+        file: examples/refsystem/controllers/tenant/controller.go
+        line: 64
+    - kind: field
+      construct: quota.metadata.ownerReferences.blockOwnerDeletion
+      reason: written without a model value; no abstraction selects this field
+      location:
+        file: examples/refsystem/controllers/tenant/controller.go
+        line: 65
+    - kind: field
+      construct: quota.metadata.ownerReferences.controller
+      reason: written without a model value; no abstraction selects this field
+      location:
+        file: examples/refsystem/controllers/tenant/controller.go
+        line: 65
+    - kind: field
+      construct: quota.metadata.ownerReferences.name
+      reason: written without a model value; no abstraction selects this field
+      location:
+        file: examples/refsystem/controllers/tenant/controller.go
+        line: 65
+    - kind: field
+      construct: quota.metadata.ownerReferences.uid
+      reason: written without a model value; no abstraction selects this field
+      location:
+        file: examples/refsystem/controllers/tenant/controller.go
+        line: 65
+    - kind: field
+      construct: tenant.status.namespaceReady
+      reason: no abstraction selects this field
+      location:
+        file: examples/refsystem/controllers/tenant/controller.go
+        line: 75

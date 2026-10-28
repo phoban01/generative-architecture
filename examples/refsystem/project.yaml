@@ -6,11 +6,17 @@ spec:
   module: github.com/phoban01/generative-architecture
   packages:
     - ./examples/refsystem/api/...
+    - ./examples/refsystem/controllers/tenant
+    - ./examples/refsystem/controllers/database
+    - ./examples/refsystem/controllers/backup
   catalog:
     crds:
       - config/crd/refsystem.example.org_tenants.yaml
       - config/crd/refsystem.example.org_databases.yaml
       - config/crd/refsystem.example.org_backups.yaml
+    # The built-in kinds the controllers create and watch.
+    discovery:
+      - config/discovery/builtin.json
   runtime:
     profile: controller-runtime
   bounds:

@@ -1,0 +1,191 @@
+apiVersion: architecture.local/v1alpha1
+kind: ArchitectureIR
+metadata:
+  name: refsystem
+status:
+  schema: v1alpha1
+  controllers:
+    - id: github.com/phoban01/generative-architecture/examples/refsystem/controllers/backup.BackupReconciler
+      name: BackupReconciler
+      package: github.com/phoban01/generative-architecture/examples/refsystem/controllers/backup
+      receiver: BackupReconciler
+      setup:
+        file: examples/refsystem/controllers/backup/controller.go
+        line: 104
+        sha256: f0586101a5c8c696d7cab665cb36cf9677fa5dfe0dbf5d799d52547d32600f2a
+      injection:
+        - name: Client
+          type: sigs.k8s.io/controller-runtime/pkg/client.Client
+      provenance:
+        module: github.com/phoban01/generative-architecture
+        source:
+          file: examples/refsystem/controllers/backup/controller.go
+          line: 34
+          sha256: 04a31913c15119941e2873f656a8c87d4b952ba87bf4d1de3d5859ac058ad801
+        generator: sourcegen
+    - id: github.com/phoban01/generative-architecture/examples/refsystem/controllers/database.DatabaseReconciler
+      name: DatabaseReconciler
+      package: github.com/phoban01/generative-architecture/examples/refsystem/controllers/database
+      receiver: DatabaseReconciler
+      setup:
+        file: examples/refsystem/controllers/database/controller.go
+        line: 86
+        sha256: 72235afc821f7c19610cea24f17763d6df3ca61186cb8b8bd295b4ac20659190
+      injection:
+        - name: Client
+          type: sigs.k8s.io/controller-runtime/pkg/client.Client
+      provenance:
+        module: github.com/phoban01/generative-architecture
+        source:
+          file: examples/refsystem/controllers/database/controller.go
+          line: 25
+          sha256: 4003303b8594db61f3d0aae6ed3e91521d65d68a9f27ee25ec56f5af587aa118
+        generator: sourcegen
+    - id: github.com/phoban01/generative-architecture/examples/refsystem/controllers/tenant.TenantReconciler
+      name: TenantReconciler
+      package: github.com/phoban01/generative-architecture/examples/refsystem/controllers/tenant
+      receiver: TenantReconciler
+      setup:
+        file: examples/refsystem/controllers/tenant/controller.go
+        line: 85
+        sha256: cd29526b1c03a8970dd8b1af5ccd2df1a04136de16e626221bccced809e53fd1
+      injection:
+        - name: Client
+          type: sigs.k8s.io/controller-runtime/pkg/client.Client
+      provenance:
+        module: github.com/phoban01/generative-architecture
+        source:
+          file: examples/refsystem/controllers/tenant/controller.go
+          line: 24
+          sha256: 3406e691cf65d6c82a90a0c49b779170b78880da6cf013656973080157a51588
+        generator: sourcegen
+  watches:
+    - id: c70b2b85553f2927
+      controller: github.com/phoban01/generative-architecture/examples/refsystem/controllers/backup.BackupReconciler
+      resource:
+        group: refsystem.example.org
+        version: v1alpha1
+        kind: Backup
+      primary: true
+      mapping:
+        kind: self
+      evidence: extracted
+      provenance:
+        source:
+          file: examples/refsystem/controllers/backup/controller.go
+          line: 106
+          sha256: 04a31913c15119941e2873f656a8c87d4b952ba87bf4d1de3d5859ac058ad801
+        generator: watchgen
+    - id: bcb434abeb76e9c2
+      controller: github.com/phoban01/generative-architecture/examples/refsystem/controllers/backup.BackupReconciler
+      resource:
+        group: batch
+        version: v1
+        kind: Job
+      mapping:
+        kind: owner
+        ownerGVK:
+          group: refsystem.example.org
+          version: v1alpha1
+          kind: Backup
+        onlyController: true
+      evidence: extracted
+      provenance:
+        source:
+          file: examples/refsystem/controllers/backup/controller.go
+          line: 107
+          sha256: 04a31913c15119941e2873f656a8c87d4b952ba87bf4d1de3d5859ac058ad801
+        generator: watchgen
+    - id: f3e23f3df367c629
+      controller: github.com/phoban01/generative-architecture/examples/refsystem/controllers/backup.BackupReconciler
+      resource:
+        group: refsystem.example.org
+        version: v1alpha1
+        kind: Database
+      mapping:
+        kind: reference
+        dependent:
+          group: refsystem.example.org
+          version: v1alpha1
+          kind: Backup
+        dependentPath:
+          - Spec
+          - Database
+      evidence: extracted
+      provenance:
+        source:
+          file: examples/refsystem/controllers/backup/controller.go
+          line: 108
+          sha256: 04a31913c15119941e2873f656a8c87d4b952ba87bf4d1de3d5859ac058ad801
+        generator: watchgen
+    - id: 31aae2fe513d5834
+      controller: github.com/phoban01/generative-architecture/examples/refsystem/controllers/database.DatabaseReconciler
+      resource:
+        group: refsystem.example.org
+        version: v1alpha1
+        kind: Database
+      primary: true
+      mapping:
+        kind: self
+      evidence: extracted
+      provenance:
+        source:
+          file: examples/refsystem/controllers/database/controller.go
+          line: 88
+          sha256: 4003303b8594db61f3d0aae6ed3e91521d65d68a9f27ee25ec56f5af587aa118
+        generator: watchgen
+    - id: 3ef8223d96e94c16
+      controller: github.com/phoban01/generative-architecture/examples/refsystem/controllers/database.DatabaseReconciler
+      resource:
+        version: v1
+        kind: Secret
+      mapping:
+        kind: owner
+        ownerGVK:
+          group: refsystem.example.org
+          version: v1alpha1
+          kind: Database
+        onlyController: true
+      evidence: extracted
+      provenance:
+        source:
+          file: examples/refsystem/controllers/database/controller.go
+          line: 89
+          sha256: 4003303b8594db61f3d0aae6ed3e91521d65d68a9f27ee25ec56f5af587aa118
+        generator: watchgen
+    - id: 0182dbdba817e843
+      controller: github.com/phoban01/generative-architecture/examples/refsystem/controllers/database.DatabaseReconciler
+      resource:
+        group: refsystem.example.org
+        version: v1alpha1
+        kind: Tenant
+      mapping:
+        kind: label
+        dependent:
+          group: refsystem.example.org
+          version: v1alpha1
+          kind: Database
+        label: refsystem.example.org/tenant
+      evidence: extracted
+      provenance:
+        source:
+          file: examples/refsystem/controllers/database/controller.go
+          line: 90
+          sha256: 4003303b8594db61f3d0aae6ed3e91521d65d68a9f27ee25ec56f5af587aa118
+        generator: watchgen
+    - id: dba87b4a78932520
+      controller: github.com/phoban01/generative-architecture/examples/refsystem/controllers/tenant.TenantReconciler
+      resource:
+        group: refsystem.example.org
+        version: v1alpha1
+        kind: Tenant
+      primary: true
+      mapping:
+        kind: self
+      evidence: extracted
+      provenance:
+        source:
+          file: examples/refsystem/controllers/tenant/controller.go
+          line: 87
+          sha256: 3406e691cf65d6c82a90a0c49b779170b78880da6cf013656973080157a51588
+        generator: watchgen

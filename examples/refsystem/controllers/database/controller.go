@@ -1,5 +1,5 @@
 // Package database reconciles Databases: once a Database's Tenant has a
-// ready namespace, it creates the credentials Secret in that namespace.
+// ready namespace, it creates the credentials Secret of the Database.
 package database
 
 import (
@@ -7,8 +7,10 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -22,11 +24,13 @@ const TenantLabel = "refsystem.example.org/tenant"
 // DatabaseReconciler creates the credentials Secret of a Database.
 type DatabaseReconciler struct {
 	Client client.Client
+	Scheme *runtime.Scheme
 }
 
 // Reconcile waits for the Database's Tenant to be ready, creates the
-// credentials Secret in the tenant namespace when it is missing and records
-// the Secret in the Database's status. The Secret has the Database's name.
+// credentials Secret when it is missing and records the Secret in the
+// Database's status. The Secret lives beside the Database, because an
+// owner reference cannot cross namespaces, and the Database controls it.
 func (r *DatabaseReconciler) Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
 	database := &v1alpha1.Database{}
 	err := r.Client.Get(ctx, req.NamespacedName, database)
@@ -51,12 +55,18 @@ func (r *DatabaseReconciler) Reconcile(ctx context.Context, req reconcile.Reques
 		return reconcile.Result{}, nil
 	}
 
+	// The Secret has the Database's name. database.Name + "-credentials"
+	// would be clearer, but the extractor cannot yet lower a string
+	// concatenation with a field.
 	secret := &corev1.Secret{}
-	err = r.Client.Get(ctx, client.ObjectKey{Namespace: tenant.Name, Name: database.Name}, secret)
+	err = r.Client.Get(ctx, client.ObjectKey{Namespace: database.Namespace, Name: database.Name}, secret)
 	if apierrors.IsNotFound(err) {
-		secret.Namespace = tenant.Name
+		secret.Namespace = database.Namespace
 		secret.Name = database.Name
 		secret.StringData = map[string]string{"username": database.Name}
+		if err := controllerutil.SetControllerReference(database, secret, r.Scheme); err != nil {
+			return reconcile.Result{}, err
+		}
 		if err := r.Client.Create(ctx, secret); err != nil {
 			return reconcile.Result{}, err
 		}

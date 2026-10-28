@@ -1,0 +1,19 @@
+apiVersion: architecture.local/v1alpha1
+kind: Abstraction
+metadata:
+  name: inventory
+spec:
+  resources:
+    - gvk: {group: "", version: v1, kind: ConfigMap}
+      objects:
+        - {id: source, namespace: demo, name: source}
+      fields:
+        - {path: [data, a], type: string}
+    # The Secret's map literal names key a; the abstraction also selects
+    # key b, which the literal omits.
+    - gvk: {group: "", version: v1, kind: Secret}
+      objects:
+        - {id: copy, namespace: demo, name: source}
+      fields:
+        - {path: [stringData, a], type: string}
+        - {path: [stringData, b], type: string}
