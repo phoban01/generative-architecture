@@ -21,12 +21,14 @@ Line numbers refer to `internal/controller/cronjob_controller.go` at the pin.
   gap, a scratch copy of the controller had the reported construct removed,
   and extraction ran again. The scratch copy kept the line numbers. Nothing
   in this directory was changed.
-- `arch extract` reads only `SetupWithManager`. Gaps 4 to 13 come from
-  running the typed `Reconcile` frontend (`goflow.ExtractTyped`) through
-  `examples/refsystem/internal/extractcheck` on the scratch copy. Those
-  options summarize every controller-runtime client call and map every
-  field of basic type. A diagnostic there means the frontend cannot read the
-  construct at all.
+- When this list was written, `arch extract` read only `SetupWithManager`.
+  Gaps 4 to 13 came from running the typed `Reconcile` frontend
+  (`goflow.ExtractTyped`) through `examples/refsystem/internal/extractcheck`
+  on the scratch copy. Since #103, `arch extract` and `arch support` run
+  that frontend on every `Reconcile` and collect every diagnostic, so
+  `generated/support.yaml` now lists these gaps directly (55 unsupported
+  items). A diagnostic there means the frontend cannot read the construct at
+  all.
 - Gap 14 is from reading the code. The probe removed these constructs
   together with others, so no diagnostic text is recorded for them.
 
@@ -76,18 +78,16 @@ smallest extension that would support it.
   statement and go on with the next statement. Do the same per top-level
   statement in `goflow`. Report all of them.
 
-### 4. arch extract does not read Reconcile
+### 4. arch extract does not read Reconcile (closed by #103)
 
 - Construct: the `Reconcile` method (line 100).
-- Location: `cmd/arch/extract.go`, which extracts only `SetupWithManager`.
-- Diagnostic: none. The support report lists the controller as included,
-  but nothing in its `Reconcile` is in the report.
-- Problem: the report says nothing about the main body of the controller.
-  An author gets no list of the constructs that block a model.
-- Smallest extension: run `goflow.ExtractTyped` on `Reconcile` in
-  `arch extract` with the built-in client summaries, and add its
-  diagnostics to the support report. This needs a decision on the default
-  options when the project has no abstraction document.
+- Location: `cmd/arch/extract.go`, which at the time extracted only
+  `SetupWithManager`.
+- Resolution: `arch extract` and `arch support` now run `goflow.ExtractTyped`
+  on every `Reconcile` with the built-in client summaries. Without an
+  abstraction document, each field the method reads or writes is reported
+  as a located `unresolved` item, as ADR-0008 recommended. Every diagnostic
+  reaches the support report.
 
 ### 5. Client methods promoted through an embedded client.Client
 
