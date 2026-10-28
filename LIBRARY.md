@@ -5,10 +5,10 @@ Start with the adoption guides for [a project you own](docs/adopt-owned-project.
 Public packages live under `pkg/`. Example-specific wiring stays under `examples/`. The module path is `github.com/phoban01/generative-architecture`. Add it to another module with:
 
 ```sh
-go get github.com/phoban01/generative-architecture@<version>
+go get github.com/phoban01/generative-architecture@v0.1.0
 ```
 
-No version is tagged yet. v0.1.0 is the first planned release. Until then, use a commit hash as the version, or point at a local checkout:
+v0.1.0 is the first release. The compatibility policy is in [docs/release.md](docs/release.md). To work against a local checkout instead:
 
 ```go
 require github.com/phoban01/generative-architecture v0.0.0

@@ -170,7 +170,7 @@ func TestOwnedProjectGuideWalk(t *testing.T) {
 	}
 
 	// Section 1.
-	w.skip("go install github.com/phoban01/generative-architecture/cmd/arch@<commit>", "placeholder version; needs the network")
+	w.skip("go install github.com/phoban01/generative-architecture/cmd/arch@v0.1.0", "needs the network")
 
 	// Section 2: arch init in an empty directory writes the module and
 	// packages of the committed project, and no catalog or abstraction.

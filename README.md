@@ -116,10 +116,10 @@ The job fails on a constraint violation or Quint finding, on a replay finding, o
 ```yaml
 jobs:
   architecture:
-    uses: phoban01/generative-architecture/.github/workflows/arch.yml@<ref>
+    uses: phoban01/generative-architecture/.github/workflows/arch.yml@v0.1.0
     with:
       project: project.yaml
-      arch-package: github.com/phoban01/generative-architecture/cmd/arch@<ref>
+      arch-package: github.com/phoban01/generative-architecture/cmd/arch@v0.1.0
       tools-dir: hack/tools   # a package.json and lockfile that pin Quint and LikeC4
 ```
 

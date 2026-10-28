@@ -12,17 +12,17 @@ every file and `make` target this checklist names exists.
 | Step | State |
 | --- | --- |
 | Module path | Done (#109) |
-| CI green on GitHub | Open: check on the release commit |
-| Evidence refreshed with the pinned tools | Open: run on the release commit |
-| Envtest job | Done in CI config; check on the release commit |
-| Architecture pipeline job | Done in CI config; check on the release commit |
+| CI green on GitHub | Done: run 40762032430 on 78b4f0e, all jobs passed |
+| Evidence refreshed with the pinned tools | Done (cc419ec) |
+| Envtest job | Done: passed on Go 1.26.x and 1.27.x |
+| Architecture pipeline job | Done: passed on 78b4f0e |
 | Compatibility policy for `pkg/` | Done: written below |
 | Tool version ranges | Done (ADR-0003) |
 | Go versions | Done: 1.26 and 1.27 |
 | Receipt drift scope | Done (#142, ADR-0009) |
 | Stray `devbox.lock` change | Done: restored |
 | Adoption guides | Done (#110) |
-| Tag and release notes | Open: the owner's act |
+| Tag and release notes | Tag v0.1.0 created on 78b4f0e; the owner pushes it |
 
 ## 1. Module path
 
@@ -41,8 +41,9 @@ pass:
 - `architecture`: the reusable workflow `.github/workflows/arch.yml` on the
   ConfigMirror project.
 
-The last CI run on GitHub passed on 2026-10-15. Local `main` has many
-commits since then that GitHub has not run.
+Run 40762032430 on 78b4f0e passed all four jobs on 2026-10-28. The first
+run on cc419ec failed because the runner had an empty module cache for the
+pinned CronJob module; the `go` job now fills it with `go mod download`.
 
 ## 3. Refresh all evidence with the pinned tools
 
@@ -135,11 +136,12 @@ The committed value `0.0.5` is restored, and the tree is clean.
 
 ## 11. Tag and release
 
-The owner's act. After steps 2 and 3:
+Steps 2 and 3 are done. The annotated tag `v0.1.0` exists in the local
+checkout on 78b4f0e, the commit CI passed. The owner publishes it:
 
 ```sh
-git tag -a v0.1.0 -m "v0.1.0"
 git push origin v0.1.0
+git push origin main
 ```
 
 Then check ADOPT-6 from a module outside this repository:
@@ -149,11 +151,9 @@ go get github.com/phoban01/generative-architecture@v0.1.0
 go install github.com/phoban01/generative-architecture/cmd/arch@v0.1.0
 ```
 
-Then replace `@<commit>`, `@<ref>` and the "no release is tagged" notes with
-`@v0.1.0` in `LIBRARY.md`, `README.md`, `docs/adopt-owned-project.md` and
-`docs/adopt-upstream-project.md`. Mark ADOPT-6 and the Checkpoint C row of
-`PROJECT-PLAN.md` done.
-
+`LIBRARY.md`, `README.md` and `docs/adopt-owned-project.md` already name
+`@v0.1.0`. ADOPT-6 and the Checkpoint C row of `PROJECT-PLAN.md` are marked
+done. Create the GitHub release from the tag with the notes in section 12.
 ## 12. Release notes outline
 
 **Summary.** A Go library and the `arch` CLI that extract controller

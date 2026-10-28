@@ -21,10 +21,10 @@ repository root unless a section says otherwise.
 
 - **Go.** `go.mod` declares Go 1.26.0 as the minimum. The README lists the
   supported releases.
-- **arch.** No release is tagged yet. Install a commit of this module:
+- **arch.** Install the released command:
 
   ```sh
-  go install github.com/phoban01/generative-architecture/cmd/arch@<commit>
+  go install github.com/phoban01/generative-architecture/cmd/arch@v0.1.0
   ```
 
   In a checkout of this repository, `make build` writes `bin/arch`.
@@ -330,10 +330,10 @@ Call the reusable workflow from your repository:
 ```yaml
 jobs:
   architecture:
-    uses: phoban01/generative-architecture/.github/workflows/arch.yml@<commit>
+    uses: phoban01/generative-architecture/.github/workflows/arch.yml@v0.1.0
     with:
       project: project.yaml
-      arch-package: github.com/phoban01/generative-architecture/cmd/arch@<commit>
+      arch-package: github.com/phoban01/generative-architecture/cmd/arch@v0.1.0
       tools-dir: hack/tools   # a package.json and lockfile that pin Quint and LikeC4
 ```
 
