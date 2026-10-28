@@ -55,7 +55,7 @@ status:
     - path: examples/configmirror/project.yaml
       sha256: 7c30e5b3c3d049c92d08b69b9db78571c8d90da0eb657895a9113676bc6220f9
     - path: go.mod
-      sha256: 3aea38742cd601a29a0029926de14d1c099efb8c8fc3eb9456067d7bdb3c7a88
+      sha256: ef66f58b0664696408246827ef8fbb54accc6ec775ff92938f55ff310d8d02ac
     - path: go.sum
       sha256: e8531c7210f8b9a53c6e17b31d25ffeafb85acb188a97bb21d9b42047be35ef2
     - path: pkg/abstraction/abstraction.go
