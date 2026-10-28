@@ -59,13 +59,14 @@ func TestExternalCronJobPinned(t *testing.T) {
 }
 
 // TestExternalCronJobBuilds builds the pinned controller as its own module
-// from the local module cache only.
+// from the local module cache only. CI fills the cache with go mod download
+// before the tests run, because the runner starts empty.
 func TestExternalCronJobBuilds(t *testing.T) {
 	cmd := exec.Command("go", "build", "./...")
 	cmd.Dir = cronJobDir
 	cmd.Env = append(os.Environ(), "GOWORK=off", "GOPROXY=off", "GOFLAGS=-mod=readonly")
 	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("go build in %s: %v\n%s", cronJobDir, err, out)
+		t.Fatalf("go build in %s: %v\n%s\nif modules are missing, run go mod download in that directory first", cronJobDir, err, out)
 	}
 }
 

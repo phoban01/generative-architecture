@@ -54,7 +54,9 @@ The Go source is not changed. Only the module files differ:
 - `go.sum` comes from `go mod tidy` with these versions. The module has no
   `replace` directive.
 - `github.com/robfig/cron v1.2.0` stays at the upstream version. It was
-  downloaded into the module cache once, with the source.
+  downloaded into the module cache once, with the source. The CI `go` job
+  runs `go mod download` in this directory before the tests, because the
+  runner starts with an empty cache.
 
 ## Files added for this project
 
@@ -76,4 +78,4 @@ The Go source is not changed. Only the module files differ:
 The directory is a separate module. The main module's `./...` does not
 include it, because it is under `testdata`.
 
-    cd testdata/external/cronjob && GOWORK=off GOPROXY=off go build ./...
+    cd testdata/external/cronjob && go mod download && GOWORK=off GOPROXY=off go build ./...
