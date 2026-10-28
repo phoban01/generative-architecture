@@ -22,7 +22,7 @@ every file and `make` target this checklist names exists.
 | Receipt drift scope | Done (#142, ADR-0009) |
 | Stray `devbox.lock` change | Done: restored |
 | Adoption guides | Done (#110) |
-| Tag and release notes | Tag v0.1.0 created on 78b4f0e; the owner pushes it |
+| Tag and release notes | Tag v0.1.0 pushed on 78b4f0e; the GitHub release is the owner's act |
 
 ## 1. Module path
 
@@ -136,20 +136,12 @@ The committed value `0.0.5` is restored, and the tree is clean.
 
 ## 11. Tag and release
 
-Steps 2 and 3 are done. The annotated tag `v0.1.0` exists in the local
-checkout on 78b4f0e, the commit CI passed. The owner publishes it:
+Steps 2 and 3 are done. The annotated tag `v0.1.0` points at 78b4f0e, the
+commit CI passed, and is pushed. ADOPT-6 is checked: `go get` and
+`go install` of v0.1.0 work from a module outside this repository.
 
-```sh
-git push origin v0.1.0
-git push origin main
-```
-
-Then check ADOPT-6 from a module outside this repository:
-
-```sh
-go get github.com/phoban01/generative-architecture@v0.1.0
-go install github.com/phoban01/generative-architecture/cmd/arch@v0.1.0
-```
+The release itself is the owner's act: create the GitHub release from the
+tag with the notes in section 12.
 
 `LIBRARY.md`, `README.md` and `docs/adopt-owned-project.md` already name
 `@v0.1.0`. ADOPT-6 and the Checkpoint C row of `PROJECT-PLAN.md` are marked
