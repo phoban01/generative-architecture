@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"go/ast"
 	"go/token"
+	"strings"
 
 	"github.com/phoban01/generative-architecture/pkg/report"
 )
@@ -71,6 +72,22 @@ func (e *extractor) diagnose(n ast.Node, construct, reason string) *Diagnostic {
 		}
 	}
 	return d
+}
+
+// unsupported locates a failure to compile the CEL lowered from the Go
+// expression n. A diagnostic passes through unchanged.
+func (e *extractor) unsupported(n ast.Node, err error) error {
+	if _, ok := AsDiagnostic(err); ok {
+		return err
+	}
+	return e.diagnose(n, "expression", firstLine(err))
+}
+
+// firstLine returns the first line of an error message, so a support
+// report row stays on one line.
+func firstLine(err error) string {
+	msg, _, _ := strings.Cut(err.Error(), "\n")
+	return msg
 }
 
 // NewDiagnostic builds a Diagnostic from a position in fset; frontends that

@@ -73,7 +73,7 @@ func (e *extractor) objectCall(c Callee, call *ast.CallExpr) (Node, bool, error)
 			return Node{}, true, err
 		}
 		if _, err := e.opts.Compiler.Compile(expr.Expression(v), e.opts.Scope, sym.Type); err != nil {
-			return Node{}, true, e.diagnose(call, "assign", "write of "+field+": "+err.Error())
+			return Node{}, true, e.diagnose(call, "assign", "write of "+field+": "+firstLine(err))
 		}
 		n.Updates[string(symbol)] = expr.Expression(v)
 	}

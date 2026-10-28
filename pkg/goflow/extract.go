@@ -142,7 +142,7 @@ func (e *extractor) expression(n ast.Expr, want string) (expr.Expression, error)
 		return "", err
 	}
 	if _, err = e.opts.Compiler.Compile(v, e.opts.Scope, want); err != nil {
-		return "", err
+		return "", e.unsupported(n, err)
 	}
 	return v, nil
 }
@@ -518,7 +518,7 @@ func (e *extractor) switchStmt(x *ast.SwitchStmt, next int) (int, error) {
 				}
 				condition = "(" + tag + " == " + lit + ")"
 				if _, err = e.opts.Compiler.Compile(condition, e.opts.Scope, "bool"); err != nil {
-					return 0, err
+					return 0, e.unsupported(ex, err)
 				}
 			} else if condition, err = e.expression(ex, "bool"); err != nil {
 				return 0, err
