@@ -51,6 +51,9 @@ type Node struct {
 	// source of d; the runtime model uses its own delay.
 	Requeue      string `yaml:"requeue,omitempty"`
 	RequeueAfter string `yaml:"requeueAfter,omitempty"`
+	// inMemory marks an assign node lowered from a built-in object
+	// summary, whose call's error result is bound to false.
+	inMemory bool
 }
 type Program struct {
 	Entry        int    `yaml:"entry"`
@@ -557,7 +560,26 @@ func (e *extractor) caseLiteral(ex ast.Expr) (expr.Expression, error) {
 // assignment binds each left-hand name to the node's Results so the summary
 // can update the corresponding model symbols.
 func (e *extractor) summarized(n Node, s ast.Stmt, next int) (int, error) {
-	if x, ok := s.(*ast.AssignStmt); ok && e.info != nil {
+	if x, ok := s.(*ast.AssignStmt); ok && e.info != nil && n.inMemory {
+		// An in-memory call summary: its only result is an error, which
+		// is nil.
+		if len(x.Lhs) != 1 {
+			return 0, e.diagnose(x, "assign", "unsupported assignment of a summarized call")
+		}
+		id, ok := x.Lhs[0].(*ast.Ident)
+		if !ok {
+			return 0, e.diagnose(x.Lhs[0], "assign", "unsupported assignment target")
+		}
+		if id.Name != "_" {
+			target := id.Name
+			if t, ok := e.opts.Targets[id.Name]; ok {
+				target = t
+			}
+			if err := e.succeed(&n, x, target); err != nil {
+				return 0, err
+			}
+		}
+	} else if x, ok := s.(*ast.AssignStmt); ok && e.info != nil {
 		var err error
 		if n, err = e.bindResults(n, x); err != nil {
 			return 0, err

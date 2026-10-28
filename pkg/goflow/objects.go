@@ -17,15 +17,19 @@ import (
 const ReturnedError = "err"
 
 // summarizeCall offers a call to a resolved symbol to the declared external
-// effects and then to Options.Call.
+// effects, then to Options.Call and last to the built-in object summaries.
+// An object summary yields a node of kind assign (see objectCall).
 func (e *extractor) summarizeCall(c Callee, call *ast.CallExpr) (Node, bool, error) {
 	if n, ok := e.externalCall(c); ok {
 		return n, true, nil
 	}
 	if e.opts.Call != nil {
-		return e.opts.Call(c, call, e.expression)
+		n, ok, err := e.opts.Call(c, call, e.expression)
+		if ok || err != nil {
+			return n, ok, err
+		}
 	}
-	return Node{}, false, nil
+	return e.objectCall(c, call)
 }
 
 // typedStatement lowers the statements that need type information to
@@ -381,6 +385,12 @@ func (e *extractor) returnCall(x *ast.ReturnStmt, next int) (int, bool, error) {
 			return 0, true, err
 		}
 		e.program.Nodes[ret].Source = Code(x)
+		if n.inMemory {
+			if err := e.succeed(&n, call, ReturnedError); err != nil {
+				return 0, true, err
+			}
+			return e.add(n, call, ret, 0), true, nil
+		}
 		n.Results = []expr.Expression{ReturnedError}
 		n.Error = ReturnedError
 		return e.add(n, call, ret, 0), true, nil
