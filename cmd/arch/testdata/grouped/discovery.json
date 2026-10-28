@@ -1,0 +1,16 @@
+[
+  {
+    "kind": "APIResourceList",
+    "groupVersion": "widgets.example.test/v1beta1",
+    "resources": [
+      {"name": "widgets", "singularName": "widget", "namespaced": true, "kind": "Widget", "verbs": ["get", "list", "watch"]}
+    ]
+  },
+  {
+    "kind": "APIResourceList",
+    "groupVersion": "other.example.test/v1beta1",
+    "resources": [
+      {"name": "widgets", "singularName": "widget", "namespaced": true, "kind": "Widget", "verbs": ["get", "list", "watch"]}
+    ]
+  }
+]

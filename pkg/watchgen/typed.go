@@ -3,6 +3,7 @@ package watchgen
 import (
 	"fmt"
 	"go/ast"
+	"go/constant"
 	"go/types"
 	"os"
 
@@ -39,7 +40,14 @@ func ExtractLoaded(l goflow.Loaded, resources, bindings map[string]effect.Resour
 	if l.Func.Recv != nil && len(l.Func.Recv.List) == 1 {
 		receiver = goflow.Code(l.Func.Recv.List[0].Type)
 	}
-	return extract(l.Package.Fset, l.File, l.Func, source, receiver, method, imports(l.File, info), resolve, resources, bindings)
+	stringConstant := func(e ast.Expr) (string, bool) {
+		tv, ok := info.Types[e]
+		if !ok || tv.Value == nil || tv.Value.Kind() != constant.String {
+			return "", false
+		}
+		return constant.StringVal(tv.Value), true
+	}
+	return extract(l.Package.Fset, l.File, l.Func, source, receiver, method, imports(l.File, info), resolve, stringConstant, resources, bindings)
 }
 
 // imports maps the package names in scope in f to their import paths, as

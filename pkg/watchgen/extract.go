@@ -27,6 +27,12 @@ type Rule struct {
 	OwnerKind      string           `yaml:"ownerKind,omitempty"`
 	Owner          *effect.Resource `yaml:"owner,omitempty"`
 	OnlyController bool             `yaml:"onlyController,omitempty"`
+	// List mappings list the Dependent kind in the watched object's
+	// namespace. A label mapping selects on the Label key; a reference
+	// mapping compares DependentPath with the watched object's name.
+	Dependent     *effect.Resource `yaml:"dependent,omitempty"`
+	Label         string           `yaml:"label,omitempty"`
+	DependentPath []string         `yaml:"dependentPath,omitempty"`
 }
 type Result struct {
 	Name  string `yaml:"name,omitempty"` // controller name given by Named, if any
@@ -76,13 +82,50 @@ func ExtractWithGVKs(source []byte, receiver, method string, resources, bindings
 		path, ok := imports[id.Name]
 		return path, ok
 	}
-	return extract(fs, f, goflow.FindMethod(f, receiver, method), source, receiver, method, imports, resolve, resources, bindings)
+	return extract(fs, f, goflow.FindMethod(f, receiver, method), source, receiver, method, imports, resolve, fileConstant(f), resources, bindings)
+}
+
+// fileConstant resolves a string literal, or the name of a string constant
+// declared at the top level of f, to its value.
+func fileConstant(f *ast.File) func(ast.Expr) (string, bool) {
+	return func(e ast.Expr) (string, bool) {
+		if lit, ok := e.(*ast.BasicLit); ok && lit.Kind == token.STRING {
+			s, err := strconv.Unquote(lit.Value)
+			return s, err == nil
+		}
+		id, ok := e.(*ast.Ident)
+		if !ok {
+			return "", false
+		}
+		for _, d := range f.Decls {
+			gen, ok := d.(*ast.GenDecl)
+			if !ok || gen.Tok != token.CONST {
+				continue
+			}
+			for _, spec := range gen.Specs {
+				v := spec.(*ast.ValueSpec)
+				for i, name := range v.Names {
+					if name.Name != id.Name || i >= len(v.Values) {
+						continue
+					}
+					lit, ok := v.Values[i].(*ast.BasicLit)
+					if !ok || lit.Kind != token.STRING {
+						return "", false
+					}
+					s, err := strconv.Unquote(lit.Value)
+					return s, err == nil
+				}
+			}
+		}
+		return "", false
+	}
 }
 
 // extract reads the builder setup in fn. imports maps the file's package
 // names to import paths and resolve maps a package identifier to its import
-// path: by name in text mode, by symbol in the loaded path.
-func extract(fs *token.FileSet, f *ast.File, fn *ast.FuncDecl, source []byte, receiver, method string, imports map[string]string, resolve func(*ast.Ident) (string, bool), resources, bindings map[string]effect.Resource) (Result, error) {
+// path: by name in text mode, by symbol in the loaded path. constant
+// resolves a string constant expression to its value.
+func extract(fs *token.FileSet, f *ast.File, fn *ast.FuncDecl, source []byte, receiver, method string, imports map[string]string, resolve func(*ast.Ident) (string, bool), constant func(ast.Expr) (string, bool), resources, bindings map[string]effect.Resource) (Result, error) {
 	out := Result{SourceSHA256: goflow.Hash(source)}
 	if fn == nil || fn.Body == nil || len(fn.Body.List) == 0 {
 		return out, diag(fs, f.Name, "method", fmt.Sprintf("expected a builder return in %s.%s", receiver, method))
@@ -259,12 +302,21 @@ func extract(fs *token.FileSet, f *ast.File, fn *ast.FuncDecl, source []byte, re
 			if len(h.Args) != 1 {
 				return diag(fs, e, "handler", "unsupported watch handler")
 			}
-			id, ok := h.Args[0].(*ast.Ident)
-			if !ok {
-				return diag(fs, h.Args[0], "handler", "mapping must name a local function")
+			m := mapper{fs: fs, f: f, imports: imports, qualified: qualified, constant: constant, resources: resources}
+			switch arg := h.Args[0].(type) {
+			case *ast.Ident:
+				m.fn = goflow.FindMethod(f, "", arg.Name)
+				rule.Mapping = arg.Name
+			case *ast.SelectorExpr:
+				if !isName(arg.X, receiverName) {
+					return diag(fs, arg, "handler", "mapping must name a local function or a method of the receiver")
+				}
+				m.fn = findMethod(f, fn.Recv.List[0].Type, arg.Sel.Name)
+				rule.Mapping = arg.Sel.Name
+			default:
+				return diag(fs, h.Args[0], "handler", "mapping must name a local function or a method of the receiver")
 			}
-			rule.Mapping = id.Name
-			return extractMapping(fs, f, imports, qualified, rule)
+			return m.extract(rule)
 		case "sigs.k8s.io/controller-runtime/pkg/handler.EnqueueRequestForOwner":
 			if len(h.Args) < 3 || len(h.Args) > 4 || !managerCall(h.Args[0], "GetScheme") || !managerCall(h.Args[1], "GetRESTMapper") {
 				return diag(fs, e, "handler", "expected EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), owner, ...)")

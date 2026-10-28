@@ -1,0 +1,11 @@
+apiVersion: architecture.local/v1alpha1
+kind: Project
+metadata:
+  name: marked
+spec:
+  module: github.com/phoban01/generative-architecture
+  packages:
+    - ./cmd/arch/testdata/grouped/marked
+  catalog:
+    discovery:
+      - discovery.json

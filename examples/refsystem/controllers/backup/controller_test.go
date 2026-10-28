@@ -2,6 +2,7 @@ package backup
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	batchv1 "k8s.io/api/batch/v1"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/phoban01/generative-architecture/examples/refsystem/api/v1alpha1"
 	"github.com/phoban01/generative-architecture/examples/refsystem/internal/extractcheck"
+	"github.com/phoban01/generative-architecture/pkg/ir"
 )
 
 func newClient(t *testing.T, objs ...client.Object) client.Client {
@@ -121,12 +123,11 @@ func TestDatabaseToBackups(t *testing.T) {
 	}
 }
 
-// TestExtraction pins the two constructs the extractor cannot read yet.
+// TestExtraction pins the one construct the extractor cannot read yet.
 // Reconcile builds the Job's containers with a slice literal, which goflow
-// cannot lower; it stops at that statement. The Database watch needs a map
-// function that lists Backups, and watchgen accepts only a package function
-// returning one key from a field of the watched object. The test fails when
-// either gap closes or a new one appears.
+// cannot lower; it stops at that statement. The test fails when the gap
+// closes or a new one appears. It also checks that the Database watch maps
+// through the Backups whose spec.database names the Database.
 func TestExtraction(t *testing.T) {
 	res, err := extractcheck.Run("./examples/refsystem/controllers/backup", "BackupReconciler")
 	if err != nil {
@@ -138,7 +139,6 @@ func TestExtraction(t *testing.T) {
 	type gap struct{ construct, source, reason string }
 	want := []gap{
 		{"field", "job.Spec.Template.Spec.Containers", "unmapped field job.spec.template.spec.containers"},
-		{"handler", "r.databaseToBackups", "mapping must name a local function"},
 	}
 	if len(res.Diagnostics) != len(want) {
 		t.Fatalf("diagnostics %v, want %d", res.Diagnostics, len(want))
@@ -147,5 +147,13 @@ func TestExtraction(t *testing.T) {
 		if got := (gap{d.Construct, d.Source, d.Reason}); got != want[i] {
 			t.Errorf("diagnostic %d: %+v, want %+v", i, got, want[i])
 		}
+	}
+	watches := res.Watches.IR("backup", "controller.go")
+	if len(watches) != 3 {
+		t.Fatalf("watches %+v, want 3", watches)
+	}
+	m := watches[2].Mapping
+	if watches[2].Resource.Kind != "Database" || m.Kind != ir.MappingReference || strings.Join(m.DependentPath, ".") != "Spec.Database" || m.Dependent == nil || m.Dependent.Kind != "Backup" {
+		t.Fatalf("database watch %+v, mapping %+v", watches[2], m)
 	}
 }

@@ -122,3 +122,45 @@ func TestExtractFailsClosedOnUnknownResource(t *testing.T) {
 		t.Fatalf("diagnostic not located at the Owns call: %+v", u)
 	}
 }
+
+// TestExtractResolvesGroupVersion checks that a watched type resolves to
+// the catalog entry of its package's group and version, not of its package
+// name. The catalog lists Widget in two groups with the same version.
+func TestExtractResolvesGroupVersion(t *testing.T) {
+	for _, tc := range []struct {
+		name, project string
+		want          ir.GVK
+		unsupported   *report.Item
+	}{
+		{"GroupVersion variable, package name is not the version", "testdata/grouped/widget.yaml",
+			ir.GVK{Group: "widgets.example.test", Version: "v1beta1", Kind: "Widget"}, nil},
+		{"group marker", "testdata/grouped/marked.yaml",
+			ir.GVK{Group: "other.example.test", Version: "v1beta1", Kind: "Widget"}, nil},
+		{"no GroupVersion and no marker", "testdata/grouped/gadget.yaml", ir.GVK{},
+			&report.Item{Kind: "group-version", Location: report.Location{File: "cmd/arch/testdata/grouped/gadget/controller.go", Line: 25}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			out, err := extractTo(t, tc.project)
+			if tc.unsupported != nil {
+				if !errors.Is(err, errUnsupported) {
+					t.Fatalf("expected unsupported constructs, got %v", err)
+				}
+				s := readSupport(t, out)
+				if len(s.Unsupported) != 1 || s.Unsupported[0].Kind != tc.unsupported.Kind || s.Unsupported[0].Location != tc.unsupported.Location {
+					t.Fatalf("unsupported %+v, want %+v", s.Unsupported, *tc.unsupported)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			doc, err := ir.Read(filepath.Join(out, irFile))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(doc.Watches) != 1 || doc.Watches[0].Resource != tc.want {
+				t.Fatalf("watches %+v, want one of %s", doc.Watches, tc.want)
+			}
+		})
+	}
+}

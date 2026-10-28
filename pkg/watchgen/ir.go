@@ -29,6 +29,12 @@ func (r Result) IR(controller, file string) []ir.Watch {
 			}
 		default:
 			mapping = ir.KeyMapping{Kind: ir.MappingField, FieldPath: append([]string(nil), rule.NamePath...)}
+			if d := rule.Dependent; d != nil {
+				mapping = ir.KeyMapping{Kind: ir.MappingLabel, Label: rule.Label, Dependent: &ir.GVK{Group: d.Group, Version: d.Version, Kind: d.Kind}}
+				if rule.Label == "" {
+					mapping.Kind, mapping.DependentPath = ir.MappingReference, append([]string(nil), rule.DependentPath...)
+				}
+			}
 		}
 		predicates := make([]ir.Predicate, 0, len(rule.Predicates))
 		for _, p := range rule.Predicates {

@@ -67,3 +67,26 @@ func TestStableIDSeparatesParts(t *testing.T) {
 		t.Fatal("parts collide by concatenation")
 	}
 }
+
+func TestListMappingValidate(t *testing.T) {
+	dependent := &GVK{Group: "demo", Version: "v1", Kind: "Child"}
+	for _, tc := range []struct {
+		name    string
+		mapping KeyMapping
+		ok      bool
+	}{
+		{"label", KeyMapping{Kind: MappingLabel, Label: "demo/parent", Dependent: dependent}, true},
+		{"label without key", KeyMapping{Kind: MappingLabel, Dependent: dependent}, false},
+		{"label without dependent", KeyMapping{Kind: MappingLabel, Label: "demo/parent"}, false},
+		{"label with invalid dependent", KeyMapping{Kind: MappingLabel, Label: "demo/parent", Dependent: &GVK{Kind: "Child"}}, false},
+		{"reference", KeyMapping{Kind: MappingReference, DependentPath: []string{"Spec", "Parent"}, Dependent: dependent}, true},
+		{"reference without path", KeyMapping{Kind: MappingReference, Dependent: dependent}, false},
+		{"reference without dependent", KeyMapping{Kind: MappingReference, DependentPath: []string{"Spec", "Parent"}}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := tc.mapping.Validate(); (err == nil) != tc.ok {
+				t.Fatalf("Validate() = %v, want ok %v", err, tc.ok)
+			}
+		})
+	}
+}

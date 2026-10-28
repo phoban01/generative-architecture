@@ -2,6 +2,7 @@ package watchmodel
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -76,6 +77,9 @@ func (g *generator) route(r *resource, w ir.Watch) (target, error) {
 	case ir.MappingOwner:
 		g.routeOwner(&t, r, w)
 		return t, nil
+	case ir.MappingLabel, ir.MappingReference:
+		g.routeList(&t, r, w)
+		return t, nil
 	}
 	return t, diagnose(w, "mapping", fmt.Sprintf("%s key mapping is not modelled", w.Mapping.Kind))
 }
@@ -109,6 +113,42 @@ func (g *generator) routeOwner(t *target, r *resource, w ir.Watch) {
 			req.namespace = r.object.Namespace
 		}
 		g.enqueue(t, req, "true")
+	}
+}
+
+// WithLabels supplies the labels of each object. A label mapping reads the
+// labels of the dependent objects; they are fixed for the whole model.
+func WithLabels(labels map[ir.ObjectRef]map[string]string) Option {
+	return func(g *generator) { g.labels = labels }
+}
+
+// routeList maps through a label or reference mapping, as a mapper that
+// lists the dependent kind in the object's namespace does. It enqueues
+// every dependent whose label (from WithLabels) or field (from WithFields,
+// keyed by the dotted dependent path) equals the object's name. These
+// dependent facts are fixed; only field mappings turn values into state. A
+// dependent without the label or field is not selected. Group and kind
+// identify the dependent kind; the version is not compared.
+func (g *generator) routeList(t *target, r *resource, w ir.Watch) {
+	facts, key := g.labels, w.Mapping.Label
+	if w.Mapping.Kind == ir.MappingReference {
+		facts, key = g.fields, strings.Join(w.Mapping.DependentPath, ".")
+	}
+	dependents := make([]ir.ObjectRef, 0, len(facts))
+	for ref, values := range facts {
+		if ref.GVK.Group != w.Mapping.Dependent.Group || ref.GVK.Kind != w.Mapping.Dependent.Kind {
+			continue
+		}
+		if ref.Cluster != r.object.Cluster || ref.Namespace != r.object.Namespace {
+			continue
+		}
+		if v, ok := values[key]; ok && v == r.object.Name {
+			dependents = append(dependents, ref)
+		}
+	}
+	sort.Slice(dependents, func(i, j int) bool { return dependents[i].Name < dependents[j].Name })
+	for _, ref := range dependents {
+		g.enqueue(t, requestOf(ref), "true")
 	}
 }
 

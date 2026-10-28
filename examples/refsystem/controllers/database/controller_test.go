@@ -14,6 +14,7 @@ import (
 
 	"github.com/phoban01/generative-architecture/examples/refsystem/api/v1alpha1"
 	"github.com/phoban01/generative-architecture/examples/refsystem/internal/extractcheck"
+	"github.com/phoban01/generative-architecture/pkg/ir"
 )
 
 func newClient(t *testing.T, objs ...client.Object) client.Client {
@@ -127,12 +128,9 @@ func TestTenantToDatabases(t *testing.T) {
 	}
 }
 
-// TestExtraction checks that discovery and Reconcile extract with no
-// unsupported construct. The Tenant watch needs a map function that lists
-// Databases, which watchgen does not read yet: it accepts only a package
-// function returning one key from a field of the watched object. The test
-// pins that one diagnostic so it fails when the gap closes or a new one
-// appears.
+// TestExtraction checks that discovery, Reconcile and SetupWithManager
+// extract with no unsupported construct, and that the Tenant watch maps
+// through the Databases labelled with the Tenant's name.
 func TestExtraction(t *testing.T) {
 	res, err := extractcheck.Run("./examples/refsystem/controllers/database", "DatabaseReconciler")
 	if err != nil {
@@ -144,11 +142,15 @@ func TestExtraction(t *testing.T) {
 	if res.Program == nil || len(res.Program.Nodes) == 0 {
 		t.Fatal("Reconcile not extracted")
 	}
-	if len(res.Diagnostics) != 1 {
-		t.Fatalf("diagnostics %v, want only the list-based map function", res.Diagnostics)
+	if len(res.Diagnostics) != 0 {
+		t.Fatalf("diagnostics %v, want none", res.Diagnostics)
 	}
-	d := res.Diagnostics[0]
-	if d.Construct != "handler" || d.Source != "r.tenantToDatabases" || d.Reason != "mapping must name a local function" {
-		t.Fatalf("unexpected diagnostic %v (construct %s)", d, d.Construct)
+	watches := res.Watches.IR("database", "controller.go")
+	if len(watches) != 3 {
+		t.Fatalf("watches %+v, want 3", watches)
+	}
+	m := watches[2].Mapping
+	if watches[2].Resource.Kind != "Tenant" || m.Kind != ir.MappingLabel || m.Label != TenantLabel || m.Dependent == nil || m.Dependent.Kind != "Database" {
+		t.Fatalf("tenant watch %+v, mapping %+v", watches[2], m)
 	}
 }

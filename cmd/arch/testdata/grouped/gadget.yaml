@@ -1,0 +1,11 @@
+apiVersion: architecture.local/v1alpha1
+kind: Project
+metadata:
+  name: gadget
+spec:
+  module: github.com/phoban01/generative-architecture
+  packages:
+    - ./cmd/arch/testdata/grouped/gadget
+  catalog:
+    discovery:
+      - discovery.json

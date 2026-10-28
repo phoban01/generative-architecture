@@ -51,7 +51,8 @@ type Option func(*generator)
 // WithFields supplies field values per object, keyed by the dotted Go field
 // path of a field mapping, such as "Spec.Target". Each value becomes the
 // initial value of a string state variable (see FieldVar) that other actions
-// may change.
+// may change. A reference mapping reads the fields of its dependent objects
+// here too, keyed by the dotted dependent path, as fixed values.
 func WithFields(fields map[ir.ObjectRef]map[string]string) Option {
 	return func(g *generator) { g.fields = fields }
 }
@@ -114,6 +115,7 @@ type generator struct {
 	fields    map[ir.ObjectRef]map[string]string
 	declared  map[string]bool // state variables Add declared
 	owners    map[ir.ObjectRef][]OwnerRef
+	labels    map[ir.ObjectRef]map[string]string
 }
 
 var boolFalse = model.Variable{Type: "bool", Initial: "false"}
