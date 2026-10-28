@@ -1,5 +1,7 @@
 # Start here: the sample controller's behaviour, watches and the generated model
 
+The adoption entry point is the reference system in [`examples/refsystem`](examples/refsystem/README.md), with the guides for [a project you own](docs/adopt-owned-project.md) and [an upstream controller](docs/adopt-upstream-project.md). This page is the source-to-model walkthrough of the sample database controller. The sample is a regression fixture that shows the full model and replay flow.
+
 The current walkthrough is **`examples/database/`**, run through `cmd/walkthrough`. It includes both the controller's reconcile process and the watch registrations that cause it to run. `examples/configmirror/` is the first source-generated controller: its model, replay projection, environment and boundary gating are all generated from its source, an abstraction document and the built-in client summaries. The runtime group under `examples/` is a separate integration reference.
 
 The goal is to generate behaviour from the implementation, then check independent constraints. This example extracts supported Go decisions, watch registrations, predicates and a reference-to-key mapper. Effect meanings, the bounded runtime model and the replay adapter still have handwritten parts, identified below.
