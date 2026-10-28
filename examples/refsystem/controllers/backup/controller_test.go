@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	batchv1 "k8s.io/api/batch/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -42,17 +43,22 @@ var key = client.ObjectKey{Namespace: "default", Name: "nightly"}
 
 func reconcileBackup(t *testing.T, c client.Client) *v1alpha1.Backup {
 	t.Helper()
-	r := &BackupReconciler{Client: c}
+	r := &BackupReconciler{Client: c, Scheme: c.Scheme()}
 	res, err := r.Reconcile(context.Background(), reconcile.Request{NamespacedName: key})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res != (reconcile.Result{}) {
-		t.Fatalf("unexpected result %+v", res)
-	}
 	got := &v1alpha1.Backup{}
 	if err := c.Get(context.Background(), key, got); err != nil {
 		t.Fatal(err)
+	}
+	// Only a running Job is checked again.
+	want := reconcile.Result{}
+	if got.Status.Phase == PhaseRunning {
+		want.RequeueAfter = 30 * time.Second
+	}
+	if res != want {
+		t.Fatalf("result %+v in phase %q, want %+v", res, got.Status.Phase, want)
 	}
 	return got
 }
@@ -90,6 +96,10 @@ func TestReconcileCreatesJob(t *testing.T) {
 	containers := job.Spec.Template.Spec.Containers
 	if len(containers) != 1 || containers[0].Image != Image || job.Spec.Template.Spec.RestartPolicy != "Never" {
 		t.Fatalf("job spec %+v", job.Spec.Template.Spec)
+	}
+	owners := job.OwnerReferences
+	if len(owners) != 1 || owners[0].Kind != "Backup" || owners[0].Name != "nightly" || owners[0].Controller == nil || !*owners[0].Controller {
+		t.Fatalf("job owners %+v, want the Backup as controller", owners)
 	}
 }
 
@@ -138,15 +148,18 @@ func TestExtraction(t *testing.T) {
 	if res.Program == nil || len(res.Program.Nodes) == 0 {
 		t.Fatal("Reconcile not extracted")
 	}
-	type gap struct{ construct, source, reason string }
-	want := []gap{}
-	if len(res.Diagnostics) != len(want) {
-		t.Fatalf("diagnostics %v, want %d", res.Diagnostics, len(want))
+	if len(res.Diagnostics) != 0 {
+		t.Fatalf("diagnostics %v, want none", res.Diagnostics)
 	}
-	for i, d := range res.Diagnostics {
-		if got := (gap{d.Construct, d.Source, d.Reason}); got != want[i] {
-			t.Errorf("diagnostic %d: %+v, want %+v", i, got, want[i])
+	// The running phase returns a delayed requeue.
+	var requeues []string
+	for _, n := range res.Program.Nodes {
+		if n.Requeue != "" {
+			requeues = append(requeues, n.Requeue+" "+n.RequeueAfter)
 		}
+	}
+	if len(requeues) != 1 || requeues[0] != ir.RequeueAfter+" 30 * time.Second" {
+		t.Fatalf("requeues %q, want one after 30 * time.Second", requeues)
 	}
 	watches := res.Watches.IR("backup", "controller.go")
 	if len(watches) != 3 {

@@ -42,7 +42,7 @@ func database() *v1alpha1.Database {
 
 func reconcileDatabase(t *testing.T, c client.Client) *v1alpha1.Database {
 	t.Helper()
-	r := &DatabaseReconciler{Client: c}
+	r := &DatabaseReconciler{Client: c, Scheme: c.Scheme()}
 	key := client.ObjectKey{Namespace: "default", Name: "orders"}
 	res, err := r.Reconcile(context.Background(), reconcile.Request{NamespacedName: key})
 	if err != nil {
@@ -87,11 +87,15 @@ func TestReconcileCreatesSecret(t *testing.T) {
 		t.Fatalf("status %+v", got.Status)
 	}
 	secret := &corev1.Secret{}
-	if err := c.Get(context.Background(), client.ObjectKey{Namespace: "acme", Name: "orders"}, secret); err != nil {
+	if err := c.Get(context.Background(), client.ObjectKey{Namespace: "default", Name: "orders"}, secret); err != nil {
 		t.Fatal(err)
 	}
 	if secret.StringData["username"] != "orders" {
 		t.Fatalf("secret data %v", secret.StringData)
+	}
+	owners := secret.OwnerReferences
+	if len(owners) != 1 || owners[0].Kind != "Database" || owners[0].Name != "orders" || owners[0].Controller == nil || !*owners[0].Controller {
+		t.Fatalf("secret owners %+v, want the Database as controller", owners)
 	}
 
 	// A second pass with a ready database writes nothing.
@@ -102,14 +106,14 @@ func TestReconcileCreatesSecret(t *testing.T) {
 }
 
 func TestReconcileKeepsExistingSecret(t *testing.T) {
-	existing := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Namespace: "acme", Name: "orders"}, StringData: map[string]string{"username": "admin"}}
+	existing := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "orders"}, StringData: map[string]string{"username": "admin"}}
 	c := newClient(t, database(), tenant(true), existing)
 	got := reconcileDatabase(t, c)
 	if !got.Status.Ready {
 		t.Fatalf("status %+v", got.Status)
 	}
 	secret := &corev1.Secret{}
-	if err := c.Get(context.Background(), client.ObjectKey{Namespace: "acme", Name: "orders"}, secret); err != nil {
+	if err := c.Get(context.Background(), client.ObjectKey{Namespace: "default", Name: "orders"}, secret); err != nil {
 		t.Fatal(err)
 	}
 	if secret.StringData["username"] != "admin" {

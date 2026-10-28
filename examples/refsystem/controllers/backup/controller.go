@@ -4,12 +4,15 @@ package backup
 
 import (
 	"context"
+	"time"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -30,12 +33,15 @@ const (
 // BackupReconciler runs the backup Job of a Backup.
 type BackupReconciler struct {
 	Client client.Client
+	Scheme *runtime.Scheme
 }
 
 // Reconcile waits for the Backup's Database to be ready, creates the backup
 // Job when it is missing and sets the Backup's phase from the Job's status.
-// The Job has the Backup's name. An unready Database is not requeued: the
-// Database watch enqueues the Backup again when the Database changes.
+// The Job has the Backup's name and the Backup controls it. An unready
+// Database is not requeued: the Database watch enqueues the Backup again
+// when the Database changes. A running Job is checked again after 30
+// seconds, in case a Job event is missed.
 func (r *BackupReconciler) Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
 	backup := &v1alpha1.Backup{}
 	err := r.Client.Get(ctx, req.NamespacedName, backup)
@@ -65,6 +71,9 @@ func (r *BackupReconciler) Reconcile(ctx context.Context, req reconcile.Request)
 		job.Name = backup.Name
 		job.Spec.Template.Spec.RestartPolicy = corev1.RestartPolicyNever
 		job.Spec.Template.Spec.Containers = []corev1.Container{{Name: "backup", Image: Image, Args: []string{"echo", database.Name}}}
+		if err := controllerutil.SetControllerReference(backup, job, r.Scheme); err != nil {
+			return reconcile.Result{}, err
+		}
 		if err := r.Client.Create(ctx, job); err != nil {
 			return reconcile.Result{}, err
 		}
@@ -82,7 +91,13 @@ func (r *BackupReconciler) Reconcile(ctx context.Context, req reconcile.Request)
 	default:
 		backup.Status.Phase = PhasePending
 	}
-	return reconcile.Result{}, r.Client.Status().Update(ctx, backup)
+	if err := r.Client.Status().Update(ctx, backup); err != nil {
+		return reconcile.Result{}, err
+	}
+	if backup.Status.Phase == PhaseRunning {
+		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+	}
+	return reconcile.Result{}, nil
 }
 
 // SetupWithManager registers the controller with the manager.
