@@ -98,9 +98,11 @@ func extract(p project.Project) (ir.Document, *report.Support, error) {
 			continue
 		}
 		watches, err := extractWatches(p.Root, c, cat)
-		if d, ok := goflow.AsDiagnostic(err); ok {
-			d.File = relative(p.Root, d.File)
-			support.Unsupported = append(support.Unsupported, d.Item())
+		if ds, ok := goflow.AsDiagnostics(err); ok {
+			for _, d := range ds {
+				d.File = relative(p.Root, d.File)
+				support.Unsupported = append(support.Unsupported, d.Item())
+			}
 			continue
 		}
 		if err != nil {

@@ -134,6 +134,8 @@ type extractor struct {
 	program Program
 	fset    *token.FileSet
 	info    *types.Info // nil in text mode; set by ExtractTyped
+	// diagnostics collects every skipped statement's failure.
+	diagnostics []*Diagnostic
 }
 
 func (e *extractor) expression(n ast.Expr, want string) (expr.Expression, error) {
@@ -239,11 +241,29 @@ func (e *extractor) add(n Node, source ast.Node, next, other int) int {
 	e.program.Nodes = append(e.program.Nodes, n)
 	return n.ID
 }
+
+// kindUnsupported marks the terminal node that stands for a skipped
+// statement at the end of a block. It exists only in a failed extraction.
+const kindUnsupported = "unsupported"
+
+// block lowers stmts last-first. A statement that fails with a located
+// diagnostic is recorded and skipped: control passes from the statement
+// before it to the one after it, and no node stands for it. When nothing
+// follows, a terminal node of kind unsupported takes its place, so the
+// skip adds no false fallthrough. Any other error stops extraction.
 func (e *extractor) block(stmts []ast.Stmt, next int) (int, error) {
 	for i := len(stmts) - 1; i >= 0; i-- {
 		n, err := e.statement(stmts[i], next)
 		if err != nil {
-			return 0, err
+			ds, ok := AsDiagnostics(err)
+			if !ok {
+				return 0, err
+			}
+			e.diagnostics = append(e.diagnostics, ds...)
+			if next < 0 {
+				next = e.add(Node{Kind: kindUnsupported}, stmts[i], -1, 0)
+			}
+			continue
 		}
 		next = n
 	}
@@ -400,9 +420,14 @@ func (e *extractor) run(source []byte, method *ast.FuncDecl) (*Program, error) {
 		return nil, err
 	}
 	for _, n := range e.program.Nodes {
-		if n.Kind != "return" && (n.Next < 0 || (n.Kind == "branch" && n.Else < 0)) {
-			return nil, &Diagnostic{File: e.opts.File, Line: n.Line, Construct: "fallthrough", Reason: "unsupported fallthrough: control reaches the end of the method without a return", Source: n.Source}
+		if n.Kind != "return" && n.Kind != kindUnsupported && (n.Next < 0 || (n.Kind == "branch" && n.Else < 0)) {
+			e.diagnostics = append(e.diagnostics, &Diagnostic{File: e.opts.File, Line: n.Line, Construct: "fallthrough", Reason: "unsupported fallthrough: control reaches the end of the method without a return", Source: n.Source})
 		}
+	}
+	// Any diagnostic fails the extraction: no program is returned, so no
+	// IR is written for a method with a skipped statement.
+	if err := diagnosticsError(e.diagnostics); err != nil {
+		return nil, err
 	}
 	return &e.program, nil
 }

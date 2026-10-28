@@ -50,8 +50,9 @@ type Result struct {
 	Program     *goflow.Program
 	Watches     watchgen.Result
 	// Diagnostics lists every unsupported construct, in frontend order:
-	// discovery, then Reconcile, then SetupWithManager. goflow and watchgen
-	// stop at their first diagnostic.
+	// discovery, then Reconcile, then SetupWithManager. goflow reports
+	// every diagnostic of Reconcile in source order; watchgen stops at its
+	// first.
 	Diagnostics []*goflow.Diagnostic
 }
 
@@ -102,8 +103,8 @@ func collect(out *Result, err error) error {
 	if err == nil {
 		return nil
 	}
-	if d, ok := goflow.AsDiagnostic(err); ok {
-		out.Diagnostics = append(out.Diagnostics, d)
+	if ds, ok := goflow.AsDiagnostics(err); ok {
+		out.Diagnostics = append(out.Diagnostics, ds...)
 		return nil
 	}
 	return err
