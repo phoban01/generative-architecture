@@ -1,0 +1,18 @@
+[
+  {
+    "kind": "APIResourceList",
+    "groupVersion": "v1",
+    "resources": [
+      {"name": "namespaces", "singularName": "namespace", "namespaced": false, "kind": "Namespace", "verbs": ["create", "delete", "get", "list", "patch", "update", "watch"]},
+      {"name": "resourcequotas", "singularName": "resourcequota", "namespaced": true, "kind": "ResourceQuota", "verbs": ["create", "delete", "deletecollection", "get", "list", "patch", "update", "watch"]},
+      {"name": "secrets", "singularName": "secret", "namespaced": true, "kind": "Secret", "verbs": ["create", "delete", "deletecollection", "get", "list", "patch", "update", "watch"]}
+    ]
+  },
+  {
+    "kind": "APIResourceList",
+    "groupVersion": "batch/v1",
+    "resources": [
+      {"name": "jobs", "singularName": "job", "namespaced": true, "kind": "Job", "verbs": ["create", "delete", "deletecollection", "get", "list", "patch", "update", "watch"]}
+    ]
+  }
+]

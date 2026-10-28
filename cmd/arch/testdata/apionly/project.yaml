@@ -1,0 +1,9 @@
+apiVersion: architecture.local/v1alpha1
+kind: Project
+metadata:
+  name: apionly
+spec:
+  # The reference system's API types alone: a project with no controller.
+  module: github.com/phoban01/generative-architecture
+  packages:
+    - ./examples/refsystem/api/...

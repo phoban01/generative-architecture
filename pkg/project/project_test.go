@@ -14,7 +14,7 @@ func TestLoadReferenceSystem(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Name != "refsystem" || p.Spec.Module != "github.com/phoban01/generative-architecture" || len(p.Spec.Packages) != 1 || p.Spec.Runtime.Profile != "controller-runtime" {
+	if p.Name != "refsystem" || p.Spec.Module != "github.com/phoban01/generative-architecture" || len(p.Spec.Packages) != 4 || p.Spec.Runtime.Profile != "controller-runtime" {
 		t.Fatalf("unexpected document %+v", p.Spec)
 	}
 	if p.Spec.Bounds["maxInvocations"] != 4 {
@@ -27,7 +27,7 @@ func TestLoadReferenceSystem(t *testing.T) {
 	if p.Root != root {
 		t.Fatalf("module root %s, want %s", p.Root, root)
 	}
-	want := []string{"config/crd/refsystem.example.org_backups.yaml", "config/crd/refsystem.example.org_databases.yaml", "config/crd/refsystem.example.org_tenants.yaml", "project.yaml"}
+	want := []string{"config/crd/refsystem.example.org_backups.yaml", "config/crd/refsystem.example.org_databases.yaml", "config/crd/refsystem.example.org_tenants.yaml", "config/discovery/builtin.json", "project.yaml"}
 	got := p.SortedHashes()
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("hashed %v, want %v", got, want)
@@ -41,7 +41,8 @@ func TestLoadReferenceSystem(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(c.Entries()) != 3 {
+	// Three CRDs and four built-in kinds.
+	if len(c.Entries()) != 7 {
 		t.Fatalf("catalog %v", c.Entries())
 	}
 	if e, ok := c.Lookup(ir.GVK{Group: "refsystem.example.org", Version: "v1alpha1", Kind: "Backup"}); !ok || e.GVR.Resource != "backups" {

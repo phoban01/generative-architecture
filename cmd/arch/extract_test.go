@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -31,21 +32,94 @@ func readSupport(t *testing.T, out string) report.Support {
 	return s
 }
 
+// refsystemDir holds the reference system and its committed extraction.
+const refsystemDir = "../../examples/refsystem"
+
+// TestExtractReferenceSystem runs arch --strict extract on the reference
+// system. It finds the three controllers and their seven watches and no
+// unsupported construct. The reference system has no abstraction yet, so
+// every field its Reconcile methods touch is unresolved and verification
+// mode still fails on those, after it writes the IR. The committed IR and
+// support report must match the run byte for byte; regenerate them with
+// go run ./cmd/arch --project examples/refsystem/project.yaml --out examples/refsystem/generated extract.
 func TestExtractReferenceSystem(t *testing.T) {
-	out, err := extractTo(t, "../../examples/refsystem/project.yaml")
-	if err != nil {
-		t.Fatal(err)
+	out := t.TempDir()
+	var stdout, stderr bytes.Buffer
+	err := run([]string{"--project", filepath.Join(refsystemDir, "project.yaml"), "--out", out, "--strict", "extract"}, &stdout, &stderr)
+	if !errors.Is(err, errStrict) || errors.Is(err, errUnsupported) {
+		t.Fatalf("expected verification mode to fail on unresolved fields only, got %v", err)
 	}
 	doc, err := ir.Read(filepath.Join(out, irFile))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(doc.Controllers) != 0 || len(doc.Watches) != 0 {
-		t.Fatalf("reference system has API types only, got %+v", doc)
+	var controllers []string
+	for _, c := range doc.Controllers {
+		controllers = append(controllers, c.Name)
+	}
+	if want := []string{"BackupReconciler", "DatabaseReconciler", "TenantReconciler"}; !slices.Equal(controllers, want) {
+		t.Fatalf("controllers %q, want %q", controllers, want)
+	}
+	var watches []string
+	for _, w := range doc.Watches {
+		m := w.Mapping
+		row := w.Controller[strings.LastIndex(w.Controller, ".")+1:] + " " + w.Resource.Kind + " " + m.Kind
+		switch m.Kind {
+		case ir.MappingOwner:
+			row += " " + m.OwnerGVK.Kind
+		case ir.MappingLabel:
+			row += " " + m.Dependent.Kind + " " + m.Label
+		case ir.MappingReference:
+			row += " " + m.Dependent.Kind + " " + strings.Join(m.DependentPath, ".")
+		}
+		watches = append(watches, row)
+	}
+	want := []string{
+		"BackupReconciler Backup self",
+		"BackupReconciler Job owner Backup",
+		"BackupReconciler Database reference Backup Spec.Database",
+		"DatabaseReconciler Database self",
+		"DatabaseReconciler Secret owner Database",
+		"DatabaseReconciler Tenant label Database refsystem.example.org/tenant",
+		"TenantReconciler Tenant self",
+	}
+	if !slices.Equal(watches, want) {
+		t.Fatalf("watches\n%s\nwant\n%s", strings.Join(watches, "\n"), strings.Join(want, "\n"))
 	}
 	s := readSupport(t, out)
-	if len(s.Included)+len(s.Summarized)+len(s.Unsupported) != 0 {
-		t.Fatalf("expected an empty support report, got %+v", s)
+	if len(s.Unsupported) != 0 {
+		t.Fatalf("unsupported %+v, want none", s.Unsupported)
+	}
+	var reconciles int
+	for _, it := range s.Included {
+		if it.Kind == "reconcile" {
+			reconciles++
+		}
+	}
+	if reconciles != 3 {
+		t.Fatalf("%d Reconcile methods extracted, want 3", reconciles)
+	}
+	if len(s.Unresolved) == 0 {
+		t.Fatal("no unresolved field, but the reference system has no abstraction")
+	}
+	for _, it := range s.Unresolved {
+		if it.Kind != "field" || !strings.HasPrefix(it.Location.File, "examples/refsystem/controllers/") || it.Location.Line == 0 {
+			t.Fatalf("unresolved item %+v is not a located controller field", it)
+		}
+	}
+	for _, name := range []string{irFile, supportFile} {
+		got, err := os.ReadFile(filepath.Join(out, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		committed := filepath.Join(refsystemDir, "generated", name)
+		want, err := os.ReadFile(committed)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(got, want) {
+			t.Errorf("%s is stale; regenerate it with go run ./cmd/arch --project examples/refsystem/project.yaml --out examples/refsystem/generated extract", committed)
+		}
 	}
 }
 

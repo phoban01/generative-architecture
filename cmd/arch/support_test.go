@@ -24,13 +24,19 @@ func support(t *testing.T, projectPath string, strict bool) (string, string, err
 	return stdout.String(), stderr.String(), err
 }
 
+// TestSupportReferenceSystemHasNoUnsupportedItems checks ADOPT-4: the
+// table lists no unsupported item. Without an abstraction the fields of
+// each Reconcile are unresolved, so verification mode fails on a field.
 func TestSupportReferenceSystemHasNoUnsupportedItems(t *testing.T) {
 	out, _, err := support(t, "../../examples/refsystem/project.yaml", true)
-	if err != nil {
-		t.Fatal(err)
+	if !errors.Is(err, errStrict) || !strings.Contains(err.Error(), "first field ") {
+		t.Fatalf("expected verification mode to fail on an unresolved field, got %v", err)
 	}
 	if strings.Contains(out, report.Unsupported) {
 		t.Fatalf("unexpected unsupported item:\n%s", out)
+	}
+	if !strings.Contains(out, "\n"+report.Unresolved+" ") {
+		t.Fatalf("no unresolved field in the table:\n%s", out)
 	}
 }
 
@@ -64,7 +70,7 @@ func TestExtractStrictPassesWhenComplete(t *testing.T) {
 }
 
 func TestGenerateHonoursStrict(t *testing.T) {
-	const projectPath = "../../examples/refsystem/project.yaml"
+	const projectPath = "testdata/apionly/project.yaml"
 	out, err := extractTo(t, projectPath)
 	if err != nil {
 		t.Fatal(err)

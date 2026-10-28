@@ -81,8 +81,17 @@ func TestGenerateConfigMirror(t *testing.T) {
 	likec4Validate(t, filepath.Join(out, likec4Dir))
 }
 
+// TestGenerateReferenceSystem checks that arch generate refuses the three
+// reference controllers, which it cannot compose into one model yet.
 func TestGenerateReferenceSystem(t *testing.T) {
-	out, err := generateTo(t, "../../examples/refsystem/project.yaml")
+	_, err := generateTo(t, "../../examples/refsystem/project.yaml")
+	if !errors.Is(err, errors.ErrUnsupported) || !strings.Contains(err.Error(), "has 3 controllers") {
+		t.Fatalf("expected a refusal to compose three controllers, got %v", err)
+	}
+}
+
+func TestGenerateWithoutControllers(t *testing.T) {
+	out, err := generateTo(t, "testdata/apionly/project.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
