@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/phoban01/generative-architecture/pkg/ir"
@@ -60,10 +61,23 @@ func TestExtractControllerWithoutSetup(t *testing.T) {
 	if len(doc.Controllers) != 1 || doc.Controllers[0].Receiver != "Reconciler" || len(doc.Watches) != 0 {
 		t.Fatalf("expected one controller and no watches, got %+v", doc)
 	}
-	// The missing setup is reported, not silently dropped.
+	// The missing setup is reported, not silently dropped. Reconcile
+	// extracts, and without an abstraction both map fields it touches are
+	// unresolved. With the abstraction of testdata/configmirror they
+	// resolve.
 	s := readSupport(t, out)
-	if len(s.Included) != 1 || len(s.Summarized) != 1 || s.Summarized[0].Kind != "setup" || s.Summarized[0].Location.File != "examples/configmirror/controller.go" || len(s.Unsupported) != 0 {
+	if len(s.Included) != 2 || s.Included[1].Kind != "reconcile" || len(s.Summarized) != 1 || s.Summarized[0].Kind != "setup" || s.Summarized[0].Location.File != "examples/configmirror/controller.go" || len(s.Unsupported) != 0 {
 		t.Fatalf("unexpected support report %+v", s)
+	}
+	if got := constructs(s.Unresolved); len(got) != 2 || !strings.HasPrefix(got[0], "source.data.value at ") || !strings.HasPrefix(got[1], "target.data.value at ") {
+		t.Fatalf("unresolved %q", got)
+	}
+	out, err = extractTo(t, configMirror)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s := readSupport(t, out); len(s.Unsupported)+len(s.Unresolved) != 0 {
+		t.Fatalf("abstracted support report %+v", s)
 	}
 }
 
@@ -91,7 +105,8 @@ func TestExtractWatches(t *testing.T) {
 		t.Fatalf("watch provenance %+v", primary.Provenance)
 	}
 	s := readSupport(t, out)
-	if len(s.Included) != 3 || len(s.Summarized) != 0 || len(s.Unsupported) != 0 {
+	// The controller, its two watches and its Reconcile method.
+	if len(s.Included) != 4 || len(s.Summarized) != 0 || len(s.Unsupported) != 0 || len(s.Unresolved) != 0 {
 		t.Fatalf("unexpected support report %+v", s)
 	}
 	again, err := extractTo(t, "testdata/watched/project.yaml")

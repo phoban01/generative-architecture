@@ -226,6 +226,7 @@ func irProcess(c ir.Controller, program goflow.Program, effects []effect.Descrip
 		case n.Effect != "":
 			node.Kind, node.Effect, node.Next = ir.NodeEffect, n.Effect, id(n.Next)
 		case n.Kind == ir.NodeReturn:
+			node.Requeue = n.Requeue
 		case n.Kind == ir.NodeBranch:
 			node.Expression, node.Next, node.Else = string(n.Expression), id(n.Next), id(n.Else)
 		case n.Kind == ir.NodeAssign:

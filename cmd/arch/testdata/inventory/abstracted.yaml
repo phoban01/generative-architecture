@@ -1,0 +1,12 @@
+apiVersion: architecture.local/v1alpha1
+kind: Project
+metadata:
+  name: inventory
+spec:
+  module: github.com/phoban01/generative-architecture
+  packages:
+    - ./cmd/arch/testdata/inventory
+  catalog:
+    discovery:
+      - discovery.json
+  abstraction: abstraction.yaml

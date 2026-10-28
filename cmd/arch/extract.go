@@ -14,6 +14,7 @@ import (
 
 	"golang.org/x/tools/go/packages"
 
+	"github.com/phoban01/generative-architecture/pkg/abstraction"
 	"github.com/phoban01/generative-architecture/pkg/catalog"
 	"github.com/phoban01/generative-architecture/pkg/effect"
 	"github.com/phoban01/generative-architecture/pkg/goflow"
@@ -94,40 +95,67 @@ func extract(p project.Project) (ir.Document, *report.Support, error) {
 	for _, diag := range d.Diagnostics {
 		support.Unsupported = append(support.Unsupported, diag.Item())
 	}
+	var abs *abstraction.Abstraction
+	if p.Spec.Abstraction != "" {
+		a, err := abstraction.Load(filepath.Join(p.Dir, p.Spec.Abstraction))
+		if err != nil {
+			return doc, nil, err
+		}
+		abs = &a
+	}
 	doc.Controllers = d.Controllers
 	for _, c := range d.Controllers {
-		loc := report.Location{File: c.Provenance.Source.File, Line: c.Provenance.Source.Line}
-		support.Included = append(support.Included, report.Item{Kind: "controller", Construct: c.ID, Location: loc})
-		if c.Setup == nil {
-			support.Summarized = append(support.Summarized, report.Item{Kind: "setup", Construct: c.ID, Reason: "no SetupWithManager method; watches are not extracted", Location: loc})
-			continue
+		if err := extractController(p, c, cat, abs, &doc, support); err != nil {
+			return doc, nil, fmt.Errorf("controller %s: %w", c.ID, err)
 		}
-		watches, err := extractWatches(p.Root, c, cat)
+	}
+	return doc, support, nil
+}
+
+// extractController adds the watches of one controller to doc and what
+// extraction read of its SetupWithManager and Reconcile methods to the
+// support report. A failure to locate or type-check Reconcile is an
+// unsupported item at the controller.
+func extractController(p project.Project, c ir.Controller, cat *catalog.Catalog, abs *abstraction.Abstraction, doc *ir.Document, support *report.Support) error {
+	loc := report.Location{File: c.Provenance.Source.File, Line: c.Provenance.Source.Line}
+	support.Included = append(support.Included, report.Item{Kind: "controller", Construct: c.ID, Location: loc})
+	l, err := goflow.Load(p.Root, goflow.Selector{Package: c.Package, Receiver: c.Receiver, Method: reconcileMethod})
+	if err != nil {
+		support.Unsupported = append(support.Unsupported, report.Item{Kind: "reconcile", Construct: c.ID, Reason: err.Error(), Location: loc})
+		return nil
+	}
+	if c.Setup == nil {
+		support.Summarized = append(support.Summarized, report.Item{Kind: "setup", Construct: c.ID, Reason: "no SetupWithManager method; watches are not extracted", Location: loc})
+	} else if setup, ok := sibling(l, c.Receiver, "SetupWithManager"); !ok {
+		support.Unsupported = append(support.Unsupported, report.Item{Kind: "setup", Construct: c.ID, Reason: "SetupWithManager is not declared in the package of Reconcile", Location: loc})
+	} else {
+		watches, err := extractWatches(setup, c, cat)
 		if ds, ok := goflow.AsDiagnostics(err); ok {
 			for _, d := range ds {
 				d.File = relative(p.Root, d.File)
 				support.Unsupported = append(support.Unsupported, d.Item())
 			}
-			continue
-		}
-		if err != nil {
-			return doc, nil, fmt.Errorf("controller %s: %w", c.ID, err)
+		} else if err != nil {
+			return err
 		}
 		for _, w := range watches {
 			support.Included = append(support.Included, report.Item{Kind: "watch", Construct: c.ID + " watches " + w.Resource.String(), Location: report.Location{File: w.Provenance.Source.File, Line: w.Provenance.Source.Line}})
 		}
 		doc.Watches = append(doc.Watches, watches...)
 	}
-	return doc, support, nil
+	program, unsupported, unresolved := extractReconcile(p.Root, c, l, abs, cat)
+	support.Unsupported = append(support.Unsupported, unsupported...)
+	support.Unresolved = append(support.Unresolved, unresolved...)
+	if program != nil {
+		at := l.Package.Fset.Position(l.Func.Pos())
+		support.Included = append(support.Included, report.Item{Kind: "reconcile", Construct: c.ID, Reason: fmt.Sprintf("%d process nodes", len(program.Nodes)), Location: report.Location{File: relative(p.Root, at.Filename), Line: at.Line}})
+	}
+	return nil
 }
 
-// extractWatches type-checks the controller's SetupWithManager and converts
-// its builder chain into IR watches.
-func extractWatches(root string, c ir.Controller, cat *catalog.Catalog) ([]ir.Watch, error) {
-	l, err := goflow.Load(root, goflow.Selector{Package: c.Package, Receiver: c.Receiver, Method: "SetupWithManager"})
-	if err != nil {
-		return nil, err
-	}
+// extractWatches converts the builder chain of a loaded SetupWithManager
+// into IR watches.
+func extractWatches(l goflow.Loaded, c ir.Controller, cat *catalog.Catalog) ([]ir.Watch, error) {
 	resources, err := watchedResources(l, cat)
 	if err != nil {
 		return nil, err
