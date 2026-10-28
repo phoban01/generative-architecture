@@ -41,6 +41,19 @@ type Node struct {
 	// Error names the Results entry bound to the call's error result, so
 	// the process lowering can record which outcomes fail.
 	Error expr.Expression `yaml:"error,omitempty"`
+	// Unmodelled lists the fields an assign node writes without a model
+	// value, as root.json.path: the abstraction selects nothing at or
+	// below them, so the write changes no model state.
+	Unmodelled []string `yaml:"unmodelled,omitempty"`
+	// Requeue is the requeue a return node asks the runtime for:
+	// ir.RequeueImmediate for Result{Requeue: true}, ir.RequeueAfter for
+	// Result{RequeueAfter: d}, empty for none. RequeueAfter keeps the Go
+	// source of d; the runtime model uses its own delay.
+	Requeue      string `yaml:"requeue,omitempty"`
+	RequeueAfter string `yaml:"requeueAfter,omitempty"`
+	// inMemory marks an assign node lowered from a built-in object
+	// summary, whose call's error result is bound to false.
+	inMemory bool
 }
 type Program struct {
 	Entry        int    `yaml:"entry"`
@@ -53,11 +66,13 @@ type Program struct {
 // error result. Zero marks a result that is not modelled because every
 // return passes the zero value of its type (an empty composite literal such
 // as reconcile.Result{}); any other value is a diagnostic, and the result is
-// recorded as the empty expression.
+// recorded as the empty expression. Requeue, with Zero, also accepts a
+// reconcile result literal that asks for a requeue (see Node.Requeue).
 type Return struct {
-	Type  string
-	Error bool
-	Zero  bool
+	Type    string
+	Error   bool
+	Zero    bool
+	Requeue bool
 }
 
 // Convert lowers a Go expression that must have the given model type. It is an
@@ -119,6 +134,8 @@ type extractor struct {
 	program Program
 	fset    *token.FileSet
 	info    *types.Info // nil in text mode; set by ExtractTyped
+	// diagnostics collects every skipped statement's failure.
+	diagnostics []*Diagnostic
 }
 
 func (e *extractor) expression(n ast.Expr, want string) (expr.Expression, error) {
@@ -127,7 +144,7 @@ func (e *extractor) expression(n ast.Expr, want string) (expr.Expression, error)
 		return "", err
 	}
 	if _, err = e.opts.Compiler.Compile(v, e.opts.Scope, want); err != nil {
-		return "", err
+		return "", e.unsupported(n, err)
 	}
 	return v, nil
 }
@@ -224,11 +241,29 @@ func (e *extractor) add(n Node, source ast.Node, next, other int) int {
 	e.program.Nodes = append(e.program.Nodes, n)
 	return n.ID
 }
+
+// kindUnsupported marks the terminal node that stands for a skipped
+// statement at the end of a block. It exists only in a failed extraction.
+const kindUnsupported = "unsupported"
+
+// block lowers stmts last-first. A statement that fails with a located
+// diagnostic is recorded and skipped: control passes from the statement
+// before it to the one after it, and no node stands for it. When nothing
+// follows, a terminal node of kind unsupported takes its place, so the
+// skip adds no false fallthrough. Any other error stops extraction.
 func (e *extractor) block(stmts []ast.Stmt, next int) (int, error) {
 	for i := len(stmts) - 1; i >= 0; i-- {
 		n, err := e.statement(stmts[i], next)
 		if err != nil {
-			return 0, err
+			ds, ok := AsDiagnostics(err)
+			if !ok {
+				return 0, err
+			}
+			e.diagnostics = append(e.diagnostics, ds...)
+			if next < 0 {
+				next = e.add(Node{Kind: kindUnsupported}, stmts[i], -1, 0)
+			}
+			continue
 		}
 		next = n
 	}
@@ -298,12 +333,17 @@ func (e *extractor) statement(s ast.Stmt, next int) (int, error) {
 			return 0, e.diagnose(s, "return", fmt.Sprintf("unsupported return arity %d; expected %d", len(x.Results), len(e.opts.Returns)))
 		}
 		values := []expr.Expression{}
+		var requeue, after string
 		for i, result := range x.Results {
 			r := e.opts.Returns[i]
 			var v expr.Expression
 			var err error
 			if r.Zero {
-				if !zeroComposite(result) {
+				switch {
+				case zeroComposite(result):
+				case r.Requeue && e.info != nil:
+					requeue, after, err = e.requeue(result)
+				default:
 					return 0, e.diagnose(result, "return", "result must be the zero value of its type")
 				}
 			} else if r.Error && Code(result) == "nil" {
@@ -319,7 +359,7 @@ func (e *extractor) statement(s ast.Stmt, next int) (int, error) {
 			}
 			values = append(values, v)
 		}
-		n := Node{Kind: "return", Results: values}
+		n := Node{Kind: "return", Results: values, Requeue: requeue, RequeueAfter: after}
 		if len(values) > 0 {
 			n.Expression = values[0]
 		}
@@ -380,9 +420,14 @@ func (e *extractor) run(source []byte, method *ast.FuncDecl) (*Program, error) {
 		return nil, err
 	}
 	for _, n := range e.program.Nodes {
-		if n.Kind != "return" && (n.Next < 0 || (n.Kind == "branch" && n.Else < 0)) {
-			return nil, &Diagnostic{File: e.opts.File, Line: n.Line, Construct: "fallthrough", Reason: "unsupported fallthrough: control reaches the end of the method without a return", Source: n.Source}
+		if n.Kind != "return" && n.Kind != kindUnsupported && (n.Next < 0 || (n.Kind == "branch" && n.Else < 0)) {
+			e.diagnostics = append(e.diagnostics, &Diagnostic{File: e.opts.File, Line: n.Line, Construct: "fallthrough", Reason: "unsupported fallthrough: control reaches the end of the method without a return", Source: n.Source})
 		}
+	}
+	// Any diagnostic fails the extraction: no program is returned, so no
+	// IR is written for a method with a skipped statement.
+	if err := diagnosticsError(e.diagnostics); err != nil {
+		return nil, err
 	}
 	return &e.program, nil
 }
@@ -498,7 +543,7 @@ func (e *extractor) switchStmt(x *ast.SwitchStmt, next int) (int, error) {
 				}
 				condition = "(" + tag + " == " + lit + ")"
 				if _, err = e.opts.Compiler.Compile(condition, e.opts.Scope, "bool"); err != nil {
-					return 0, err
+					return 0, e.unsupported(ex, err)
 				}
 			} else if condition, err = e.expression(ex, "bool"); err != nil {
 				return 0, err
@@ -540,7 +585,26 @@ func (e *extractor) caseLiteral(ex ast.Expr) (expr.Expression, error) {
 // assignment binds each left-hand name to the node's Results so the summary
 // can update the corresponding model symbols.
 func (e *extractor) summarized(n Node, s ast.Stmt, next int) (int, error) {
-	if x, ok := s.(*ast.AssignStmt); ok && e.info != nil {
+	if x, ok := s.(*ast.AssignStmt); ok && e.info != nil && n.inMemory {
+		// An in-memory call summary: its only result is an error, which
+		// is nil.
+		if len(x.Lhs) != 1 {
+			return 0, e.diagnose(x, "assign", "unsupported assignment of a summarized call")
+		}
+		id, ok := x.Lhs[0].(*ast.Ident)
+		if !ok {
+			return 0, e.diagnose(x.Lhs[0], "assign", "unsupported assignment target")
+		}
+		if id.Name != "_" {
+			target := id.Name
+			if t, ok := e.opts.Targets[id.Name]; ok {
+				target = t
+			}
+			if err := e.succeed(&n, x, target); err != nil {
+				return 0, err
+			}
+		}
+	} else if x, ok := s.(*ast.AssignStmt); ok && e.info != nil {
 		var err error
 		if n, err = e.bindResults(n, x); err != nil {
 			return 0, err

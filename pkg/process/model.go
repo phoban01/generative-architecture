@@ -31,9 +31,16 @@ type Variant struct {
 // kind effect is expanded from the declared outcomes of its External effect
 // and a node of any other kind from the built-in summary of that operation
 // (see summarize).
+//
+// Outcome, when set, names a string state variable that each return node
+// sets to the runtime outcome it reports, so the runtime model can schedule
+// the key: success, error, requeue, after or errorAfter (see Outcome*). A
+// return node that asks for a requeue needs it, so that no requeue is
+// dropped.
 type Config struct {
 	PC         string               `yaml:"pc"`
 	Finished   string               `yaml:"finished"`
+	Outcome    string               `yaml:"outcome,omitempty"`
 	Results    []string             `yaml:"results"`
 	Operations map[string][]Variant `yaml:"operations"`
 	Summaries  summaries.Registry   `yaml:"-"`
@@ -90,6 +97,9 @@ func Expand(base model.Spec, p goflow.Program, c Config) (model.Spec, error) {
 				if target != "" {
 					u[target] = n.Results[i]
 				}
+			}
+			if err := c.outcome(base.State, n, u); err != nil {
+				return base, err
 			}
 			variants = []Variant{{Name: "return", Guard: "true", Updates: u}}
 		default:
@@ -155,6 +165,53 @@ func recordError(state map[string]model.Variable, n goflow.Node, v Variant, u ma
 		if s, ok := state[name+"_"+class]; ok && s.Type == "bool" {
 			u[name+"_"+class] = expr.Expression(strconv.FormatBool(v.Error == class))
 		}
+	}
+	return nil
+}
+
+// Runtime outcomes a return node reports through Config.Outcome. The names
+// are those of the controller-runtime model's finish events.
+const (
+	OutcomeSuccess    = "success"
+	OutcomeError      = "error"
+	OutcomeRequeue    = ir.RequeueImmediate
+	OutcomeAfter      = ir.RequeueAfter
+	OutcomeErrorAfter = "errorAfter"
+)
+
+// outcome sets Config.Outcome for a return node: the outcome of its
+// requeue request, or an error outcome when its error result holds. An
+// error with a delayed requeue is errorAfter; an error with an immediate
+// requeue is a plain error, as controller-runtime ignores the result then.
+func (c Config) outcome(state map[string]model.Variable, n goflow.Node, u map[string]expr.Expression) error {
+	if c.Outcome == "" {
+		if n.Requeue != "" {
+			return fmt.Errorf("return node %d at line %d requeues (%s) but the process has no outcome variable", n.ID, n.Line, n.Requeue)
+		}
+		return nil
+	}
+	if s, ok := state[c.Outcome]; !ok || s.Type != "string" {
+		return fmt.Errorf("outcome %s is not a string state variable", c.Outcome)
+	}
+	if _, set := u[c.Outcome]; set {
+		return fmt.Errorf("outcome %s is also a result target", c.Outcome)
+	}
+	success, failure := OutcomeSuccess, OutcomeError
+	switch n.Requeue {
+	case "":
+	case ir.RequeueImmediate:
+		success = OutcomeRequeue
+	case ir.RequeueAfter:
+		success, failure = OutcomeAfter, OutcomeErrorAfter
+	default:
+		return fmt.Errorf("return node %d: unknown requeue %q", n.ID, n.Requeue)
+	}
+	quote := strconv.Quote
+	switch n.ReturnError {
+	case "", "false":
+		u[c.Outcome] = expr.Expression(quote(success))
+	default:
+		u[c.Outcome] = expr.Expression("(" + string(n.ReturnError) + ") ? " + quote(failure) + " : " + quote(success))
 	}
 	return nil
 }

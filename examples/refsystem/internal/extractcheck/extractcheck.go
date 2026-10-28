@@ -50,8 +50,9 @@ type Result struct {
 	Program     *goflow.Program
 	Watches     watchgen.Result
 	// Diagnostics lists every unsupported construct, in frontend order:
-	// discovery, then Reconcile, then SetupWithManager. goflow and watchgen
-	// stop at their first diagnostic.
+	// discovery, then Reconcile, then SetupWithManager. goflow reports
+	// every diagnostic of Reconcile in source order; watchgen stops at its
+	// first.
 	Diagnostics []*goflow.Diagnostic
 }
 
@@ -102,8 +103,8 @@ func collect(out *Result, err error) error {
 	if err == nil {
 		return nil
 	}
-	if d, ok := goflow.AsDiagnostic(err); ok {
-		out.Diagnostics = append(out.Diagnostics, d)
+	if ds, ok := goflow.AsDiagnostics(err); ok {
+		out.Diagnostics = append(out.Diagnostics, ds...)
 		return nil
 	}
 	return err
@@ -132,6 +133,9 @@ func moduleRoot() (string, error) {
 func options(l goflow.Loaded) goflow.Options {
 	info := l.Package.TypesInfo
 	scope := map[string]expr.Symbol{}
+	// mapKeys lists the declared keys of each map field, so a literal
+	// assigned above a map knows which of its keys are model symbols.
+	mapKeys := map[string][]string{}
 	declare := func(name string, t types.Type) {
 		if typ, ok := modelType(t); ok {
 			scope[name] = expr.Symbol{Type: typ, Quint: name}
@@ -171,13 +175,20 @@ func options(l goflow.Loaded) goflow.Options {
 				}
 				if tv, ok := info.Types[kv.Key]; ok && tv.Value != nil {
 					key := strings.Trim(tv.Value.ExactString(), `"`)
-					declare(symbol(root, append(slices.Clone(path), key)), m.Elem())
+					name := symbol(root, append(slices.Clone(path), key))
+					declare(name, m.Elem())
+					if _, ok := scope[name]; ok {
+						mapKeys[symbol(root, path)] = append(mapKeys[symbol(root, path)], key)
+					}
 				}
 			}
 		}
 		return true
 	})
-	opts := goflow.Options{File: l.Path, Scope: scope, Returns: []goflow.Return{{Zero: true}, {Error: true}}}
+	opts := goflow.Options{File: l.Path, Scope: scope, Returns: []goflow.Return{{Zero: true, Requeue: true}, {Error: true}}}
+	opts.MapKeys = func(root string, path []string) []string {
+		return mapKeys[symbol(root, path)]
+	}
 	opts.Call = func(c goflow.Callee, _ *ast.CallExpr, _ goflow.Convert) (goflow.Node, bool, error) {
 		if c.Package != clientPackage {
 			return goflow.Node{}, false, nil

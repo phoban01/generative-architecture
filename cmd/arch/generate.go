@@ -175,14 +175,20 @@ func checkSupport(g globals, p project.Project, doc ir.Document) error {
 	return enforce(g, p, support)
 }
 
-// located makes the file of a frontend diagnostic relative to the module
-// root, so the message reads file:line.
+// located makes the file of each frontend diagnostic relative to the
+// module root, so the message reads file:line, one line per diagnostic.
 func located(root string, err error) error {
-	if d, ok := goflow.AsDiagnostic(err); ok {
-		d.File = relative(root, d.File)
-		return d
+	ds, ok := goflow.AsDiagnostics(err)
+	if !ok {
+		return err
 	}
-	return err
+	for _, d := range ds {
+		d.File = relative(root, d.File)
+	}
+	if len(ds) == 1 {
+		return ds[0]
+	}
+	return goflow.Diagnostics(ds)
 }
 
 // loadConstraints reads the properties of every constraints document.

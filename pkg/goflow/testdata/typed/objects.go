@@ -1,10 +1,14 @@
 package typed
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // Result stands for a reconcile result whose zero value means no requeue.
 type Result struct {
-	Requeue bool
+	Requeue      bool
+	RequeueAfter time.Duration
 }
 
 func (r *Reconciler) read(ctx context.Context, key string, cm *ConfigMap) error  { return nil }

@@ -236,20 +236,37 @@ func jsonPath(sel *types.Selection) ([]string, error) {
 		if !f.Exported() {
 			return nil, fmt.Errorf("unexported field %s is not serialized", f.Name())
 		}
-		tag := strings.Split(reflect.StructTag(st.Tag(i)).Get("json"), ",")
-		name := tag[0]
-		switch {
-		case name == "-":
+		name, serialized := jsonName(st, i)
+		if !serialized {
 			return nil, fmt.Errorf("field %s is not serialized", f.Name())
-		case name == "" && (f.Embedded() || slices.Contains(tag[1:], "inline")):
-		case name == "":
-			path = append(path, f.Name())
-		default:
+		}
+		if name != "" {
 			path = append(path, name)
 		}
 		t = f.Type()
 	}
 	return path, nil
+}
+
+// jsonName returns the JSON name of field i of st: the tag name, else the
+// Go field name, or "" for an inlined embedded struct. It reports false for
+// a field encoding/json does not serialize.
+func jsonName(st *types.Struct, i int) (string, bool) {
+	f := st.Field(i)
+	if !f.Exported() {
+		return "", false
+	}
+	tag := strings.Split(reflect.StructTag(st.Tag(i)).Get("json"), ",")
+	switch name := tag[0]; {
+	case name == "-":
+		return "", false
+	case name == "" && (f.Embedded() || slices.Contains(tag[1:], "inline")):
+		return "", true
+	case name == "":
+		return f.Name(), true
+	default:
+		return name, true
+	}
 }
 
 func deref(t types.Type) types.Type {

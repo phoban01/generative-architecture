@@ -238,6 +238,13 @@ func (compiler Compiler) lowerCEL(e *exprpb.Expr, scope map[string]Symbol) (Symb
 			}
 			a = append(a, s)
 		}
+		if c.Function == "_+_" && len(a) == 2 && a[0].Type == "string" && a[1].Type == "string" {
+			v, err := compiler.concatenation(e, scope)
+			if err != nil {
+				return Symbol{}, err
+			}
+			return Symbol{"string", v.quint()}, nil
+		}
 		if c.Function == "_[_]" && len(a) == 2 {
 			t, err := mapElement(a[0].Type)
 			if err != nil {

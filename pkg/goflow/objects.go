@@ -6,6 +6,7 @@ import (
 	"go/token"
 	"go/types"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/phoban01/generative-architecture/pkg/expr"
@@ -17,15 +18,19 @@ import (
 const ReturnedError = "err"
 
 // summarizeCall offers a call to a resolved symbol to the declared external
-// effects and then to Options.Call.
+// effects, then to Options.Call and last to the built-in object summaries.
+// An object summary yields a node of kind assign (see objectCall).
 func (e *extractor) summarizeCall(c Callee, call *ast.CallExpr) (Node, bool, error) {
 	if n, ok := e.externalCall(c); ok {
 		return n, true, nil
 	}
 	if e.opts.Call != nil {
-		return e.opts.Call(c, call, e.expression)
+		n, ok, err := e.opts.Call(c, call, e.expression)
+		if ok || err != nil {
+			return n, ok, err
+		}
 	}
-	return Node{}, false, nil
+	return e.objectCall(c, call)
 }
 
 // typedStatement lowers the statements that need type information to
@@ -185,17 +190,34 @@ func (e *extractor) fieldAssign(x *ast.AssignStmt, lhs *ast.SelectorExpr, next i
 		return 0, err
 	}
 	updates := map[string]expr.Expression{}
+	var unmodelled []string
 	set := func(at ast.Node, path []string, value ast.Expr) error {
+		field := root + "." + strings.Join(path, ".")
+		quantity, isQuantity, err := e.quantity(value)
+		if err != nil {
+			return err
+		}
 		target, ok := e.opts.Field(root, path)
+		if !ok && isQuantity {
+			unmodelled = append(unmodelled, field)
+			return nil
+		}
 		if !ok {
-			return e.diagnose(at, "field", "unmapped field "+root+"."+strings.Join(path, "."))
+			return e.diagnose(at, "field", "unmapped field "+field)
 		}
 		symbol, ok := e.opts.Scope[string(target)]
 		if !ok {
-			return e.diagnose(at, "assign", "field "+root+"."+strings.Join(path, ".")+" maps to "+string(target)+", which is not a model symbol")
+			return e.diagnose(at, "assign", "field "+field+" maps to "+string(target)+", which is not a model symbol")
 		}
 		if _, dup := updates[string(target)]; dup {
 			return e.diagnose(at, "assign", "aliased field assignment to "+string(target))
+		}
+		if isQuantity {
+			if symbol.Type != "string" {
+				return e.diagnose(value, "assign", "quantity field "+field+" must map to a string symbol, not "+symbol.Type)
+			}
+			updates[string(target)] = expr.Expression(strconv.Quote(quantity))
+			return nil
 		}
 		v, err := e.expression(value, symbol.Type)
 		if err != nil {
@@ -213,7 +235,21 @@ func (e *extractor) fieldAssign(x *ast.AssignStmt, lhs *ast.SelectorExpr, next i
 			}
 			key, ok := e.constantKey(kv.Key)
 			if !ok {
-				return 0, e.diagnose(kv.Key, "assign", "map literal key must be a constant string")
+				// A key that cannot be a path element, such as
+				// requests.cpu, is a write without a model value unless
+				// MapKeys selects it.
+				raw, isConst := e.constantString(kv.Key)
+				if !isConst {
+					return 0, e.diagnose(kv.Key, "assign", "map literal key must be a constant string")
+				}
+				if e.opts.MapKeys == nil || slices.Contains(e.opts.MapKeys(root, path), raw) {
+					return 0, e.diagnose(kv.Key, "assign", "map literal key "+strconv.Quote(raw)+" cannot be a model path element")
+				}
+				if err := e.noCalls(kv.Value); err != nil {
+					return 0, err
+				}
+				unmodelled = append(unmodelled, root+"."+strings.Join(path, ".")+"["+raw+"]")
+				continue
 			}
 			listed[key] = true
 			if err := set(kv, append(append([]string(nil), path...), key), kv.Value); err != nil {
@@ -233,10 +269,118 @@ func (e *extractor) fieldAssign(x *ast.AssignStmt, lhs *ast.SelectorExpr, next i
 				return 0, err
 			}
 		}
+	} else if opaque, err := e.opaqueLiteral(root, path, x.Rhs[0]); err != nil {
+		return 0, err
+	} else if opaque {
+		return e.add(Node{Kind: "assign", Unmodelled: []string{root + "." + strings.Join(path, ".")}}, x, next, 0), nil
 	} else if err := set(lhs, path, x.Rhs[0]); err != nil {
 		return 0, err
 	}
-	return e.add(Node{Kind: "assign", Updates: updates}, x, next, 0), nil
+	return e.add(Node{Kind: "assign", Updates: updates, Unmodelled: unmodelled}, x, next, 0), nil
+}
+
+// opaqueLiteral reports whether value, assigned to the field at path of
+// root, is a slice, array or struct literal (optionally behind &) that
+// writes no model state: Options.Field maps neither the field nor any
+// field below it (see selectsBelow). Such a write is recorded without a
+// value. A literal that holds a call to a declared function or method is a
+// diagnostic, because the call would be dropped. It reports false for any
+// other value, which is then lowered as an ordinary field assignment.
+func (e *extractor) opaqueLiteral(root string, path []string, value ast.Expr) (bool, error) {
+	x := ast.Unparen(value)
+	if u, ok := x.(*ast.UnaryExpr); ok && u.Op == token.AND {
+		x = ast.Unparen(u.X)
+	}
+	lit, ok := x.(*ast.CompositeLit)
+	if !ok {
+		return false, nil
+	}
+	t := e.info.TypeOf(lit)
+	if t == nil {
+		return false, nil
+	}
+	switch t.Underlying().(type) {
+	case *types.Slice, *types.Array, *types.Struct:
+	default:
+		return false, nil
+	}
+	if _, mapped := e.opts.Field(root, path); mapped {
+		return false, nil
+	}
+	if e.selectsBelow(root, path, t, map[types.Type]bool{}) {
+		return false, nil
+	}
+	if err := e.noCalls(lit); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// noCalls fails on a call to a declared function or method inside a value
+// written without a model value, because the call would be dropped. The
+// quantity constructors are pure and allowed.
+func (e *extractor) noCalls(value ast.Expr) error {
+	var err error
+	ast.Inspect(value, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok || err != nil {
+			return err == nil
+		}
+		if c, ok := e.callee(call); ok && !quantityConstructor(c) {
+			err = e.diagnose(call, "call", "call to "+c.String()+" inside a value written without a model value")
+		}
+		return true
+	})
+	return err
+}
+
+// selectsBelow reports whether the abstraction may select a field below
+// path of root, whose Go type is t: Options.Field maps a JSON path below
+// it, or a map with string keys below it has selected keys. List entries
+// add no path element, as the abstraction addresses them by scalar paths.
+// Without Options.MapKeys the keys of a map cannot be enumerated, so any
+// map with string keys counts as selected. A type that contains itself has
+// unbounded paths and counts as selected too.
+func (e *extractor) selectsBelow(root string, path []string, t types.Type, visiting map[types.Type]bool) bool {
+	t = types.Unalias(t)
+	switch u := t.Underlying().(type) {
+	case *types.Pointer:
+		return e.selectsBelow(root, path, u.Elem(), visiting)
+	case *types.Slice:
+		return e.selectsBelow(root, path, u.Elem(), visiting)
+	case *types.Array:
+		return e.selectsBelow(root, path, u.Elem(), visiting)
+	case *types.Map:
+		if b, ok := u.Key().Underlying().(*types.Basic); !ok || b.Info()&types.IsString == 0 {
+			return false
+		}
+		return e.opts.MapKeys == nil || len(e.opts.MapKeys(root, path)) > 0
+	case *types.Struct:
+		if visiting[t] {
+			// A recursive type has unbounded paths, so a field below it may
+			// be selected at any depth.
+			return true
+		}
+		visiting[t] = true
+		defer delete(visiting, t)
+		for i := range u.NumFields() {
+			name, serialized := jsonName(u, i)
+			if !serialized {
+				continue
+			}
+			child := path
+			if name != "" {
+				child = append(slices.Clone(path), name)
+				if _, ok := e.opts.Field(root, child); ok {
+					return true
+				}
+			}
+			if e.selectsBelow(root, child, u.Field(i).Type(), visiting) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // returnCall lowers a return statement whose error result is a call to a
@@ -283,6 +427,12 @@ func (e *extractor) returnCall(x *ast.ReturnStmt, next int) (int, bool, error) {
 			return 0, true, err
 		}
 		e.program.Nodes[ret].Source = Code(x)
+		if n.inMemory {
+			if err := e.succeed(&n, call, ReturnedError); err != nil {
+				return 0, true, err
+			}
+			return e.add(n, call, ret, 0), true, nil
+		}
 		n.Results = []expr.Expression{ReturnedError}
 		n.Error = ReturnedError
 		return e.add(n, call, ret, 0), true, nil
