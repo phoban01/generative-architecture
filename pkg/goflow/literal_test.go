@@ -53,7 +53,7 @@ func TestOpaqueLiteralWrites(t *testing.T) {
 		{name: "type that contains itself", method: "RecursiveLiteral", withMapKeys: true, diagnostic: "unmapped field job.spec.tree"},
 		{name: "map key selected", mapKeys: map[string][]string{"job.spec.containers.env": {"HOME"}}, withMapKeys: true, diagnostic: "unmapped field job.spec.containers"},
 		{name: "map keys unknown", diagnostic: "unmapped field job.spec.containers"},
-		{name: "call inside literal", method: "CallInLiteral", withMapKeys: true, diagnostic: "call to github.com/phoban01/generative-architecture/pkg/goflow/testdata/typed.Reconciler.image inside a literal"},
+		{name: "call inside literal", method: "CallInLiteral", withMapKeys: true, diagnostic: "call to github.com/phoban01/generative-architecture/pkg/goflow/testdata/typed.Reconciler.image inside a value"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			l := literals

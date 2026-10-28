@@ -6,6 +6,7 @@ import (
 	"go/token"
 	"go/types"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/phoban01/generative-architecture/pkg/expr"
@@ -189,17 +190,34 @@ func (e *extractor) fieldAssign(x *ast.AssignStmt, lhs *ast.SelectorExpr, next i
 		return 0, err
 	}
 	updates := map[string]expr.Expression{}
+	var unmodelled []string
 	set := func(at ast.Node, path []string, value ast.Expr) error {
+		field := root + "." + strings.Join(path, ".")
+		quantity, isQuantity, err := e.quantity(value)
+		if err != nil {
+			return err
+		}
 		target, ok := e.opts.Field(root, path)
+		if !ok && isQuantity {
+			unmodelled = append(unmodelled, field)
+			return nil
+		}
 		if !ok {
-			return e.diagnose(at, "field", "unmapped field "+root+"."+strings.Join(path, "."))
+			return e.diagnose(at, "field", "unmapped field "+field)
 		}
 		symbol, ok := e.opts.Scope[string(target)]
 		if !ok {
-			return e.diagnose(at, "assign", "field "+root+"."+strings.Join(path, ".")+" maps to "+string(target)+", which is not a model symbol")
+			return e.diagnose(at, "assign", "field "+field+" maps to "+string(target)+", which is not a model symbol")
 		}
 		if _, dup := updates[string(target)]; dup {
 			return e.diagnose(at, "assign", "aliased field assignment to "+string(target))
+		}
+		if isQuantity {
+			if symbol.Type != "string" {
+				return e.diagnose(value, "assign", "quantity field "+field+" must map to a string symbol, not "+symbol.Type)
+			}
+			updates[string(target)] = expr.Expression(strconv.Quote(quantity))
+			return nil
 		}
 		v, err := e.expression(value, symbol.Type)
 		if err != nil {
@@ -217,7 +235,21 @@ func (e *extractor) fieldAssign(x *ast.AssignStmt, lhs *ast.SelectorExpr, next i
 			}
 			key, ok := e.constantKey(kv.Key)
 			if !ok {
-				return 0, e.diagnose(kv.Key, "assign", "map literal key must be a constant string")
+				// A key that cannot be a path element, such as
+				// requests.cpu, is a write without a model value unless
+				// MapKeys selects it.
+				raw, isConst := e.constantString(kv.Key)
+				if !isConst {
+					return 0, e.diagnose(kv.Key, "assign", "map literal key must be a constant string")
+				}
+				if e.opts.MapKeys == nil || slices.Contains(e.opts.MapKeys(root, path), raw) {
+					return 0, e.diagnose(kv.Key, "assign", "map literal key "+strconv.Quote(raw)+" cannot be a model path element")
+				}
+				if err := e.noCalls(kv.Value); err != nil {
+					return 0, err
+				}
+				unmodelled = append(unmodelled, root+"."+strings.Join(path, ".")+"["+raw+"]")
+				continue
 			}
 			listed[key] = true
 			if err := set(kv, append(append([]string(nil), path...), key), kv.Value); err != nil {
@@ -244,7 +276,7 @@ func (e *extractor) fieldAssign(x *ast.AssignStmt, lhs *ast.SelectorExpr, next i
 	} else if err := set(lhs, path, x.Rhs[0]); err != nil {
 		return 0, err
 	}
-	return e.add(Node{Kind: "assign", Updates: updates}, x, next, 0), nil
+	return e.add(Node{Kind: "assign", Updates: updates, Unmodelled: unmodelled}, x, next, 0), nil
 }
 
 // opaqueLiteral reports whether value, assigned to the field at path of
@@ -278,18 +310,28 @@ func (e *extractor) opaqueLiteral(root string, path []string, value ast.Expr) (b
 	if e.selectsBelow(root, path, t, map[types.Type]bool{}) {
 		return false, nil
 	}
+	if err := e.noCalls(lit); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// noCalls fails on a call to a declared function or method inside a value
+// written without a model value, because the call would be dropped. The
+// quantity constructors are pure and allowed.
+func (e *extractor) noCalls(value ast.Expr) error {
 	var err error
-	ast.Inspect(lit, func(n ast.Node) bool {
+	ast.Inspect(value, func(n ast.Node) bool {
 		call, ok := n.(*ast.CallExpr)
 		if !ok || err != nil {
 			return err == nil
 		}
-		if c, ok := e.callee(call); ok {
-			err = e.diagnose(call, "call", "call to "+c.String()+" inside a literal written without a model value")
+		if c, ok := e.callee(call); ok && !quantityConstructor(c) {
+			err = e.diagnose(call, "call", "call to "+c.String()+" inside a value written without a model value")
 		}
 		return true
 	})
-	return err == nil, err
+	return err
 }
 
 // selectsBelow reports whether the abstraction may select a field below
