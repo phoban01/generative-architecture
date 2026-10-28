@@ -492,3 +492,53 @@ func TestUpstreamProjectGuideBoundary(t *testing.T) {
 		t.Fatalf("consumer did not reconcile: %v", state)
 	}
 }
+
+// TestReleaseChecklistReferences checks that every repository path in
+// backticks, every make target and every ADR that docs/release.md names
+// exists, so the checklist cannot point at a moved or deleted file.
+func TestReleaseChecklistReferences(t *testing.T) {
+	const root = "../.."
+	b, err := os.ReadFile(filepath.Join(root, "docs", "release.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(b)
+	n := 0
+	pathLike := regexp.MustCompile(`^\.?[\w-]+(\.[\w-]+)*(/[\w.-]+)*/?$`)
+	fileExt := []string{".md", ".mod", ".sum", ".lock", ".json", ".yaml", ".yml"}
+	for _, m := range regexp.MustCompile("`([^`\\s]+)`").FindAllStringSubmatch(text, -1) {
+		tok := m[1]
+		first, _, nested := strings.Cut(tok, "/")
+		switch {
+		case !pathLike.MatchString(tok):
+			continue
+		case nested && strings.Contains(first, ".") && !strings.HasPrefix(first, "."):
+			continue // a module path or an API group, such as github.com/...
+		case !nested && !slices.Contains(fileExt, filepath.Ext(tok)):
+			continue // a name, a version or a flag, not a file
+		}
+		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(tok))); err != nil {
+			t.Errorf("docs/release.md names %s: %v", tok, err)
+		}
+		n++
+	}
+	makefile, err := os.ReadFile(filepath.Join(root, "Makefile"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range regexp.MustCompile(`\bmake ([a-z][\w-]*)`).FindAllStringSubmatch(text, -1) {
+		if !regexp.MustCompile(`(?m)^` + regexp.QuoteMeta(m[1]) + `:`).Match(makefile) {
+			t.Errorf("docs/release.md names make %s, which the Makefile does not define", m[1])
+		}
+		n++
+	}
+	for _, m := range regexp.MustCompile(`ADR-(\d{4})`).FindAllStringSubmatch(text, -1) {
+		if files, _ := filepath.Glob(filepath.Join(root, "docs", "adr", m[1]+"-*.md")); len(files) != 1 {
+			t.Errorf("docs/release.md names ADR-%s, found %v", m[1], files)
+		}
+		n++
+	}
+	if n < 20 {
+		t.Fatalf("found only %d references in docs/release.md; the parser misses them", n)
+	}
+}

@@ -25,7 +25,7 @@ go run ./cmd/walkthrough          # no Kubernetes or Quint required
 
 The goal is **implementation → generated system model → independent constraints → counterexamples and Go replay**. Public packages in `pkg/` support restricted source extraction, structural contract declarations, process/model composition and controller-runtime scheduling. See [Using the library](LIBRARY.md) for APIs and limits. Automatic discovery of arbitrary controller wiring remains unfinished.
 
-See [the project plan](PROJECT-PLAN.md) for the requirements index, milestones and decision records.
+See [the project plan](PROJECT-PLAN.md) for the requirements index, milestones and decision records. [docs/release.md](docs/release.md) is the v0.1.0 checklist and the compatibility policy.
 
 ## Examples
 
@@ -148,7 +148,7 @@ The generated LikeC4 sources cover the extracted reconcile flow, the watch route
 | `pkg/contracts/`, `pkg/composition/`, `pkg/model/`, `pkg/expr/` | Contract checks, composition, model compilation, CEL subset |
 | `pkg/effect/`, `pkg/controllerruntime/`, `pkg/conformance/`, `pkg/quint/`, `pkg/krm/` | Effect gating, runtime harness, replay, Quint driver, strict KRM loading |
 | `cmd/` | `arch`, the generic CLI (subcommands land milestone by milestone), plus the `walkthrough`, `library-demo` and `general-demo` entry points |
-| `docs/` | Adoption guides, supported patterns, decision records (`adr/`) and plan reviews (`reviews/`) |
+| `docs/` | Adoption guides, supported patterns, the release checklist, decision records (`adr/`) and plan reviews (`reviews/`) |
 
 **Generated models, trace fixtures and YAML reports are intentionally retained.** Native tests and replay commands depend on them, and their hashes detect stale evidence. ITF traces retain Quint's JSON interchange format. Use `make clean` to remove local binaries and the rendered site.
 

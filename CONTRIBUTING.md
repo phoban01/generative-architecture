@@ -16,6 +16,10 @@ Work is tracked as small GitHub issues sized for one change each. Every issue ti
 
 Generated models, ITF traces and `report.yaml` receipts under `examples/` are committed on purpose. Each receipt stores the hashes of its inputs, so the native tests fail when a model, constraint or source file changes without the evidence being refreshed. When your change alters any of those inputs, run `make verify` and commit the refreshed files. `make verify` needs Quint and LikeC4; `devbox shell` provides both at the pinned versions (see [README.md](README.md#development-environment)).
 
+## Releases
+
+[docs/release.md](docs/release.md) lists the release steps, their state and the compatibility policy. A test checks that every file it names exists.
+
 ## Licence
 
 Contributions are accepted under the [Apache License 2.0](LICENSE).
