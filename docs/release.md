@@ -145,7 +145,8 @@ tag with the notes in section 12.
 
 `LIBRARY.md`, `README.md` and `docs/adopt-owned-project.md` already name
 `@v0.1.0`. ADOPT-6 and the Checkpoint C row of `PROJECT-PLAN.md` are marked
-done. Create the GitHub release from the tag with the notes in section 12.
+done.
+
 ## 12. Release notes outline
 
 **Summary.** A Go library and the `arch` CLI that extract controller
