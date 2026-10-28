@@ -18,9 +18,9 @@ every file and `make` target this checklist names exists.
 | Architecture pipeline job | Done in CI config; check on the release commit |
 | Compatibility policy for `pkg/` | Done: written below |
 | Tool version ranges | Done (ADR-0003) |
-| Go versions | Open: decision needed |
+| Go versions | Done: 1.26 and 1.27 |
 | Receipt drift scope | Open: #142 |
-| Stray `devbox.lock` change | Open: decision needed |
+| Stray `devbox.lock` change | Done: restored |
 | Adoption guides | Done (#110) |
 | Tag and release notes | Open: the owner's act |
 
@@ -114,16 +114,12 @@ in [1.59.0, 1.60.0). Each receipt records the exact version that ran.
 
 ## 8. Go versions
 
-Open: decision needed. The sources disagree:
-
-- `go.mod` declares `go 1.25.0`.
-- The `go` job in `.github/workflows/ci.yml` installs the version in `go.mod` (`go-version-file`).
-- The `envtest` matrix runs 1.26.x and 1.27.x.
-- `README.md` supports "the two most recent minor releases (currently 1.26
-  and 1.27)", and its quick start says "Go 1.25 or newer".
-
-Decide whether 1.25 is supported. Then either raise `go.mod` and the `go`
-job to 1.26, or add 1.25 to the README and the matrix.
+Done. The supported releases are the two most recent Go minors, 1.26 and
+1.27, as `README.md` states. `go.mod` declares `go 1.26.0`, and so do the
+consumer module under `testdata/consumer` and the pinned CronJob module
+under `testdata/external/cronjob`. The `go` job installs the version in
+`go.mod`, and the `envtest` matrix runs 1.26.x and 1.27.x. Go 1.25 is not
+supported.
 
 ## 9. Receipt drift scope
 
@@ -133,14 +129,12 @@ release promises. The release notes state the scope that ships.
 
 ## 10. Stray devbox.lock change
 
-Open: decision needed. The main checkout has an uncommitted change to
-`devbox.lock`: one plugin's `plugin_version` reads `0.0.2`, while the
-committed file has `0.0.5`. Commit it or restore it, so that the tag
-points at a clean tree.
+Done. The uncommitted change set one plugin's `plugin_version` to `0.0.2`.
+The committed value `0.0.5` is restored, and the tree is clean.
 
 ## 11. Tag and release
 
-The owner's act. After steps 2, 3, 8, 9 and 10:
+The owner's act. After steps 2, 3 and 9:
 
 ```sh
 git tag -a v0.1.0 -m "v0.1.0"

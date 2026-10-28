@@ -1,6 +1,6 @@
 module example.org/architecture-consumer
 
-go 1.25.0
+go 1.26.0
 
 require (
 	github.com/phoban01/generative-architecture v0.0.0

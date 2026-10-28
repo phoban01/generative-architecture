@@ -1,6 +1,6 @@
 module github.com/phoban01/generative-architecture
 
-go 1.25.0
+go 1.26.0
 
 require (
 	cel.dev/cel-go v0.32.0

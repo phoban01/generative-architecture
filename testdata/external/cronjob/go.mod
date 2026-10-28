@@ -1,6 +1,6 @@
 module tutorial.kubebuilder.io/project
 
-go 1.25.0
+go 1.26.0
 
 require (
 	github.com/robfig/cron v1.2.0

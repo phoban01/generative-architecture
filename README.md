@@ -41,7 +41,7 @@ See [the project plan](PROJECT-PLAN.md) for the requirements index, milestones a
 
 ## Quick start
 
-Run from the repository root with Go 1.25 or newer on PATH:
+Run from the repository root with Go 1.26 or newer on PATH:
 
 ```sh
 go test ./...

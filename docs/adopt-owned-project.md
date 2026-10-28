@@ -19,7 +19,7 @@ repository root unless a section says otherwise.
 
 ## 1. What to pin
 
-- **Go.** `go.mod` declares Go 1.25.0 as the minimum. The README lists the
+- **Go.** `go.mod` declares Go 1.26.0 as the minimum. The README lists the
   supported releases.
 - **arch.** No release is tagged yet. Install a commit of this module:
 
