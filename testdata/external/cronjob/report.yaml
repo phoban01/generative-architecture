@@ -9,7 +9,7 @@ status:
     conformance: 0
     safety: 0
     tool: 0
-    unsupported: 58
+    unsupported: 59
   scope: 'no model: arch extract failed closed on the unmodified controller, so arch generate, check and replay did not run; no tool sampled or replayed anything'
   traces: 0
   transitions: 0
@@ -125,6 +125,8 @@ status:
     - category: unsupported
       message: 'arch extract: internal/controller/cronjob_controller.go:553: preamble "if r.Clock == nil {": expected an unstructured object declaration'
     - category: unsupported
+      message: 'arch extract: internal/controller/cronjob_controller.go:557: preamble "if err := mgr.GetFieldIndexer().IndexField(context.Background(), &kbatch.Job{}, jobOwnerKey, func(rawObj client.Object) []string {": expected an unstructured object declaration'
+    - category: unsupported
       message: 'arch generate: not run: arch extract wrote no ir.yaml'
     - category: unsupported
       message: 'arch check: not run: arch extract wrote no ir.yaml'
@@ -135,6 +137,6 @@ status:
     catalog/batch-v1.json: a972f6b207e83e52f80baf5821e20d7b154c788b092a412945c2254566159d15
     config/crd/bases/batch.tutorial.kubebuilder.io_cronjobs.yaml: 4016e4984192bbd6ae9e460e5b39bda35a7fac44ed19a63efa60c16018e83630
     constraints.yaml: d65c2cebdb865f0f4234cfdd8470927640fb9aacf68e7d5f51e7ac7cc57657a4
-    generated/support.yaml: 3d7733d8991200efcdd1c4dcc4ea7dd99d244bfe0c4985ab25aaec93342a61c4
+    generated/support.yaml: 5d98e962f4423b63465ef067acb0df4528ddbc341407a6548508dfde57b64f02
     internal/controller/cronjob_controller.go: b9bde9f751609f2661062c88b86e73e70125e4fd136475bb6e1eec37686db5aa
     project.yaml: b964264e5f1f239bef530a8ed965b19c33baddd4f79e39dcae057b03f84dc2f5

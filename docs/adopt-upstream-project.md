@@ -101,7 +101,7 @@ arch extract
 It prints:
 
 ```text
-arch extract: unsupported constructs: 54 found, listed in generated/support.yaml
+arch extract: unsupported constructs: 55 found, listed in generated/support.yaml
 ```
 
 `arch extract` writes `generated/support.yaml` and no `ir.yaml`, because a
@@ -121,15 +121,16 @@ included     controller   tutorial.kubebuilder.io/project/internal/controller.Cr
 unsupported  call         log := logf.FromContext(ctx)                                           internal/controller/cronjob_controller.go:101  unsummarized call to sigs.k8s.io/controller-runtime/pkg/log.FromContext; ...
 ...
 unsupported  preamble     if r.Clock == nil { ...                                                internal/controller/cronjob_controller.go:553  expected an unstructured object declaration
+unsupported  preamble     if err := mgr.GetFieldIndexer().IndexField(...                         internal/controller/cronjob_controller.go:557  expected an unstructured object declaration
 unresolved   field        cronJob.spec.concurrencyPolicy                                         internal/controller/cronjob_controller.go:444  no abstraction selects this field
-inventory mode: 55 unsupported or unresolved items in the selected packages; --strict fails on them
+inventory mode: 56 unsupported or unresolved items in the selected packages; --strict fails on them
 ```
 
 Read the two lists that matter for adoption:
 
 - `unsupported`: constructs arch cannot read, each with its source text, a
   reason and `file:line`. The list has every unsupported construct of
-  `Reconcile`, and the first one of `SetupWithManager`. You cannot change
+  `Reconcile` and of the `SetupWithManager` preamble. You cannot change
   upstream source, so each row is either an extractor gap to report or a
   reason to describe the controller with a boundary model (section 7).
 - `unresolved`: object fields that `Reconcile` reads or writes but no
@@ -147,7 +148,7 @@ arch --strict support
 ```
 
 ```text
-arch support: verification mode (--strict) refuses incomplete semantics: 55 unsupported or unresolved items in the selected packages, first call log := logf.FromContext(ctx) at internal/controller/cronjob_controller.go:101
+arch support: verification mode (--strict) refuses incomplete semantics: 56 unsupported or unresolved items in the selected packages, first call log := logf.FromContext(ctx) at internal/controller/cronjob_controller.go:101
 ```
 
 ## 6. What fails closed
@@ -161,7 +162,7 @@ arch --strict extract
 ```
 
 ```text
-arch extract: unsupported constructs: 55 found, listed in generated/support.yaml
+arch extract: unsupported constructs: 56 found, listed in generated/support.yaml
 ```
 
 Without an IR, the later commands refuse to run:

@@ -499,6 +499,25 @@ status:
       location:
         file: internal/controller/cronjob_controller.go
         line: 553
+    - kind: preamble
+      construct: |-
+        if err := mgr.GetFieldIndexer().IndexField(context.Background(), &kbatch.Job{}, jobOwnerKey, func(rawObj client.Object) []string {
+        	job := rawObj.(*kbatch.Job)
+        	owner := metav1.GetControllerOf(job)
+        	if owner == nil {
+        		return nil
+        	}
+        	if owner.APIVersion != apiGVStr || owner.Kind != "CronJob" {
+        		return nil
+        	}
+        	return []string{owner.Name}
+        }); err != nil {
+        	return err
+        }
+      reason: expected an unstructured object declaration
+      location:
+        file: internal/controller/cronjob_controller.go
+        line: 557
   unresolved:
     - kind: field
       construct: cronJob.spec.concurrencyPolicy

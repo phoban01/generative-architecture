@@ -17,18 +17,17 @@ Line numbers refer to `internal/controller/cronjob_controller.go` at the pin.
 ## How the gaps were found
 
 - Gaps 1 and 2 come from `arch extract` and `arch support`.
-- `goflow` and `watchgen` stop at the first diagnostic. To find the next
-  gap, a scratch copy of the controller had the reported construct removed,
-  and extraction ran again. The scratch copy kept the line numbers. Nothing
+- When this list was written, `goflow` and `watchgen` stopped at the first
+  diagnostic (gap 3). To find the next gap, a scratch copy of the controller
+  had the reported construct removed, and extraction ran again. The scratch copy kept the line numbers. Nothing
   in this directory was changed.
 - When this list was written, `arch extract` read only `SetupWithManager`.
   Gaps 4 to 13 came from running the typed `Reconcile` frontend
   (`goflow.ExtractTyped`) through `examples/refsystem/internal/extractcheck`
   on the scratch copy. Since #103, `arch extract` and `arch support` run
   that frontend on every `Reconcile` and collect every diagnostic, so
-  `generated/support.yaml` now lists these gaps directly (55 unsupported
-  items). A diagnostic there means the frontend cannot read the construct at
-  all.
+  `generated/support.yaml` now lists these gaps directly. A diagnostic
+  there means the frontend cannot read the construct at all.
 - Gap 14 is from reading the code. The probe removed these constructs
   together with others, so no diagnostic text is recorded for them.
 
@@ -56,8 +55,8 @@ smallest extension that would support it.
 
 - Construct:
   `if err := mgr.GetFieldIndexer().IndexField(context.Background(), &kbatch.Job{}, jobOwnerKey, func(...) []string {...}); err != nil { return err }`.
-- Location: line 557. Gap 1 hides it.
-- Diagnostic: `preamble: unsupported setup preamble`.
+- Location: line 557. Gap 1 hid it until #156.
+- Diagnostic: `preamble: expected an unstructured object declaration`.
 - Problem: kubebuilder projects often register an index next to `Owns`.
   `Reconcile` reads it through `client.MatchingFields{jobOwnerKey: ...}`
   (line 132).
@@ -65,18 +64,21 @@ smallest extension that would support it.
   `&T{}` object and a constant key. Record a summarized `index` item with
   the resource and the key. Keep the extractor function summarized.
 
-### 3. Extraction stops at the first diagnostic
+### 3. Extraction stops at the first diagnostic (closed by #156)
 
 - Construct: any second unsupported statement in `SetupWithManager` or
   `Reconcile`.
-- Location: the report shows line 553 only; line 557 stays hidden.
-- Diagnostic: none; the second gap is not reported.
+- Location: the report showed line 553 only; line 557 stayed hidden.
 - Problem: an author fixes one gap and finds the next one only on the next
   run. Checkpoint A recorded the same problem for the database and backup
   controllers.
-- Smallest extension: in the `watchgen` preamble, collect one diagnostic per
-  statement and go on with the next statement. Do the same per top-level
-  statement in `goflow`. Report all of them.
+- Resolution: `goflow` collects every diagnostic since 0daf2fe. Since #156,
+  the `watchgen` preamble check reports one diagnostic per unsupported
+  statement and goes on with the next one. `generated/support.yaml` lists
+  both line 553 and line 557.
+- Remaining: the builder chain after the preamble is still read only when
+  the preamble has no diagnostic, so a watch gap behind a preamble gap
+  stays hidden.
 
 ### 4. arch extract does not read Reconcile (closed by #103)
 

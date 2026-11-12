@@ -324,12 +324,12 @@ func TestUpstreamProjectGuideWalk(t *testing.T) {
 	// SetupWithManager and Reconcile and lists every gap, including the
 	// setup preamble and the first Reconcile statement.
 	_, _, err = w.arch("arch extract")
-	wantErr(err, "arch extract: unsupported constructs: 54 found, listed in generated/support.yaml")
+	wantErr(err, "arch extract: unsupported constructs: 55 found, listed in generated/support.yaml")
 	s, err := report.Read(filepath.Join(generatedDir, supportFile))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(s.Unsupported) != 54 || len(s.Unresolved) != 1 || s.Unresolved[0].Construct != "cronJob.spec.concurrencyPolicy" {
+	if len(s.Unsupported) != 55 || len(s.Unresolved) != 1 || s.Unresolved[0].Construct != "cronJob.spec.concurrencyPolicy" {
 		t.Fatalf("report without a catalog: %d unsupported, unresolved %+v", len(s.Unsupported), s.Unresolved)
 	}
 	if _, err := os.Stat(filepath.Join(generatedDir, irFile)); !os.IsNotExist(err) {
@@ -338,19 +338,20 @@ func TestUpstreamProjectGuideWalk(t *testing.T) {
 	out, stderr, err := w.arch("arch support")
 	for _, row := range []string{
 		"internal/controller/cronjob_controller.go:553  expected an unstructured object declaration",
+		"internal/controller/cronjob_controller.go:557  expected an unstructured object declaration",
 		"internal/controller/cronjob_controller.go:101  unsummarized call to sigs.k8s.io/controller-runtime/pkg/log.FromContext",
 	} {
 		if err != nil || !strings.Contains(out, row) {
 			t.Fatalf("arch support lacks %q: %v\n%s", row, err, out)
 		}
 	}
-	if !strings.Contains(stderr, "inventory mode: 55 unsupported or unresolved items in the selected packages; --strict fails on them") {
+	if !strings.Contains(stderr, "inventory mode: 56 unsupported or unresolved items in the selected packages; --strict fails on them") {
 		t.Fatalf("arch support: %s", stderr)
 	}
 
 	// Section 5: strict mode fails on the first construct in file order.
 	_, _, err = w.arch("arch --strict support")
-	wantErr(err, "arch support: verification mode (--strict) refuses incomplete semantics: 55 unsupported or unresolved items in the selected packages, first call log := logf.FromContext(ctx) at internal/controller/cronjob_controller.go:101")
+	wantErr(err, "arch support: verification mode (--strict) refuses incomplete semantics: 56 unsupported or unresolved items in the selected packages, first call log := logf.FromContext(ctx) at internal/controller/cronjob_controller.go:101")
 
 	// Section 6 with the committed project and abstraction. The
 	// abstraction selects spec.suspend and status.lastScheduleTime, so
@@ -359,7 +360,7 @@ func TestUpstreamProjectGuideWalk(t *testing.T) {
 		copyTree(t, filepath.Join(src, name), filepath.Join(dir, name))
 	}
 	_, _, err = w.arch("arch --strict extract")
-	wantErr(err, "arch extract: unsupported constructs: 55 found, listed in generated/support.yaml")
+	wantErr(err, "arch extract: unsupported constructs: 56 found, listed in generated/support.yaml")
 	got, err := os.ReadFile(filepath.Join(generatedDir, supportFile))
 	if err != nil {
 		t.Fatal(err)

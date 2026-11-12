@@ -401,3 +401,25 @@ func TestNamedRecordsControllerName(t *testing.T) {
 		}
 	}
 }
+
+// TestPreambleReportsEveryUnsupportedStatement checks that the setup
+// preamble check goes on past an unsupported statement. A receiver default
+// before the object declaration and a field index after it give one
+// diagnostic each, and the declaration between them is still read.
+func TestPreambleReportsEveryUnsupportedStatement(t *testing.T) {
+	source, resources := fixture(t)
+	changed := strings.Replace(string(source), "\tdatabase := &unstructured.Unstructured{}",
+		"\tif r.Clock == nil {\n\t\tr.Clock = 1\n\t}\n\tdatabase := &unstructured.Unstructured{}", 1)
+	changed = strings.Replace(changed, "\treturn ctrl.NewControllerManagedBy(mgr).",
+		"\tif err := mgr.GetFieldIndexer().IndexField(nil, nil, \"key\", nil); err != nil {\n\t\treturn err\n\t}\n\treturn ctrl.NewControllerManagedBy(mgr).", 1)
+	_, err := watchgen.Extract([]byte(changed), "DatabaseReconciler", "SetupWithManager", resources)
+	ds, ok := goflow.AsDiagnostics(err)
+	if !ok || len(ds) != 2 {
+		t.Fatalf("want two diagnostics, got %v", err)
+	}
+	for i, want := range []int{27, 32} {
+		if ds[i].Construct != "preamble" || ds[i].Line != want {
+			t.Fatalf("diagnostic %d: %+v, want preamble at line %d", i, ds[i], want)
+		}
+	}
+}
