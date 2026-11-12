@@ -9,23 +9,17 @@ status:
     conformance: 0
     safety: 0
     tool: 0
-    unsupported: 59
+    unsupported: 45
   scope: 'no model: arch extract failed closed on the unmodified controller, so arch generate, check and replay did not run; no tool sampled or replayed anything'
   traces: 0
   transitions: 0
   findings:
     - category: unsupported
-      message: 'arch extract: internal/controller/cronjob_controller.go:101: call "log := logf.FromContext(ctx)": unsummarized call to sigs.k8s.io/controller-runtime/pkg/log.FromContext; declare it as a client operation or an external effect'
-    - category: unsupported
       message: 'arch extract: internal/controller/cronjob_controller.go:115: declaration "var cronJob batchv1.CronJob /*": unsupported Go statement'
-    - category: unsupported
-      message: 'arch extract: internal/controller/cronjob_controller.go:117: call "log.Error(err, \"unable to fetch CronJob\")": unsummarized call to github.com/go-logr/logr.Logger.Error; declare it as a client operation or an external effect'
     - category: unsupported
       message: 'arch extract: internal/controller/cronjob_controller.go:121: call "client.IgnoreNotFound(err)": unsummarized call to sigs.k8s.io/controller-runtime/pkg/client.IgnoreNotFound; declare it as a client operation or an external effect'
     - category: unsupported
       message: 'arch extract: internal/controller/cronjob_controller.go:131: declaration "var childJobs kbatch.JobList /*": unsupported Go statement'
-    - category: unsupported
-      message: 'arch extract: internal/controller/cronjob_controller.go:133: call "log.Error(err, \"unable to list child Jobs\")": unsummarized call to github.com/go-logr/logr.Logger.Error; declare it as a client operation or an external effect'
     - category: unsupported
       message: 'arch extract: internal/controller/cronjob_controller.go:163: declaration "var activeJobs [ // find the active list of jobs": unsupported Go statement'
     - category: unsupported
@@ -51,10 +45,6 @@ status:
     - category: unsupported
       message: 'arch extract: internal/controller/cronjob_controller.go:233: range "for _, activeJob := range activeJobs {": unsupported Go statement'
     - category: unsupported
-      message: 'arch extract: internal/controller/cronjob_controller.go:248: call "log.V(1).Info(\"job count\", \"active jobs\", len(activeJobs), \"successful jobs\", len(successfulJobs), \"failed jobs\", len(failedJobs))": unsummarized call to github.com/go-logr/logr.Logger.Info; declare it as a client operation or an external effect'
-    - category: unsupported
-      message: 'arch extract: internal/controller/cronjob_controller.go:260: call "log.Error(err, \"unable to update CronJob status\")": unsummarized call to github.com/go-logr/logr.Logger.Error; declare it as a client operation or an external effect'
-    - category: unsupported
       message: 'arch extract: internal/controller/cronjob_controller.go:276: field "cronJob.Spec.FailedJobsHistoryLimit": unmapped field cronJob.spec.failedJobsHistoryLimit'
     - category: unsupported
       message: 'arch extract: internal/controller/cronjob_controller.go:277: call "sort.Slice(failedJobs, func(i, j int) bool {": unsummarized call to sort.Slice; declare it as a client operation or an external effect'
@@ -69,25 +59,17 @@ status:
     - category: unsupported
       message: 'arch extract: internal/controller/cronjob_controller.go:321: expression "nil": unsupported Go expression'
     - category: unsupported
-      message: 'arch extract: internal/controller/cronjob_controller.go:322: call "log.V(1).Info(\"cronjob suspended, skipping\")": unsummarized call to github.com/go-logr/logr.Logger.Info; declare it as a client operation or an external effect'
-    - category: unsupported
       message: 'arch extract: internal/controller/cronjob_controller.go:344: assign "getNextSchedule := func(cronJob *batchv1.CronJob, now time.Time) (lastMissed time.Time, next time.Time, err error) {": unsupported Go statement'
     - category: unsupported
       message: 'arch extract: internal/controller/cronjob_controller.go:400: assign "missedRun, nextRun, err := getNextSchedule(&cronJob, r.Now())": unsupported Go statement'
     - category: unsupported
-      message: 'arch extract: internal/controller/cronjob_controller.go:402: call "log.Error(err, \"unable to figure out CronJob schedule\")": unsummarized call to github.com/go-logr/logr.Logger.Error; declare it as a client operation or an external effect'
-    - category: unsupported
       message: 'arch extract: internal/controller/cronjob_controller.go:412: assign "scheduledResult := ctrl.Result{RequeueAfter: nextRun.Sub(r.Now())}": unsupported Go statement'
     - category: unsupported
-      message: 'arch extract: internal/controller/cronjob_controller.go:413: call "log = log.WithValues(\"now\", r.Now(), \"next run\", nextRun)": unsummarized call to github.com/go-logr/logr.Logger.WithValues; declare it as a client operation or an external effect'
+      message: 'arch extract: internal/controller/cronjob_controller.go:413: call "r.Now()": call to tutorial.kubebuilder.io/project/internal/controller.CronJobReconciler.Now inside a logging call; dropping the log would drop it'
     - category: unsupported
       message: 'arch extract: internal/controller/cronjob_controller.go:420: expression "missedRun.IsZero()": unsupported Go expression'
     - category: unsupported
-      message: 'arch extract: internal/controller/cronjob_controller.go:421: call "log.V(1).Info(\"no upcoming scheduled times, sleeping until next\")": unsummarized call to github.com/go-logr/logr.Logger.Info; declare it as a client operation or an external effect'
-    - category: unsupported
       message: 'arch extract: internal/controller/cronjob_controller.go:422: return "scheduledResult": result must be the zero value of its type or a reconcile result literal'
-    - category: unsupported
-      message: 'arch extract: internal/controller/cronjob_controller.go:426: call "log = log.WithValues(\"current run\", missedRun)": unsummarized call to github.com/go-logr/logr.Logger.WithValues; declare it as a client operation or an external effect'
     - category: unsupported
       message: 'arch extract: internal/controller/cronjob_controller.go:427: assign "tooLate := false": unsupported Go statement'
     - category: unsupported
@@ -97,13 +79,9 @@ status:
     - category: unsupported
       message: 'arch extract: internal/controller/cronjob_controller.go:431: identifier "tooLate": unbound local variable tooLate'
     - category: unsupported
-      message: 'arch extract: internal/controller/cronjob_controller.go:432: call "log.V(1).Info(\"missed starting deadline for last run, sleeping till next\")": unsummarized call to github.com/go-logr/logr.Logger.Info; declare it as a client operation or an external effect'
-    - category: unsupported
       message: 'arch extract: internal/controller/cronjob_controller.go:434: return "scheduledResult": result must be the zero value of its type or a reconcile result literal'
     - category: unsupported
       message: 'arch extract: internal/controller/cronjob_controller.go:444: expression "len(activeJobs)": unsupported Go expression'
-    - category: unsupported
-      message: 'arch extract: internal/controller/cronjob_controller.go:445: call "log.V(1).Info(\"concurrency policy blocks concurrent runs, skipping\", \"num active\", len(activeJobs))": unsummarized call to github.com/go-logr/logr.Logger.Info; declare it as a client operation or an external effect'
     - category: unsupported
       message: 'arch extract: internal/controller/cronjob_controller.go:446: return "scheduledResult": result must be the zero value of its type or a reconcile result literal'
     - category: unsupported
@@ -113,13 +91,7 @@ status:
     - category: unsupported
       message: 'arch extract: internal/controller/cronjob_controller.go:504: assign "job, err := constructJobForCronJob(&cronJob, missedRun)": unsupported Go statement'
     - category: unsupported
-      message: 'arch extract: internal/controller/cronjob_controller.go:506: call "log.Error(err, \"unable to construct job from template\")": unsummarized call to github.com/go-logr/logr.Logger.Error; declare it as a client operation or an external effect'
-    - category: unsupported
       message: 'arch extract: internal/controller/cronjob_controller.go:508: return "scheduledResult": result must be the zero value of its type or a reconcile result literal'
-    - category: unsupported
-      message: 'arch extract: internal/controller/cronjob_controller.go:513: call "log.Error(err, \"unable to create Job for CronJob\", \"job\", job)": unsummarized call to github.com/go-logr/logr.Logger.Error; declare it as a client operation or an external effect'
-    - category: unsupported
-      message: 'arch extract: internal/controller/cronjob_controller.go:517: call "log.V(1).Info(\"created Job for CronJob run\", \"job\", job)": unsummarized call to github.com/go-logr/logr.Logger.Info; declare it as a client operation or an external effect'
     - category: unsupported
       message: 'arch extract: internal/controller/cronjob_controller.go:528: return "scheduledResult": result must be the zero value of its type or a reconcile result literal'
     - category: unsupported
@@ -137,6 +109,6 @@ status:
     catalog/batch-v1.json: a972f6b207e83e52f80baf5821e20d7b154c788b092a412945c2254566159d15
     config/crd/bases/batch.tutorial.kubebuilder.io_cronjobs.yaml: 4016e4984192bbd6ae9e460e5b39bda35a7fac44ed19a63efa60c16018e83630
     constraints.yaml: d65c2cebdb865f0f4234cfdd8470927640fb9aacf68e7d5f51e7ac7cc57657a4
-    generated/support.yaml: 5d98e962f4423b63465ef067acb0df4528ddbc341407a6548508dfde57b64f02
+    generated/support.yaml: 70e8d550dfa29346c342c7e57add9cd5b56e44963e8120156471cc768a3f9b77
     internal/controller/cronjob_controller.go: b9bde9f751609f2661062c88b86e73e70125e4fd136475bb6e1eec37686db5aa
     project.yaml: b964264e5f1f239bef530a8ed965b19c33baddd4f79e39dcae057b03f84dc2f5

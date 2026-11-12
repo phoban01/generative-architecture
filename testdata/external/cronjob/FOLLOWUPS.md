@@ -106,14 +106,21 @@ smallest extension that would support it.
   the receiver after the declaring type of the method (for `Create`,
   `client.Writer`). Calls through `r.Client.Create` already work.
 
-### 6. Logging calls
+### 6. Logging calls (closed by #157)
 
 - Construct: `log := logf.FromContext(ctx)`, `log.Error(...)`,
   `log.V(1).Info(...)`, `log = log.WithValues(...)`.
-- Location: line 101 and 21 more lines; line 517 is reported first.
+- Location: line 101 and 21 more lines.
 - Diagnostic: `call: unsummarized call to github.com/go-logr/logr.Logger.Info; declare it as a client operation or an external effect`.
-- Smallest extension: a built-in no-effect summary for `logr.Logger`
-  methods and for `log.FromContext` in controller-runtime.
+- Resolution: `goflow` drops a statement that only logs. That is a call to
+  a `logr.Logger` method or to controller-runtime's `log.FromContext`,
+  alone or bound to a `logr.Logger` local. The statement adds no node.
+  Builtins such as `len` and conversions may appear in its arguments.
+- Remaining: any other call inside a logging call is a diagnostic, because
+  dropping the log would drop that call. Line 413 calls `r.Now()` inside
+  `log.WithValues`, so it stays in the report until the clock has a
+  summary (gap 11). Logging statements inside unsupported loops and
+  closures (gaps 8 and 9) still go with those constructs.
 
 ### 7. Non-zero reconcile.Result
 

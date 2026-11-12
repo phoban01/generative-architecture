@@ -11,12 +11,6 @@ status:
         line: 49
   summarized: []
   unsupported:
-    - kind: call
-      construct: log := logf.FromContext(ctx)
-      reason: unsummarized call to sigs.k8s.io/controller-runtime/pkg/log.FromContext; declare it as a client operation or an external effect
-      location:
-        file: internal/controller/cronjob_controller.go
-        line: 101
     - kind: declaration
       construct: |
         var cronJob batchv1.CronJob /*
@@ -36,12 +30,6 @@ status:
         file: internal/controller/cronjob_controller.go
         line: 115
     - kind: call
-      construct: log.Error(err, "unable to fetch CronJob")
-      reason: unsummarized call to github.com/go-logr/logr.Logger.Error; declare it as a client operation or an external effect
-      location:
-        file: internal/controller/cronjob_controller.go
-        line: 117
-    - kind: call
       construct: client.IgnoreNotFound(err)
       reason: unsummarized call to sigs.k8s.io/controller-runtime/pkg/client.IgnoreNotFound; declare it as a client operation or an external effect
       location:
@@ -60,12 +48,6 @@ status:
       location:
         file: internal/controller/cronjob_controller.go
         line: 131
-    - kind: call
-      construct: log.Error(err, "unable to list child Jobs")
-      reason: unsummarized call to github.com/go-logr/logr.Logger.Error; declare it as a client operation or an external effect
-      location:
-        file: internal/controller/cronjob_controller.go
-        line: 133
     - kind: declaration
       construct: |-
         var activeJobs [ // find the active list of jobs
@@ -189,18 +171,6 @@ status:
       location:
         file: internal/controller/cronjob_controller.go
         line: 233
-    - kind: call
-      construct: log.V(1).Info("job count", "active jobs", len(activeJobs), "successful jobs", len(successfulJobs), "failed jobs", len(failedJobs))
-      reason: unsummarized call to github.com/go-logr/logr.Logger.Info; declare it as a client operation or an external effect
-      location:
-        file: internal/controller/cronjob_controller.go
-        line: 248
-    - kind: call
-      construct: log.Error(err, "unable to update CronJob status")
-      reason: unsummarized call to github.com/go-logr/logr.Logger.Error; declare it as a client operation or an external effect
-      location:
-        file: internal/controller/cronjob_controller.go
-        line: 260
     - kind: field
       construct: cronJob.Spec.FailedJobsHistoryLimit
       reason: unmapped field cronJob.spec.failedJobsHistoryLimit
@@ -275,12 +245,6 @@ status:
       location:
         file: internal/controller/cronjob_controller.go
         line: 321
-    - kind: call
-      construct: log.V(1).Info("cronjob suspended, skipping")
-      reason: unsummarized call to github.com/go-logr/logr.Logger.Info; declare it as a client operation or an external effect
-      location:
-        file: internal/controller/cronjob_controller.go
-        line: 322
     - kind: assign
       construct: |
         getNextSchedule := func(cronJob *batchv1.CronJob, now time.Time) (lastMissed time.Time, next time.Time, err error) {
@@ -325,12 +289,6 @@ status:
       location:
         file: internal/controller/cronjob_controller.go
         line: 400
-    - kind: call
-      construct: log.Error(err, "unable to figure out CronJob schedule")
-      reason: unsummarized call to github.com/go-logr/logr.Logger.Error; declare it as a client operation or an external effect
-      location:
-        file: internal/controller/cronjob_controller.go
-        line: 402
     - kind: assign
       construct: 'scheduledResult := ctrl.Result{RequeueAfter: nextRun.Sub(r.Now())}'
       reason: unsupported Go statement
@@ -338,8 +296,8 @@ status:
         file: internal/controller/cronjob_controller.go
         line: 412
     - kind: call
-      construct: log = log.WithValues("now", r.Now(), "next run", nextRun)
-      reason: unsummarized call to github.com/go-logr/logr.Logger.WithValues; declare it as a client operation or an external effect
+      construct: r.Now()
+      reason: call to tutorial.kubebuilder.io/project/internal/controller.CronJobReconciler.Now inside a logging call; dropping the log would drop it
       location:
         file: internal/controller/cronjob_controller.go
         line: 413
@@ -349,24 +307,12 @@ status:
       location:
         file: internal/controller/cronjob_controller.go
         line: 420
-    - kind: call
-      construct: log.V(1).Info("no upcoming scheduled times, sleeping until next")
-      reason: unsummarized call to github.com/go-logr/logr.Logger.Info; declare it as a client operation or an external effect
-      location:
-        file: internal/controller/cronjob_controller.go
-        line: 421
     - kind: return
       construct: scheduledResult
       reason: result must be the zero value of its type or a reconcile result literal
       location:
         file: internal/controller/cronjob_controller.go
         line: 422
-    - kind: call
-      construct: log = log.WithValues("current run", missedRun)
-      reason: unsummarized call to github.com/go-logr/logr.Logger.WithValues; declare it as a client operation or an external effect
-      location:
-        file: internal/controller/cronjob_controller.go
-        line: 426
     - kind: assign
       construct: tooLate := false
       reason: unsupported Go statement
@@ -391,12 +337,6 @@ status:
       location:
         file: internal/controller/cronjob_controller.go
         line: 431
-    - kind: call
-      construct: log.V(1).Info("missed starting deadline for last run, sleeping till next")
-      reason: unsummarized call to github.com/go-logr/logr.Logger.Info; declare it as a client operation or an external effect
-      location:
-        file: internal/controller/cronjob_controller.go
-        line: 432
     - kind: return
       construct: scheduledResult
       reason: result must be the zero value of its type or a reconcile result literal
@@ -409,12 +349,6 @@ status:
       location:
         file: internal/controller/cronjob_controller.go
         line: 444
-    - kind: call
-      construct: log.V(1).Info("concurrency policy blocks concurrent runs, skipping", "num active", len(activeJobs))
-      reason: unsummarized call to github.com/go-logr/logr.Logger.Info; declare it as a client operation or an external effect
-      location:
-        file: internal/controller/cronjob_controller.go
-        line: 445
     - kind: return
       construct: scheduledResult
       reason: result must be the zero value of its type or a reconcile result literal
@@ -460,30 +394,12 @@ status:
       location:
         file: internal/controller/cronjob_controller.go
         line: 504
-    - kind: call
-      construct: log.Error(err, "unable to construct job from template")
-      reason: unsummarized call to github.com/go-logr/logr.Logger.Error; declare it as a client operation or an external effect
-      location:
-        file: internal/controller/cronjob_controller.go
-        line: 506
     - kind: return
       construct: scheduledResult
       reason: result must be the zero value of its type or a reconcile result literal
       location:
         file: internal/controller/cronjob_controller.go
         line: 508
-    - kind: call
-      construct: log.Error(err, "unable to create Job for CronJob", "job", job)
-      reason: unsummarized call to github.com/go-logr/logr.Logger.Error; declare it as a client operation or an external effect
-      location:
-        file: internal/controller/cronjob_controller.go
-        line: 513
-    - kind: call
-      construct: log.V(1).Info("created Job for CronJob run", "job", job)
-      reason: unsummarized call to github.com/go-logr/logr.Logger.Info; declare it as a client operation or an external effect
-      location:
-        file: internal/controller/cronjob_controller.go
-        line: 517
     - kind: return
       construct: scheduledResult
       reason: result must be the zero value of its type or a reconcile result literal
