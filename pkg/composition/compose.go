@@ -18,6 +18,12 @@ type Port struct {
 	Version   string `yaml:"version"`
 	Direction string `yaml:"direction"`
 	Writable  bool   `yaml:"writable,omitempty"`
+	// Owner and Creator record why a derived resource port provides.
+	// Owner means the component's primary watch is the resource. Creator
+	// means the component creates or applies it. ResolveProviders uses
+	// them to choose one provider per resource (ADR-0010).
+	Owner   bool `yaml:"owner,omitempty"`
+	Creator bool `yaml:"creator,omitempty"`
 	// Evidence and Provenance are set on ports derived from IR facts. A
 	// hand-written port leaves them empty and counts as declared.
 	Evidence   ir.Evidence     `yaml:"evidence,omitempty"`
