@@ -23,6 +23,12 @@ jobs:
         with:
           go-version: ${{ matrix.go }}
           check-latest: true
+      # quint verify runs TLC on a JVM. Without Java the temporal tests
+      # skip, so CI would never run them. pkg/quint caps the heap at 2 GiB.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
       - name: Build
         run: go build ./...
       - name: Vet

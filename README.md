@@ -64,7 +64,7 @@ Authored documents use KRM `apiVersion`, `kind`, `metadata` and `spec`; generate
 
 ## Development environment
 
-[Devbox](https://www.jetify.com/devbox) pins the toolchain in `devbox.json` and `devbox.lock`: Go, Node.js and `gh` from nixpkgs, plus Quint and LikeC4 installed by npm from `hack/tools/package.json` and its lockfile on first shell entry. The devbox pins sit at the minimum of each supported range below; they are a convenience, not the compatibility contract. The Go module has no npm dependency; `hack/tools/` only supplies the two external CLIs.
+[Devbox](https://www.jetify.com/devbox) pins the toolchain in `devbox.json` and `devbox.lock`: Go, Node.js, `gh` and a Java 21 JDK from nixpkgs, plus Quint and LikeC4 installed by npm from `hack/tools/package.json` and its lockfile on first shell entry. The devbox pins sit at the minimum of each supported range below; they are a convenience, not the compatibility contract. The Go module has no npm dependency; `hack/tools/` only supplies the two external CLIs.
 
 ```sh
 devbox shell          # or: devbox run tools   (prints every tool version)
@@ -82,6 +82,7 @@ Go dependencies are pinned in `go.mod` and `go.sum`. The external tools are acce
 | Go | The two most recent minor releases (currently 1.26 and 1.27); `go.mod` declares the minimum language version | `devbox.json` or your own install |
 | Quint | 0.33.x | `QUINT_BIN`, or `quint` on `PATH` |
 | LikeC4 | 1.59.x | `LIKEC4_BIN`, or `likec4` on `PATH` |
+| Java | 21, for `quint verify` (TLC); the temporal tests skip without it and `pkg/quint` caps the heap at 2 GiB | `devbox.json` or your own JDK, `java` on `PATH` |
 | controller-runtime, client-go | Pinned in `go.mod` | Go modules |
 
 The Go tools call Quint and LikeC4 as executables and never import npm code. `devbox shell` provides all of them and exports `QUINT_BIN` / `LIKEC4_BIN` (see [Development environment](#development-environment)). Outside devbox, set those variables or put the CLIs on `PATH`.

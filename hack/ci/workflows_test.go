@@ -243,3 +243,22 @@ func TestGoJobMatrix(t *testing.T) {
 		}
 	}
 }
+
+// The go job installs a Java 21 runtime, so the TLC-backed temporal tests
+// run in CI instead of skipping.
+func TestGoJobHasJava(t *testing.T) {
+	w := readWorkflow(t, filepath.Join(root, ".github", "workflows", "ci.yml"))
+	j, ok := w.Jobs["go"]
+	if !ok {
+		t.Fatal("ci.yml has no go job")
+	}
+	for _, s := range j.Steps {
+		if strings.HasPrefix(s.Uses, "actions/setup-java") {
+			if v, _ := s.With["java-version"].(string); v != "21" {
+				t.Errorf("setup-java installs %v; want 21", s.With["java-version"])
+			}
+			return
+		}
+	}
+	t.Error("the go job has no setup-java step; the temporal tests skip without Java")
+}

@@ -3,7 +3,8 @@
   "packages": [
     "go@1.26.8",
     "nodejs@24.21.0",
-    "gh@2.102.0"
+    "gh@2.102.0",
+    "jdk@21"
   ],
   "env": {
     "QUINT_BIN": "$PWD/hack/tools/node_modules/.bin/quint",
