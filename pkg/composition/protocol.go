@@ -60,6 +60,9 @@ func attachProtocols(result *Result, links []Link, ports map[string]Port, owners
 		}
 		shared := result.StateNames[provider+"."+from.State]
 		id := LinkID(l)
+		if err := checkSymbols(id, c); err != nil {
+			return err
+		}
 		monitor := id + "_protoState"
 		if _, taken := result.Model.State[monitor]; taken {
 			return fmt.Errorf("%s: generated state %s collides with existing state", at, monitor)
@@ -115,6 +118,48 @@ func attachProtocols(result *Result, links []Link, ports map[string]Port, owners
 			check.Properties = append(check.Properties, name)
 		}
 		result.Protocols = append(result.Protocols, check)
+	}
+	return nil
+}
+
+// Symbols a protocol expression may read. A guard sees the bound state
+// before and after the write and the protocol state; a property sees the
+// bound state and the protocol state.
+var (
+	guardSymbols    = map[string]bool{"port": true, "next": true, "state": true}
+	propertySymbols = map[string]bool{"port": true, "state": true}
+)
+
+// checkSymbols reports the first guard or property of c that reads a
+// symbol outside its vocabulary, named by the link and the protocol. The
+// check runs when the protocol is attached, so the error names the
+// contract and not the composed action that model.Compile would reject.
+func checkSymbols(link string, c protocol.Contract) error {
+	at := fmt.Sprintf("link %s, protocol %s/%s", link, c.Name, c.Version)
+	check := func(what string, source expr.Expression, allowed map[string]bool) error {
+		if source == "" {
+			return nil
+		}
+		free, err := expr.FreeIdentifiers(source)
+		if err != nil {
+			return fmt.Errorf("%s: %s: %w", at, what, err)
+		}
+		for _, s := range free {
+			if !allowed[s] {
+				return fmt.Errorf("%s: %s: unknown symbol %s", at, what, s)
+			}
+		}
+		return nil
+	}
+	for j, t := range c.Transitions {
+		if err := check(fmt.Sprintf("transitions[%d].guard", j), t.Guard, guardSymbols); err != nil {
+			return err
+		}
+	}
+	for j, p := range c.Properties {
+		if err := check(fmt.Sprintf("properties[%d]", j), p.Expression, propertySymbols); err != nil {
+			return err
+		}
 	}
 	return nil
 }

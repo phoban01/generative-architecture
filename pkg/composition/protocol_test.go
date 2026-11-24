@@ -125,6 +125,10 @@ func TestProtocolLinkValidation(t *testing.T) {
 	}
 	unknownSymbol := handshake()
 	unknownSymbol.Transitions[0].Guard = "other == 1"
+	unknownInProperty := handshake()
+	unknownInProperty.Properties[0].Expression = `state != "done" || value == "consumed"`
+	nextInProperty := handshake()
+	nextInProperty.Properties[0].Expression = `next == "consumed"`
 	invalid := handshake()
 	invalid.Initial = "nowhere"
 	for _, tc := range []struct {
@@ -136,7 +140,9 @@ func TestProtocolLinkValidation(t *testing.T) {
 		{"contract not loaded", handshakeComponents(), nil, "link producer.output -> user.input: protocol handshake: contract not loaded"},
 		{"consumer role on read-only port", readOnly(), map[string]protocol.Contract{"handshake": handshake()}, "roles do not match port directions: transitions[1] consume"},
 		{"invalid contract", handshakeComponents(), map[string]protocol.Contract{"handshake": invalid}, "spec.initial"},
-		{"guard names unknown symbol", handshakeComponents(), map[string]protocol.Contract{"handshake": unknownSymbol}, "unknown CEL symbol other"},
+		{"guard names unknown symbol", handshakeComponents(), map[string]protocol.Contract{"handshake": unknownSymbol}, "link producer_output__user_input, protocol Handshake/v1: transitions[0].guard: unknown symbol other"},
+		{"property names unknown symbol", handshakeComponents(), map[string]protocol.Contract{"handshake": unknownInProperty}, "link producer_output__user_input, protocol Handshake/v1: properties[0]: unknown symbol value"},
+		{"property reads next", handshakeComponents(), map[string]protocol.Contract{"handshake": nextInProperty}, "properties[0]: unknown symbol next"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := composition.ComposeWithProtocols("Joined", tc.components, []composition.Link{handshakeLink}, nil, tc.protocols)
