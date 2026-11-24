@@ -233,7 +233,8 @@ func (e *extractor) clear(at ast.Node, root string, path []string, updates map[s
 // literal with constant string keys replaces the whole map: every listed
 // key's symbol takes its value, and every key Options.MapKeys selects but
 // the literal omits takes its absent value. Keys outside the selection are
-// not modelled. Without MapKeys only the listed keys are updated.
+// not modelled. A literal that writes a selected key while MapKeys is nil
+// is a diagnostic, because the omitted selected keys could not be cleared.
 func (e *extractor) fieldAssign(x *ast.AssignStmt, lhs *ast.SelectorExpr, next int) (int, error) {
 	root, path, err := e.fieldPath(lhs)
 	if err != nil {
@@ -302,7 +303,14 @@ func (e *extractor) fieldAssign(x *ast.AssignStmt, lhs *ast.SelectorExpr, next i
 				continue
 			}
 			listed[key] = true
-			if err := set(kv, append(append([]string(nil), path...), key), kv.Value); err != nil {
+			keyPath := append(append([]string(nil), path...), key)
+			if _, selected := e.opts.Field(root, keyPath); selected && e.opts.MapKeys == nil {
+				// Without MapKeys the frontend cannot clear the selected
+				// keys the literal omits, so a replaced map would keep
+				// stale values. Fail closed instead.
+				return 0, e.diagnose(kv.Key, "assign", "map literal writes selected key "+root+"."+strings.Join(keyPath, ".")+" but Options.MapKeys is nil; the keys it omits cannot be cleared")
+			}
+			if err := set(kv, keyPath, kv.Value); err != nil {
 				return 0, err
 			}
 		}

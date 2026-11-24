@@ -55,14 +55,13 @@ func TestMapLiteralReplacesSelectedMap(t *testing.T) {
 	if got := assignOf(p).Updates["targetMode"]; got != "0" {
 		t.Fatalf("absent int %q", got)
 	}
-	// Without MapKeys only the listed key is updated.
+	// Without MapKeys the selected keys the literal omits could not be
+	// cleared, so the frontend fails closed with a located diagnostic.
 	opts := options("string")
 	opts.MapKeys = nil
-	if p, err = ExtractTyped(copyFixture, opts); err != nil {
-		t.Fatal(err)
-	}
-	if got := assignOf(p).Updates; len(got) != 1 {
-		t.Fatalf("updates without MapKeys %v", got)
+	_, err = ExtractTyped(copyFixture, opts)
+	if d, ok := AsDiagnostic(err); !ok || d.Construct != "assign" || d.Line == 0 || !strings.Contains(d.Reason, "map literal writes selected key target.data.value but Options.MapKeys is nil") {
+		t.Fatalf("map literal without MapKeys accepted: %v", err)
 	}
 
 	// A selected key the field callback does not map, and a type with no

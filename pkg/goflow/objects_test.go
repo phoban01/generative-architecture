@@ -41,6 +41,12 @@ func copyOptions() Options {
 		}
 		return "", false
 	}
+	opts.MapKeys = func(root string, path []string) []string {
+		if strings.Join(path, ".") == "data" {
+			return []string{"value"}
+		}
+		return nil
+	}
 	return opts
 }
 

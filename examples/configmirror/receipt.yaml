@@ -41,7 +41,7 @@ status:
     - path: examples/configmirror/evidence.go
       sha256: caa5a9a803ffb54b3b61f32b75083cb6ad41055f7dcaae7452209f1e0191f631
     - path: examples/configmirror/generate.go
-      sha256: a30cba92e5dd1a2e1c3c1b7187e587cf6af16a5cefba115912753ac80bb061b0
+      sha256: d8f5125a2f838bdf45e3a93140a30579f052d6c6cc90647df25483e868dc0bf3
     - path: examples/configmirror/generated/environment_generated.go
       sha256: 89c807e758ae5c150fbf7351455ce4ffe06c8f008ad31bb2540d34e17ab6519f
     - path: examples/configmirror/generated/gating_generated.go
@@ -55,13 +55,13 @@ status:
     - path: examples/configmirror/project.yaml
       sha256: 7c30e5b3c3d049c92d08b69b9db78571c8d90da0eb657895a9113676bc6220f9
     - path: go.mod
-      sha256: ef66f58b0664696408246827ef8fbb54accc6ec775ff92938f55ff310d8d02ac
+      sha256: 5b1ed1e170683eb841853c047c15d2774e376684f3318252b9d330f0f3be036c
     - path: go.sum
-      sha256: e8531c7210f8b9a53c6e17b31d25ffeafb85acb188a97bb21d9b42047be35ef2
+      sha256: ed5af2f8d19b41f7406479adef9ab0a7ee5430f55509febeba1c7d3c877d7348
     - path: pkg/abstraction/abstraction.go
       sha256: 42eb0922bf6dd098d358d65a12b52d7bd04614d0c10d1e3024b453c8eb65ef7e
     - path: pkg/adaptergen/abstraction.go
-      sha256: d345f2bb32a75cf38a1c76350fd33627ad7de5f95355719c8f14b97fb109c613
+      sha256: d4ac2ec54b307bbb84fcca0255803b6cadcd8284ca4a81607fcd2a2479267557
     - path: pkg/adaptergen/environment.go
       sha256: f0a472a2fb390c29accd17aa44041b92de4c594eeeaf6359f79d8b600958f819
     - path: pkg/adaptergen/gating.go
@@ -69,7 +69,7 @@ status:
     - path: pkg/adaptergen/generate.go
       sha256: 23ba80818bb0ad6700cfaf1cef2be9861c32ab5ecfdbc08753934efb37907284
     - path: pkg/adaptergen/projection.go
-      sha256: 1265ec8d0eefae41bad85a8464e9a5f7662acf0d17786e1a626551c7f24805f2
+      sha256: 6b0f3151d9d1e9628d33bc20d5f0356fdde958b892a8e64184b193e7973dc423
     - path: pkg/adaptergen/proxy.go
       sha256: 80d06f4552a8c3fec10a0a10cf80df6f136d98de6f57bafa9ca73a33eea29642
     - path: pkg/adaptergen/references.go
@@ -149,7 +149,7 @@ status:
     - path: pkg/goflow/objectcall.go
       sha256: 534943c36c996faffe9794b6bcc223287e21640d47fce31a1febf4b0e815be21
     - path: pkg/goflow/objects.go
-      sha256: 1aae08d0c91efa5af8a399ad25a625763fe9a9d31db9c66694e5baa8cf307716
+      sha256: e3091b0bb16aa153cfe614199ee28a54b10606b3eb33bcb07d4cd9f3e15ab799
     - path: pkg/goflow/pure.go
       sha256: 1bf500d5f760815e1aab7aed54227056ab9de0f299e9004973895e14ebfe8a87
     - path: pkg/goflow/quantity.go

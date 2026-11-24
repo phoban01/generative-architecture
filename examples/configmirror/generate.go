@@ -133,6 +133,7 @@ func ExtractOptions(l goflow.Loaded, abs abstraction.Abstraction) (goflow.Option
 	opts := goflow.Options{File: l.Path, Scope: scope, Returns: []goflow.Return{{Zero: true}, {Error: true}}}
 	opts.Call = x.call
 	opts.Field = x.field
+	opts.MapKeys = x.mapKeys
 	return opts, nil
 }
 
@@ -689,4 +690,23 @@ var finishOutcomes = map[string]string{
 	EventFinishRequeue:    process.OutcomeRequeue,
 	EventFinishAfter:      process.OutcomeAfter,
 	EventFinishErrorAfter: process.OutcomeErrorAfter,
+}
+
+// mapKeys lists the selected keys of the map at jsonPath on the object
+// local root: the last element of every selected field path whose parent
+// is jsonPath. goflow clears the keys a map literal omits, so a replaced
+// map does not keep stale values.
+func (x *extraction) mapKeys(root string, jsonPath []string) []string {
+	r, ok := x.locals[root]
+	if !ok {
+		return nil
+	}
+	var keys []string
+	for _, f := range r.Fields {
+		p := abstraction.JSONPath(f.Path)
+		if len(p) == len(jsonPath)+1 && abstraction.PathKey(p[:len(p)-1]) == abstraction.PathKey(jsonPath) {
+			keys = append(keys, p[len(p)-1])
+		}
+	}
+	return keys
 }
