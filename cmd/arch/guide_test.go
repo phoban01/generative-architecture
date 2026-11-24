@@ -380,7 +380,7 @@ func TestUpstreamProjectGuideWalk(t *testing.T) {
 		t.Fatalf("the report with the committed project differs from the committed one:\n%s", got)
 	}
 	for _, c := range []struct{ command, msg string }{
-		{"arch generate", "arch generate: generated/ir.yaml not found; run arch extract first"},
+		{"arch generate", "arch generate: generated/ir.yaml not found; arch extract failed closed on 31 unsupported constructs, listed in generated/support.yaml; first: declaration var activeJobs [ // find the active list of jobs at internal/controller/cronjob_controller.go:163"},
 		{"arch check", "arch check: generated/ir.yaml not found; run arch extract and arch generate first"},
 		{"arch replay", "arch replay: no traces match generated/traces/*.itf.json; run arch check first or pass --traces"},
 		{"arch render", "arch render: no workspace in generated/likec4; run arch generate first"},

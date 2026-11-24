@@ -176,7 +176,7 @@ arch render
 ```
 
 ```text
-arch generate: generated/ir.yaml not found; run arch extract first
+arch generate: generated/ir.yaml not found; arch extract failed closed on 31 unsupported constructs, listed in generated/support.yaml; first: declaration var activeJobs [ // find the active list of jobs at internal/controller/cronjob_controller.go:163
 arch check: generated/ir.yaml not found; run arch extract and arch generate first
 arch replay: no traces match generated/traces/*.itf.json; run arch check first or pass --traces
 arch render: no workspace in generated/likec4; run arch generate first

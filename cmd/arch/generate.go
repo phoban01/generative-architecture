@@ -388,12 +388,13 @@ func boundsOf(b abstraction.Bounds) map[string]int {
 // missingIR explains a missing IR document. When the support report beside
 // it lists unsupported constructs, arch extract ran and failed closed, so
 // the error says so and names the first construct. Otherwise extract has
-// not run.
+// not run. A construct that spans lines is cut at its first line.
 func missingIR(irPath, supportPath string) error {
 	support, err := report.Read(supportPath)
 	if err != nil || len(support.Unsupported) == 0 {
 		return fmt.Errorf("%s not found; run arch extract first", irPath)
 	}
 	first := support.Unsupported[0]
-	return fmt.Errorf("%s not found; arch extract failed closed on %d unsupported constructs, listed in %s; first: %s %s at %s:%d", irPath, len(support.Unsupported), supportPath, first.Kind, first.Construct, first.Location.File, first.Location.Line)
+	construct, _, _ := strings.Cut(first.Construct, "\n")
+	return fmt.Errorf("%s not found; arch extract failed closed on %d unsupported constructs, listed in %s; first: %s %s at %s:%d", irPath, len(support.Unsupported), supportPath, first.Kind, construct, first.Location.File, first.Location.Line)
 }
