@@ -171,3 +171,22 @@ func TestGenerateProjectionRejects(t *testing.T) {
 		})
 	}
 }
+
+// An object with no selected field projects its existence flag only; the
+// generated source must still compile, so the fetched object is not bound.
+func TestGenerateProjectionExistsOnly(t *testing.T) {
+	key := ir.ObjectRef{Name: "only"}
+	src, err := adaptergen.GenerateProjection("p", []adaptergen.Projection{
+		{State: "Database_only_exists", Resource: fixture.Database, Key: key, Type: "bool"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(src)
+	for _, want := range []string{`state["Database_only_exists"] = found`, `_, found, err := projectGet(ctx, api, mapper`} {
+		if !strings.Contains(text, want) {
+			t.Errorf("generated source lacks %q:\n%s", want, text)
+		}
+	}
+	typecheck(t, src)
+}

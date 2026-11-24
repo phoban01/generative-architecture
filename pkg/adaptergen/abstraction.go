@@ -124,7 +124,7 @@ func Project(ctx context.Context, api client.Reader{{if .Cached}}, cache client.
 {{- range .Objects}}
 	// {{.Key}} through {{.Reader}}
 	{
-		obj, found, err := projectRead(ctx, {{.Reader}}, {{gvk .Key.GVK}}, {{q .Key.Namespace}}, {{q .Key.Name}})
+		{{if .Fields}}obj{{else}}_{{end}}, found, err := projectRead(ctx, {{.Reader}}, {{gvk .Key.GVK}}, {{q .Key.Namespace}}, {{q .Key.Name}})
 		if err != nil {
 			return nil, err
 		}

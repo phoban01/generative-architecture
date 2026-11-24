@@ -7,6 +7,7 @@ import (
 
 	"github.com/phoban01/generative-architecture/pkg/adaptergen"
 	"github.com/phoban01/generative-architecture/pkg/adaptergen/internal/fixture"
+	"github.com/phoban01/generative-architecture/pkg/ir"
 )
 
 func TestFromSpec(t *testing.T) {
@@ -103,4 +104,19 @@ func TestReaderProjectionRejections(t *testing.T) {
 	if _, err := adaptergen.GenerateReaderProjection(fixture.Package, bad); err == nil || !strings.Contains(err.Error(), "unknown reader") {
 		t.Fatalf("unknown reader accepted: %v", err)
 	}
+}
+
+// The reader projection of an object with no selected field compiles too.
+func TestGenerateReaderProjectionExistsOnly(t *testing.T) {
+	key := ir.ObjectRef{Name: "only"}
+	src, err := adaptergen.GenerateReaderProjection("p", []adaptergen.Projection{
+		{State: "Database_only_exists", Resource: fixture.Database, Key: key, Type: "bool"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(src), `_, found, err := projectRead(ctx, api`) {
+		t.Errorf("generated source binds the unused object:\n%s", src)
+	}
+	typecheck(t, src)
 }

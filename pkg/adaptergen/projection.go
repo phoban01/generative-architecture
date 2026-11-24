@@ -231,7 +231,7 @@ func Project(ctx context.Context, api dynamic.Interface, mapper meta.RESTMapper)
 {{- range .Objects}}
 	// {{.Key}}
 	{
-		obj, found, err := projectGet(ctx, api, mapper, {{gvk .Key.GVK}}, {{q .Key.Namespace}}, {{q .Key.Name}})
+		{{if .Fields}}obj{{else}}_{{end}}, found, err := projectGet(ctx, api, mapper, {{gvk .Key.GVK}}, {{q .Key.Namespace}}, {{q .Key.Name}})
 		if err != nil {
 			return nil, err
 		}
