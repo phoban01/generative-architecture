@@ -194,14 +194,16 @@ smallest extension that would support it.
 - Smallest extension: map a pointer to a basic type to an optional model
   value. Lower `p != nil` to "is set" and `*p` to its value.
 
-### 13. Zero-value var declarations of objects
+### 13. Zero-value var declarations of objects (closed by #147)
 
 - Construct: `var cronJob batchv1.CronJob` and
   `var childJobs kbatch.JobList`, then `&cronJob` in client calls.
 - Location: lines 115 and 131.
 - Diagnostic: `declaration: unsupported Go statement`.
-- Smallest extension: treat `var x T` of a struct type like `x := &T{}`.
-  Checkpoint A added the pointer-literal form already, so this is small.
+- Resolution: since #147 `goflow` treats `var x T` of a struct type, with
+  no value, as `x := T{}`: a zero-valued object that adds no node. A
+  pointer declaration such as `var x *T` is nil, not an object, and stays
+  a diagnostic. The two items left `generated/support.yaml`.
 
 ### 14. Library helpers without a summary
 

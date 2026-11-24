@@ -36,3 +36,21 @@ func (r *Reconciler) Requeue(ctx context.Context) (Result, error) {
 func (r *Reconciler) Unsummarized(ctx context.Context, key string) (Result, error) {
 	return Result{}, r.after(ctx, key, &ConfigMap{})
 }
+
+// Declared declares its objects with var, as kubebuilder controllers do,
+// and otherwise matches Copy.
+func (r *Reconciler) Declared(ctx context.Context, from, to string) (Result, error) {
+	var source ConfigMap
+	if err := r.read(ctx, from, &source); err != nil {
+		return Result{}, err
+	}
+	var target ConfigMap
+	target.Data = map[string]string{"value": source.Data["value"]}
+	return Result{}, r.write(ctx, &target)
+}
+
+// DeclaredPointer declares a nil pointer, which is not an object.
+func (r *Reconciler) DeclaredPointer(ctx context.Context, from string) (Result, error) {
+	var source *ConfigMap
+	return Result{}, r.read(ctx, from, source)
+}

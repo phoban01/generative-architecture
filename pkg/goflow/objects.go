@@ -67,6 +67,12 @@ func (e *extractor) typedStatement(s ast.Stmt, next int) (int, bool, error) {
 				}
 			}
 		}
+	case *ast.DeclStmt:
+		if e.zeroDeclaration(x) {
+			// var x T of a struct type declares a zero-valued object, as
+			// x := T{} does, and adds no node for the same reason.
+			return next, true, nil
+		}
 	case *ast.ReturnStmt:
 		return e.returnCall(x, next)
 	}
@@ -88,7 +94,36 @@ func zeroComposite(x ast.Expr) bool {
 // struct value (or a pointer to one) that is not itself a model symbol.
 func (e *extractor) zeroObject(lhs, rhs ast.Expr) bool {
 	id, ok := lhs.(*ast.Ident)
-	if !ok || id.Name == "_" || !zeroComposite(rhs) {
+	return ok && zeroComposite(rhs) && e.zeroLocal(id, true)
+}
+
+// zeroDeclaration reports whether s is var x T with no value, where every
+// name is a local of struct type that is not a model symbol. The local
+// holds the zero value, as x := T{} does. A pointer type is nil, not an
+// object, so it is not accepted.
+func (e *extractor) zeroDeclaration(s *ast.DeclStmt) bool {
+	gd, ok := s.Decl.(*ast.GenDecl)
+	if !ok || gd.Tok != token.VAR || len(gd.Specs) == 0 {
+		return false
+	}
+	for _, spec := range gd.Specs {
+		vs, ok := spec.(*ast.ValueSpec)
+		if !ok || vs.Type == nil || len(vs.Values) != 0 {
+			return false
+		}
+		for _, id := range vs.Names {
+			if !e.zeroLocal(id, false) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// zeroLocal reports whether id names a local of struct type, or of pointer
+// to struct type when pointer is set, that is not a model symbol.
+func (e *extractor) zeroLocal(id *ast.Ident, pointer bool) bool {
+	if id.Name == "_" {
 		return false
 	}
 	if _, ok := e.opts.Scope[id.Name]; ok {
@@ -98,7 +133,14 @@ func (e *extractor) zeroObject(lhs, rhs ast.Expr) bool {
 	if obj == nil {
 		return false
 	}
-	_, isStruct := deref(obj.Type()).Underlying().(*types.Struct)
+	t := obj.Type()
+	if _, isPtr := types.Unalias(t).(*types.Pointer); isPtr {
+		if !pointer {
+			return false
+		}
+		t = deref(t)
+	}
+	_, isStruct := t.Underlying().(*types.Struct)
 	return isStruct
 }
 

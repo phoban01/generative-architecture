@@ -3,6 +3,7 @@ package goflow
 import (
 	"go/ast"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -75,6 +76,21 @@ func TestObjectLocalsAndReturnedCalls(t *testing.T) {
 	}
 	if len(p.Nodes) != 6 {
 		t.Fatalf("unexpected nodes %+v", p.Nodes)
+	}
+
+	// var x T declares the same zero-valued objects as x := T{}.
+	declared, err := ExtractTyped(loadFixture(t, "./pkg/goflow/testdata/typed", "Reconciler", "Declared"), copyOptions())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(declared.Nodes) != 6 || declared.Nodes[declared.Entry].Kind != "get" {
+		t.Fatalf("var declarations not lowered like := literals: %+v", declared.Nodes)
+	}
+	// A pointer declaration is nil, not an object.
+	_, err = ExtractTyped(loadFixture(t, "./pkg/goflow/testdata/typed", "Reconciler", "DeclaredPointer"), copyOptions())
+	ds, _ := AsDiagnostics(err)
+	if !slices.ContainsFunc(ds, func(d *Diagnostic) bool { return d.Construct == "declaration" }) {
+		t.Fatalf("nil pointer declaration accepted: %v", err)
 	}
 
 	// A non-zero result where Zero is declared, and a returned call nothing
