@@ -1,0 +1,126 @@
+apiVersion: architecture.local/v1alpha1
+kind: Abstraction
+metadata:
+  name: refsystem
+spec:
+  # One object of each kind: the Tenant acme, its Database main and the
+  # Backup nightly of that Database, and the objects their controllers
+  # create. Every Reconcile key addresses one of these objects.
+  resources:
+    # The tenant controller owns the Tenant.
+    - gvk: {group: refsystem.example.org, version: v1alpha1, kind: Tenant}
+      objects:
+        - {id: acme, namespace: default, name: acme}
+      fields:
+        - {path: [metadata, name], type: string}
+        - {path: [spec, quota], type: string}
+        - {path: [status, namespaceReady], type: bool}
+      valueDomains:
+        spec.quota: ['"small"']
+        status.namespaceReady: ['false', 'true']
+      identity:
+        - [metadata, name]
+    # The tenant controller creates a Namespace named after the Tenant.
+    - gvk: {group: "", version: v1, kind: Namespace}
+      objects:
+        - {id: acmeNamespace, name: acme}
+      fields:
+        - {path: [metadata, name], type: string}
+      identity:
+        - [metadata, name]
+    # The tenant controller creates one ResourceQuota in the tenant
+    # namespace. The Namespace owns it.
+    - gvk: {group: "", version: v1, kind: ResourceQuota}
+      objects:
+        - {id: quota, namespace: acme, name: tenant-quota}
+      fields:
+        - {path: [metadata, name], type: string}
+        - {path: [metadata, namespace], type: string}
+        - {path: [metadata, labels, profile], name: profile, type: string}
+        # A resource.Quantity upstream. The model sees its string form.
+        - {path: [spec, hard, '"pods"'], name: hardPods, type: string}
+      valueDomains:
+        profile: ['""', '"small"']
+        hardPods: ['""', '"10"']
+      identity:
+        - [metadata, name]
+    # The database controller owns the Database. spec.tenant names the
+    # Tenant.
+    - gvk: {group: refsystem.example.org, version: v1alpha1, kind: Database}
+      objects:
+        - {id: main, namespace: default, name: main}
+      fields:
+        - {path: [metadata, name], type: string}
+        - {path: [metadata, namespace], type: string}
+        - {path: [spec, tenant], type: string}
+        - {path: [status, ready], type: bool}
+        - {path: [status, secretName], type: string}
+      valueDomains:
+        spec.tenant: ['"acme"']
+        status.ready: ['false', 'true']
+        status.secretName: ['""', '"main"']
+      identity:
+        - [metadata, name]
+      references:
+        - path: [spec, tenant]
+          targetGVK: {group: refsystem.example.org, version: v1alpha1, kind: Tenant}
+    # The database controller creates a Secret named after the Database,
+    # beside it. The Database controls it.
+    - gvk: {group: "", version: v1, kind: Secret}
+      objects:
+        - {id: mainSecret, namespace: default, name: main}
+      fields:
+        - {path: [metadata, name], type: string}
+        - {path: [metadata, namespace], type: string}
+        - {path: [stringData, '"username"'], name: username, type: string}
+      valueDomains:
+        username: ['""', '"main"']
+      identity:
+        - [metadata, name]
+    # The backup controller owns the Backup. spec.database names the
+    # Database.
+    - gvk: {group: refsystem.example.org, version: v1alpha1, kind: Backup}
+      objects:
+        - {id: nightly, namespace: default, name: nightly}
+      fields:
+        - {path: [metadata, name], type: string}
+        - {path: [metadata, namespace], type: string}
+        - {path: [spec, database], type: string}
+        - {path: [status, phase], type: string}
+      valueDomains:
+        spec.database: ['"main"']
+        status.phase: ['""', '"Pending"', '"Running"', '"Completed"', '"Failed"']
+      identity:
+        - [metadata, name]
+      references:
+        - path: [spec, database]
+          targetGVK: {group: refsystem.example.org, version: v1alpha1, kind: Database}
+    # The backup controller creates a Job named after the Backup, beside
+    # it. The Backup controls it.
+    - gvk: {group: batch, version: v1, kind: Job}
+      objects:
+        - {id: nightlyJob, namespace: default, name: nightly}
+      fields:
+        - {path: [metadata, name], type: string}
+        - {path: [metadata, namespace], type: string}
+        - {path: [spec, template, spec, restartPolicy], type: string}
+        - {path: [status, active], type: int}
+        - {path: [status, succeeded], type: int}
+        - {path: [status, failed], type: int}
+      valueDomains:
+        spec.template.spec.restartPolicy: ['""', '"Never"']
+        status.active: ['0', '1']
+        status.succeeded: ['0', '1']
+        status.failed: ['0', '1']
+      identity:
+        - [metadata, name]
+  bounds:
+    # One object of each kind; four reconciles.
+    maxObjectsPerResource: 1
+    maxInvocations: 4
+  excludes:
+    - the Job containers; the abstraction has no list type
+    - owner references; the abstraction has no form for a list element
+    - Database spec.size, which no controller reads
+    - the Backup requeue interval while the Job runs
+    - Kubernetes API errors and retries

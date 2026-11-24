@@ -14,6 +14,7 @@ A neutral multi-controller system used as the walkthrough and the subject of mil
 - `controllers/`: the three controllers and their fake-client tests.
 - `generated/`: the committed output of `arch extract`.
 - `project.yaml`: the project document that selects the API types and the controllers.
+- `abstraction.yaml`: the abstraction document. It declares one object of each kind the controllers read or create, and the fields they touch.
 - `internal/extractcheck/`: runs the extractor over one controller package; each controller test uses it to prove that the controller extracts with no diagnostic.
 
 ## Controllers
@@ -62,10 +63,9 @@ go run ./cmd/arch --project examples/refsystem/project.yaml --out examples/refsy
 | tenant | `Tenant` | self |
 
 It reads all three `Reconcile` methods with no unsupported construct. The
-reference system has no abstraction yet, so the support report lists each
-field the methods read or write as `unresolved`: 39 in all. In inventory
-mode the command succeeds. With `--strict` it writes the same files and
-then fails on the unresolved fields. `arch generate` refuses the IR,
+abstraction selects every field the methods read or write, so no field is
+`unresolved` and `--strict` passes. Without it, 39 fields are unresolved.
+`arch generate` refuses the IR,
 because it takes one controller per project. `cmd/arch` checks that the committed files match
 a fresh run. [docs/supported-patterns.md](../../docs/supported-patterns.md)
 lists the constructs the controllers use.
@@ -77,4 +77,4 @@ The Secret has the Database's name. A name such as
 lower a string concatenation with a field. The controller keeps the bare
 name until it can.
 
-The abstraction, the composed model and the Flux boundary model are added by later milestone issues.
+The composed model and the Flux boundary model are added by later milestone issues.
