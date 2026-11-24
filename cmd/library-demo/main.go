@@ -142,6 +142,12 @@ func run(root string, refresh, generateOnly bool) error {
 	}
 	r.Bounds = bounds(abs.Spec.Bounds)
 	r.Excludes = abs.Spec.Excludes
+	opts, err := sampling(m)
+	if err != nil {
+		return err
+	}
+	record := opts.Record()
+	r.Sampling = &record
 	if err = receipt.Write(filepath.Join(root, configmirror.ReceiptFile), "config-mirror", r); err != nil {
 		return err
 	}
@@ -149,7 +155,7 @@ func run(root string, refresh, generateOnly bool) error {
 	v := report.Verification{
 		Name:        "config-mirror",
 		Mode:        report.ModeStrict,
-		Scope:       "bounded simulation of the model generated from Reconcile, abstraction.yaml and the built-in client summaries; real worker/FIFO; fake API; controlled cache; observed object, cache and queue state",
+		Scope:       "bounded simulation of the model generated from Reconcile, abstraction.yaml and the built-in client summaries; weighted sampling that prefers process completion; real worker/FIFO; fake API; controlled cache; observed object, cache and queue state",
 		Model:       configmirror.ModelFile,
 		ModelSHA256: fmt.Sprintf("%x", sha256.Sum256([]byte(m.Quint()))),
 		Sampling:    &report.Sampling{Samples: samples, Steps: steps, Seed: seed},
@@ -188,7 +194,11 @@ func traces(root string, m *model.Compiled, refresh bool) (string, error) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
-	result, err := quint.Sample(ctx, m, quint.Options{Samples: samples, Steps: steps, Seed: seed})
+	opts, err := sampling(m)
+	if err != nil {
+		return "", err
+	}
+	result, err := quint.Sample(ctx, m, opts)
 	if err != nil {
 		return "", err
 	}
@@ -235,4 +245,21 @@ func bounds(b abstraction.Bounds) map[string]int {
 		out["maxInvocations"] = b.MaxInvocations
 	}
 	return out
+}
+
+// Steering: process actions get this weight, except the error outcomes,
+// which keep weight 1. Uniform sampling reached the successful write in
+// three of forty traces; steered sampling reaches it in most.
+const steerWeight = 8
+
+// sampling returns the Quint options of the evidence run: the bounds above
+// and a strategy that prefers process completion over its failure.
+func sampling(m *model.Compiled) (quint.Options, error) {
+	opts := quint.Options{Samples: samples, Steps: steps, Seed: seed}
+	steering, err := quint.PreferProcess(m, steerWeight, "error")
+	if err != nil {
+		return opts, err
+	}
+	opts.Steering = steering
+	return opts, nil
 }

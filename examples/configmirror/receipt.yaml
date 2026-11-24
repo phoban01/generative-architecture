@@ -25,7 +25,7 @@ status:
     - examples/configmirror/project.yaml
   files:
     - path: cmd/library-demo/main.go
-      sha256: 09c72fab4a70c90f5425c0ebed5aad18446ce3bbd5a8f2e770c1cdad479e0339
+      sha256: c64651dcf1ce59e1ff15d2718e08453c9baa2528253d006d347d94a1f265a3fa
     - path: examples/configmirror/abstraction.yaml
       sha256: 9fd09656ab1bb62067055e744881d76281cdb91ced376d7d4ac6ffd504973700
     - path: examples/configmirror/adapter.go
@@ -89,7 +89,7 @@ status:
     - path: pkg/composition/load.go
       sha256: e9c0e241759a09c62a5daf7ef574fb05ef24199b7ae01daaf9d972c29bedda96
     - path: pkg/composition/protocol.go
-      sha256: 9cde933b3d1e4f7598e12e1254e48ab1cd10540d485f4f88983be0288a6075ec
+      sha256: 7b2d1b7550e11422a8d4f112e0847afd4200452abe29fce60a95dd397daedf0e
     - path: pkg/composition/report.go
       sha256: 059d2e568b70a69933b9399cb75f0e7c7e4fdebe85baa92151c8795b73e3e669
     - path: pkg/conformance/failure.go
@@ -132,6 +132,8 @@ status:
       sha256: 506571c4dcad117a562329eb17185c1bf142901d9da0897edefd9da37df7f3d0
     - path: pkg/expr/concat.go
       sha256: a215a4bd919642d2962f6fc4d0f7f27682cf451936da6e9618093494a24dc64d
+    - path: pkg/expr/free.go
+      sha256: e8d04af7fa37706d35b45189133f8537b45aad82524d51bbf6a3781ff712377b
     - path: pkg/expr/rewrite.go
       sha256: 3bcb1cf7e5ce057cc7f1adf05f4b7c36ff76b1d8c39757d73fd04605ecb3ec9a
     - path: pkg/goflow/diagnostic.go
@@ -159,7 +161,7 @@ status:
     - path: pkg/goflow/typed.go
       sha256: e2282bc6b2cd409166b99192caa0711dda64129ed3d0da451fcada0608254633
     - path: pkg/ir/diff.go
-      sha256: 53ce5cd7b39351e926a923e19445ab0cb76f0423f31d9744b25d699f7e15e153
+      sha256: 3b8f74b392a2a55f57926527e158de9974a87c34457104a2301dfbe49e9b2b11
     - path: pkg/ir/document.go
       sha256: a1954af53db861a1cf59e54b24f1a42452718300719b1c6a565b16e854369398
     - path: pkg/ir/effect.go
@@ -197,7 +199,7 @@ status:
     - path: pkg/likec4/workspace.go
       sha256: 94393d3c9b3e41c6e0d3c5d8a1d6655a12a49c9f78b61ae603b4b0d2dc01c5a9
     - path: pkg/model/model.go
-      sha256: 19dd3fe4945cc68a9d92a15e62cf37ebe8274683fea08efbe73079dc4dcc4d14
+      sha256: 44164cdab9091306e54f53339f3e546a55ff71047d54db9a6ae8a6bf5ae22b0a
     - path: pkg/model/temporal.go
       sha256: d1996a1d709e59c2c2a3c789f1290023cc8301713b91b8b3fc567146e3998564
     - path: pkg/mutation/detect.go
@@ -271,3 +273,22 @@ status:
   excludes:
     - delete
     - list
+  sampling:
+    samples: 40
+    steps: 60
+    seed: 20261013
+    strategy: weighted
+    weights:
+      node0_return: 8
+      node2_assign: 8
+      node3_return: 8
+      node4_branch: 8
+      node6_return: 8
+      node7_branch: 8
+      readSource_found: 8
+      readSource_notFound: 8
+      readTarget_found: 8
+      readTarget_notFound: 8
+      writeTarget_conflict: 8
+      writeTarget_notFound: 8
+      writeTarget_ok: 8
