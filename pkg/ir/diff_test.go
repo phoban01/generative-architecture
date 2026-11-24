@@ -71,6 +71,25 @@ func TestDiffIdenticalAndMovedRecords(t *testing.T) {
 	if d := Diff(old, new); !d.Empty() {
 		t.Fatalf("provenance-only change reported: %+v", d)
 	}
+	// A moved Reconcile body moves the setup call and every node, and a
+	// moved file changes their hashes. None of that is content.
+	new.Controllers[0].Setup = &Source{File: "other.go", Line: 7, SHA256: "abc"}
+	for i := range new.Processes[0].Nodes {
+		new.Processes[0].Nodes[i].Source = Source{File: "moved.go", Line: 100 + i, SHA256: "def"}
+	}
+	if d := Diff(old, new); !d.Empty() {
+		t.Fatalf("source-position change reported: %+v", d)
+	}
+	new.Controllers[0].Setup = nil
+	if d := Diff(old, new); !d.Empty() {
+		t.Fatalf("dropped setup position reported: %+v", d)
+	}
+	// A changed node is still a change, named by its field.
+	new.Processes[0].Nodes[1].Requeue = RequeueImmediate
+	d := Diff(old, new)
+	if len(d.Changed) != 1 || d.Changed[0].Kind != RecordProcess || !reflect.DeepEqual(d.Changed[0].Fields, []string{"nodes"}) {
+		t.Fatalf("node change not reported: %+v", d)
+	}
 }
 
 func TestDiffAddedRemovedChanged(t *testing.T) {

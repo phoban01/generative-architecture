@@ -147,8 +147,9 @@ func (d *Delta) pairWatches(old, new []Watch) {
 }
 
 // changedFields lists the YAML names of the struct fields that differ
-// between a and b, two values of the same record type, skipping
-// provenance.
+// between a and b, two values of the same record type. Provenance and
+// source positions are not content: the comparison clears every Source,
+// at any depth, before it looks at a field.
 func changedFields(a, b any) []string {
 	va, vb := reflect.ValueOf(a), reflect.ValueOf(b)
 	t := va.Type()
@@ -158,7 +159,7 @@ func changedFields(a, b any) []string {
 		if f.Type == reflect.TypeOf(Provenance{}) {
 			continue
 		}
-		if !reflect.DeepEqual(va.Field(i).Interface(), vb.Field(i).Interface()) {
+		if !reflect.DeepEqual(withoutSources(va.Field(i)).Interface(), withoutSources(vb.Field(i)).Interface()) {
 			name, _, _ := strings.Cut(f.Tag.Get("yaml"), ",")
 			if name == "" {
 				name = f.Name
@@ -167,4 +168,46 @@ func changedFields(a, b any) []string {
 		}
 	}
 	return out
+}
+
+var sourceType = reflect.TypeOf(Source{})
+
+// withoutSources returns a copy of v in which every Source value is zero
+// and every *Source is nil, through structs, pointers and slices. A
+// Controller's Setup and a process Node's Source locate a fact; they do
+// not describe it. Maps and scalars are returned as they are.
+func withoutSources(v reflect.Value) reflect.Value {
+	switch v.Kind() {
+	case reflect.Struct:
+		if v.Type() == sourceType {
+			return reflect.Zero(sourceType)
+		}
+		out := reflect.New(v.Type()).Elem()
+		for i := 0; i < v.NumField(); i++ {
+			if out.Field(i).CanSet() {
+				out.Field(i).Set(withoutSources(v.Field(i)))
+			}
+		}
+		return out
+	case reflect.Pointer:
+		if v.IsNil() {
+			return v
+		}
+		if v.Type().Elem() == sourceType {
+			return reflect.Zero(v.Type())
+		}
+		out := reflect.New(v.Type().Elem())
+		out.Elem().Set(withoutSources(v.Elem()))
+		return out
+	case reflect.Slice:
+		if v.IsNil() {
+			return v
+		}
+		out := reflect.MakeSlice(v.Type(), v.Len(), v.Len())
+		for i := 0; i < v.Len(); i++ {
+			out.Index(i).Set(withoutSources(v.Index(i)))
+		}
+		return out
+	}
+	return v
 }
