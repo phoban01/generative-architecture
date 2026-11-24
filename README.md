@@ -44,7 +44,7 @@ See [the project plan](PROJECT-PLAN.md) for the requirements index, milestones a
 Run from the repository root with Go 1.26 or newer on PATH:
 
 ```sh
-go test ./...
+go test -p 2 ./...
 go run ./cmd/walkthrough
 ```
 

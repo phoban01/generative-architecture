@@ -27,7 +27,9 @@ jobs:
       - name: Download the CronJob module dependencies
         run: cd testdata/external/cronjob && go mod download
       - name: Test
-        run: go test ./...
+        # -p 2 caps the packages under test at two at a time, as make test
+        # does; a full parallel run needs more memory than a small machine has.
+        run: go test -p 2 ./...
       - name: Consumer module
         run: make consumer-test
 

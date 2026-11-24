@@ -51,12 +51,13 @@ Run on the release commit, with Quint 0.33.x and LikeC4 1.59.x from
 `hack/tools` (`devbox shell` sets `QUINT_BIN` and `LIKEC4_BIN`):
 
 ```sh
-GOFLAGS=-p=2 make verify
+make verify
 ```
 
 `make verify` resamples the sample controller, the runtime group and
 ConfigMirror, runs every test and checks the consumer module.
-`GOFLAGS=-p=2` keeps the test run within the memory of a small machine.
+Its test run is capped at two packages at a time (`-p 2`), which keeps it
+within the memory of a small machine.
 Commit any refreshed file.
 
 ## 4. Envtest job

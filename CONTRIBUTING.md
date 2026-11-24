@@ -7,7 +7,7 @@ Work is tracked as small GitHub issues sized for one change each. Every issue ti
 ## Changes
 
 - Every change needs a test. Add or extend a Go test in the package you change, or a replay fixture under `examples/` when the behaviour is only observable through a generated model.
-- Run `go build ./... && go vet ./... && go test ./...` before opening a pull request. `make check` additionally replays the hash-checked evidence of the sample controller.
+- Run `go build ./... && go vet ./... && go test -p 2 ./...` before opening a pull request. `make check` additionally replays the hash-checked evidence of the sample controller. The `-p 2` caps the packages under test at two at a time: sourcegen, goflow, adaptergen and the configmirror tests each load packages with go/packages, and a full parallel run is killed for lack of memory on a 12 GiB machine. `make test`, `make verify` and CI use the same cap.
 - When you change `.github/workflows/`, the `Makefile` CI targets or `pkg/envtest`, run `make envtest` and `make arch-pipeline`. GitHub runs the workflows; `hack/ci` checks their shape in `go test`.
 - Keep domain vocabulary out of `pkg/`, `cmd/` and the intermediate representation. Examples illustrate concepts with neutral sample controllers (see [ADR-0004](docs/adr/0004-reference-system.md)).
 - Record a decision that changes the plan or the public surface in `docs/adr/`.

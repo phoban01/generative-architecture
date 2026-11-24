@@ -26,8 +26,11 @@ general-demo:
 consumer-test:
 	cd testdata/consumer && GOWORK=off go test -mod=readonly ./...
 
+# -p 2 caps the packages under test at two at a time. sourcegen, goflow,
+# adaptergen and the configmirror tests each load packages with go/packages,
+# and a full parallel run is killed for lack of memory on a 12 GiB machine.
 test:
-	go test ./...
+	go test -p 2 ./...
 
 # Envtest: install kube-apiserver and etcd with setup-envtest from the
 # controller-runtime release branch in go.mod, for the Kubernetes minor of
@@ -62,7 +65,7 @@ verify:
 	go run ./cmd/walkthrough --refresh
 	go run ./cmd/general-demo
 	go run ./cmd/library-demo --refresh
-	go test ./...
+	go test -p 2 ./...
 	$(MAKE) consumer-test
 
 # Build the sample controller's diagrams into site/. Requires LikeC4 1.59.x (LIKEC4_BIN).

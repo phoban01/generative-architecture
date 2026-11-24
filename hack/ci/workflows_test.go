@@ -199,3 +199,29 @@ func TestEnvtestJob(t *testing.T) {
 		}
 	}
 }
+
+// The go job's test step and the Makefile test and verify recipes cap the
+// packages under test at two at a time. A full parallel run loads too many
+// packages with go/packages for a 12 GiB machine.
+func TestTestParallelismCap(t *testing.T) {
+	const want = "go test -p 2 ./..."
+	w := readWorkflow(t, filepath.Join(root, ".github", "workflows", "ci.yml"))
+	j, ok := w.Jobs["go"]
+	if !ok {
+		t.Fatal("ci.yml has no go job")
+	}
+	if !strings.Contains(runs(j), want) {
+		t.Errorf("go job does not run %q:\n%s", want, runs(j))
+	}
+	makefile, err := os.ReadFile(filepath.Join(root, "Makefile"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, target := range []string{"test", "verify"} {
+		recipe := string(makefile)[strings.Index(string(makefile), "\n"+target+":"):]
+		recipe = recipe[:strings.Index(recipe, "\n\n")]
+		if !strings.Contains(recipe, "\t"+want) {
+			t.Errorf("make %s recipe lacks %q:\n%s", target, want, recipe)
+		}
+	}
+}
