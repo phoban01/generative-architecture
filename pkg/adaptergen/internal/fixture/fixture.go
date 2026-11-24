@@ -11,6 +11,7 @@ import (
 	"go/types"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"golang.org/x/tools/go/packages"
 
@@ -117,7 +118,13 @@ func ProvisionerType() (*types.Named, error) {
 		return nil, err
 	}
 	if len(pkgs) != 1 || len(pkgs[0].Errors) > 0 || pkgs[0].Types == nil {
-		return nil, fmt.Errorf("load %s: %v", ProvisionerPath, pkgs)
+		var errs []string
+		for _, p := range pkgs {
+			for _, e := range p.Errors {
+				errs = append(errs, e.Error())
+			}
+		}
+		return nil, fmt.Errorf("load %s: %d packages, errors: %s", ProvisionerPath, len(pkgs), strings.Join(errs, "; "))
 	}
 	named, ok := pkgs[0].Types.Scope().Lookup("Provisioner").Type().(*types.Named)
 	if !ok {
