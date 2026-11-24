@@ -2,9 +2,11 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
+	"github.com/phoban01/generative-architecture/pkg/model"
 	"github.com/phoban01/generative-architecture/pkg/report"
 )
 
@@ -30,13 +32,18 @@ func TestSummaryPrintsBindingAndProtocolSections(t *testing.T) {
 }
 
 func TestViolatedProperty(t *testing.T) {
-	for err, want := range map[error]string{
-		errors.New("property boundedRetries violated"): "boundedRetries",
-		errors.New("property a b violated"):            "",
-		errors.New("evaluate guard: no such field"):    "",
+	violation := &model.PropertyViolation{Property: "boundedRetries", Event: "retry"}
+	for _, tc := range []struct {
+		err  error
+		want string
+	}{
+		{violation, "boundedRetries"},
+		{fmt.Errorf("step 3: %w", violation), "boundedRetries"},
+		{errors.New("property boundedRetries violated"), ""},
+		{errors.New("evaluate guard: no such field"), ""},
 	} {
-		if got := violatedProperty(err); got != want {
-			t.Errorf("%v: got %q, want %q", err, got, want)
+		if got := violatedProperty(tc.err); got != tc.want {
+			t.Errorf("%v: got %q, want %q", tc.err, got, tc.want)
 		}
 	}
 }

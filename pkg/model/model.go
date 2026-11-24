@@ -291,13 +291,27 @@ func (m *Compiled) Next(state map[string]any, action string) (map[string]any, er
 	}
 	return nil, fmt.Errorf("unknown action %s", action)
 }
+
+// PropertyViolation is the error Check returns when a property does not
+// hold: the property by name, and the state and event under which it
+// failed. Callers select it with errors.As.
+type PropertyViolation struct {
+	Property string
+	State    map[string]any
+	Event    string
+}
+
+func (v *PropertyViolation) Error() string { return fmt.Sprintf("property %s violated", v.Property) }
+
+// Check reports the first property, in declaration order, that state
+// violates after event, as a *PropertyViolation.
 func (m *Compiled) Check(state map[string]any, event string) error {
 	violated, err := m.Violations(state, event)
 	if err != nil {
 		return err
 	}
 	if len(violated) > 0 {
-		return fmt.Errorf("property %s violated", violated[0])
+		return &PropertyViolation{Property: violated[0], State: state, Event: event}
 	}
 	return nil
 }

@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
-	"strings"
 
 	"github.com/phoban01/generative-architecture/pkg/conformance"
 	"github.com/phoban01/generative-architecture/pkg/ir"
@@ -205,13 +204,9 @@ func summary(w io.Writer, command string, v report.Verification) {
 // violatedProperty returns the property a model check error names, or ""
 // when the error is not a property violation.
 func violatedProperty(err error) string {
-	rest, ok := strings.CutPrefix(err.Error(), "property ")
-	if !ok {
-		return ""
+	var v *model.PropertyViolation
+	if errors.As(err, &v) {
+		return v.Property
 	}
-	name, ok := strings.CutSuffix(rest, " violated")
-	if !ok || strings.ContainsAny(name, " \t\n") {
-		return ""
-	}
-	return name
+	return ""
 }

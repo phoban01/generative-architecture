@@ -1,6 +1,8 @@
 package model_test
 
 import (
+	"errors"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -70,8 +72,13 @@ func TestViolationsNamesEveryProperty(t *testing.T) {
 	if got, _ = m.Violations(state, "skip"); strings.Join(got, ",") != "first" {
 		t.Fatalf("event not bound: %v", got)
 	}
-	if err = m.Check(state, "go"); err == nil || err.Error() != "property first violated" {
+	err = m.Check(state, "go")
+	var violation *model.PropertyViolation
+	if !errors.As(err, &violation) || err.Error() != "property first violated" {
 		t.Fatalf("check %v", err)
+	}
+	if violation.Property != "first" || violation.Event != "go" || !reflect.DeepEqual(violation.State, state) {
+		t.Fatalf("violation %+v", violation)
 	}
 }
 
