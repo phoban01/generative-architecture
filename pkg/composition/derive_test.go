@@ -39,15 +39,15 @@ func TestPortsFromEffects(t *testing.T) {
 			},
 			want: map[string]composition.Port{
 				"widget_v1_example_org": {State: "widget_objects", Contract: "resource:example.org/v1/Widget", Version: "v1", Direction: "in", Evidence: ir.Extracted, Provenance: []ir.Provenance{prov("getWidget.go")}},
-				"configmap_v1":          {State: "configmap_objects", Contract: "resource:/v1/ConfigMap", Version: "v1", Direction: "out", Evidence: ir.Extracted, Provenance: []ir.Provenance{prov("createConfig.go")}},
+				"configmap_v1":          {State: "configmap_objects", Contract: "resource:/v1/ConfigMap", Version: "v1", Direction: "out", Creator: true, Evidence: ir.Extracted, Provenance: []ir.Provenance{prov("createConfig.go")}},
 				"child_v1_example_org":  {State: "child_objects", Contract: "resource:example.org/v1/Child", Version: "v1", Direction: "in", Writable: true, Evidence: ir.Extracted, Provenance: []ir.Provenance{prov("listChild.go"), prov("patchChild.go")}},
 			},
 		},
 		{
-			name:    "declared effect stays declared",
+			name:    "declared update stays declared and does not provide",
 			effects: []ir.Effect{apiEffect("updateConfig", ir.OpUpdate, config, ir.Declared)},
 			want: map[string]composition.Port{
-				"configmap_v1": {State: "configmap_objects", Contract: "resource:/v1/ConfigMap", Version: "v1", Direction: "out", Evidence: ir.Declared, Provenance: []ir.Provenance{prov("updateConfig.go")}},
+				"configmap_v1": {State: "configmap_objects", Contract: "resource:/v1/ConfigMap", Version: "v1", Direction: "in", Writable: true, Evidence: ir.Declared, Provenance: []ir.Provenance{prov("updateConfig.go")}},
 			},
 		},
 		{
@@ -64,6 +64,14 @@ func TestPortsFromEffects(t *testing.T) {
 			effects: []ir.Effect{apiEffect("statusWidget", ir.OpUpdate, widget, ir.Extracted)},
 			want: map[string]composition.Port{
 				"widget_v1_example_org": {State: "widget_objects", Contract: "resource:example.org/v1/Widget", Version: "v1", Direction: "in", Writable: true, Evidence: ir.Extracted, Provenance: []ir.Provenance{prov("statusWidget.go"), prov("watch.go")}},
+			},
+		},
+		{
+			name:    "primary watch owns the resource",
+			watches: []ir.Watch{{ID: "w", Controller: "worker", Resource: widget, Primary: true, Mapping: ir.KeyMapping{Kind: ir.MappingSelf}, Evidence: ir.Extracted, Provenance: prov("watch.go")}},
+			effects: []ir.Effect{apiEffect("statusWidget", ir.OpUpdate, widget, ir.Extracted)},
+			want: map[string]composition.Port{
+				"widget_v1_example_org": {State: "widget_objects", Contract: "resource:example.org/v1/Widget", Version: "v1", Direction: "out", Owner: true, Evidence: ir.Extracted, Provenance: []ir.Provenance{prov("statusWidget.go"), prov("watch.go")}},
 			},
 		},
 	} {

@@ -6,6 +6,7 @@ import (
 	"github.com/phoban01/generative-architecture/pkg/ir"
 	"github.com/phoban01/generative-architecture/pkg/model"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -61,12 +62,12 @@ func TestJoinByResource(t *testing.T) {
 		{
 			name:       "no provider is unresolved",
 			components: []composition.Component{reader},
-			diags:      []composition.Diagnostic{{Code: composition.DiagUnresolvedProvider, Port: "reader.configmap_v1", Message: "no component writes resource:/v1/ConfigMap/v1"}},
+			diags:      []composition.Diagnostic{{Code: composition.DiagUnresolvedProvider, Port: "reader.configmap_v1", Message: "no component owns or creates resource:/v1/ConfigMap/v1; add a BoundaryModel that provides it or an explicit link"}},
 		},
 		{
 			name:       "several providers are ambiguous",
 			components: []composition.Component{writer("b"), writer("a"), reader},
-			diags:      []composition.Diagnostic{{Code: composition.DiagAmbiguousProvider, Port: "reader.configmap_v1", Message: "2 components write resource:/v1/ConfigMap/v1; add one explicit link to choose the provider", Candidates: []string{"a.configmap_v1", "b.configmap_v1"}}},
+			diags:      []composition.Diagnostic{{Code: composition.DiagAmbiguousProvider, Port: "reader.configmap_v1", Message: "2 components provide resource:/v1/ConfigMap/v1; add one explicit link to choose the provider", Candidates: []string{"a.configmap_v1", "b.configmap_v1"}}},
 		},
 		{
 			name:       "explicit link suppresses ambiguity",
@@ -84,7 +85,7 @@ func TestJoinByResource(t *testing.T) {
 			name:       "provider in another cluster does not resolve",
 			components: []composition.Component{writer("a"), reader},
 			cluster:    map[string]ir.ClusterID{"a": "west"},
-			diags:      []composition.Diagnostic{{Code: composition.DiagUnresolvedProvider, Port: "reader.configmap_v1", Message: "no component writes resource:/v1/ConfigMap/v1"}},
+			diags:      []composition.Diagnostic{{Code: composition.DiagUnresolvedProvider, Port: "reader.configmap_v1", Message: "no component owns or creates resource:/v1/ConfigMap/v1; add a BoundaryModel that provides it or an explicit link"}},
 		},
 		{
 			name:       "explicit resource link across clusters fails",
@@ -126,6 +127,83 @@ func TestJoinByResource(t *testing.T) {
 			}
 			if !reflect.DeepEqual(diags, tc.diags) {
 				t.Fatalf("diags %v, want %v", diags, tc.diags)
+			}
+		})
+	}
+}
+
+// TestJoinByOwnership covers the provider rule of ADR-0010.
+func TestJoinByOwnership(t *testing.T) {
+	owner := func(name string, effects ...ir.Effect) composition.Component {
+		w := ir.Watch{ID: name, Controller: name, Resource: widget, Primary: true, Mapping: ir.KeyMapping{Kind: ir.MappingSelf}, Evidence: ir.Extracted, Provenance: prov(name + ".go")}
+		return composition.Component{Name: name, Ports: composition.PortsFromIR(name, []ir.Watch{w}, effects)}
+	}
+	// A creator creates and then re-reads the resource, the usual pattern.
+	creator := func(name string) composition.Component {
+		return resourceComponent(name, apiEffect("create", ir.OpCreate, widget, ir.Extracted), apiEffect("get", ir.OpGet, widget, ir.Extracted))
+	}
+	reader := resourceComponent("reader", apiEffect("get", ir.OpGet, widget, ir.Extracted))
+	patcher := resourceComponent("patcher", apiEffect("patch", ir.OpPatch, widget, ir.Extracted))
+	const port = "widget_v1_example_org"
+	const unresolved = "no component owns or creates resource:example.org/v1/Widget/v1; add a BoundaryModel that provides it or an explicit link"
+	for _, tc := range []struct {
+		name       string
+		components []composition.Component
+		links      []composition.Link
+		diags      []composition.Diagnostic
+		// writableIn names the components whose port resolves to a writable in port.
+		writableIn []string
+	}{
+		{
+			name:       "primary owner provides and the creator gets a writable in port",
+			components: []composition.Component{creator("creator"), owner("ctrl", apiEffect("status", ir.OpUpdate, widget, ir.Extracted)), reader},
+			links:      []composition.Link{{From: "ctrl." + port, To: "creator." + port}, {From: "ctrl." + port, To: "reader." + port}},
+			writableIn: []string{"creator"},
+		},
+		{
+			name:       "sole creator provides without an owner",
+			components: []composition.Component{creator("creator"), patcher, reader},
+			links:      []composition.Link{{From: "creator." + port, To: "patcher." + port}, {From: "creator." + port, To: "reader." + port}},
+			writableIn: []string{"patcher"},
+		},
+		{
+			name:       "no owner and no creator is unresolved",
+			components: []composition.Component{patcher, reader},
+			diags: []composition.Diagnostic{
+				{Code: composition.DiagUnresolvedProvider, Port: "patcher." + port, Message: unresolved},
+				{Code: composition.DiagUnresolvedProvider, Port: "reader." + port, Message: unresolved},
+			},
+			writableIn: []string{"patcher"},
+		},
+		{
+			name:       "two primary owners are ambiguous",
+			components: []composition.Component{owner("b"), owner("a"), creator("creator")},
+			diags:      []composition.Diagnostic{{Code: composition.DiagAmbiguousProvider, Port: "creator." + port, Message: "2 components provide resource:example.org/v1/Widget/v1; add one explicit link to choose the provider", Candidates: []string{"a." + port, "b." + port}}},
+			writableIn: []string{"creator"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			links, diags, err := composition.JoinByResource(tc.components, nil, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(links, tc.links) {
+				t.Errorf("links %v, want %v", links, tc.links)
+			}
+			if !reflect.DeepEqual(diags, tc.diags) {
+				t.Errorf("diags %v, want %v", diags, tc.diags)
+			}
+			resolved := composition.ResolveProviders(tc.components, nil)
+			if again := composition.ResolveProviders(resolved, nil); !reflect.DeepEqual(again, resolved) {
+				t.Error("ResolveProviders is not idempotent")
+			}
+			for _, c := range resolved {
+				if !slices.Contains(tc.writableIn, c.Name) {
+					continue
+				}
+				if p := c.Ports[port]; p.Direction != "in" || !p.Writable {
+					t.Errorf("%s port %+v, want a writable in port", c.Name, p)
+				}
 			}
 		})
 	}

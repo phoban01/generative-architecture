@@ -13,8 +13,12 @@ import (
 // Two objects of one GVK in different clusters are distinct (ARCH-3), so
 // candidates never cross clusters.
 //
+// JoinByResource first applies ResolveProviders, so the provider of a
+// resource is its owner, or else its sole creator (ADR-0010). Compose the
+// returned links with the components that ResolveProviders returns.
+//
 // One candidate yields a link. No candidate yields an "unresolved provider"
-// diagnostic. Several candidates yield an "ambiguous provider" diagnostic
+// diagnostic that asks for a BoundaryModel or an explicit link. Several candidates yield an "ambiguous provider" diagnostic
 // that lists them and asks for one explicit binding. An explicit link to an
 // input suppresses both diagnostics for it. The returned links are the
 // explicit links followed by the joined ones. A link is connectivity only; it
@@ -25,16 +29,18 @@ import (
 // clusters.
 func JoinByResource(components []Component, cluster map[string]ir.ClusterID, explicit []Link) ([]Link, []Diagnostic, error) {
 	known := map[string]bool{}
-	ports := map[string]Port{}
 	for _, c := range components {
 		known[c.Name] = true
-		for name, p := range c.Ports {
-			ports[c.Name+"."+name] = p
-		}
 	}
 	for _, name := range sortedKeys(cluster) {
 		if !known[name] {
 			return nil, nil, fmt.Errorf("cluster assignment names unknown component %s", name)
+		}
+	}
+	ports := map[string]Port{}
+	for _, c := range ResolveProviders(components, cluster) {
+		for name, p := range c.Ports {
+			ports[c.Name+"."+name] = p
 		}
 	}
 	clusterOf := func(port string) ir.ClusterID { return cluster[strings.SplitN(port, ".", 2)[0]] }
@@ -71,11 +77,11 @@ func JoinByResource(components []Component, cluster map[string]ir.ClusterID, exp
 		candidates := providers[string(clusterOf(name))+"\x00"+p.Contract+"/"+p.Version]
 		switch len(candidates) {
 		case 0:
-			diags = append(diags, Diagnostic{Code: DiagUnresolvedProvider, Port: name, Message: fmt.Sprintf("no component writes %s/%s%s", p.Contract, p.Version, where)})
+			diags = append(diags, Diagnostic{Code: DiagUnresolvedProvider, Port: name, Message: fmt.Sprintf("no component owns or creates %s/%s%s; add a BoundaryModel that provides it or an explicit link", p.Contract, p.Version, where)})
 		case 1:
 			links = append(links, Link{From: candidates[0], To: name})
 		default:
-			diags = append(diags, Diagnostic{Code: DiagAmbiguousProvider, Port: name, Message: fmt.Sprintf("%d components write %s/%s%s; add one explicit link to choose the provider", len(candidates), p.Contract, p.Version, where), Candidates: append([]string(nil), candidates...)})
+			diags = append(diags, Diagnostic{Code: DiagAmbiguousProvider, Port: name, Message: fmt.Sprintf("%d components provide %s/%s%s; add one explicit link to choose the provider", len(candidates), p.Contract, p.Version, where), Candidates: append([]string(nil), candidates...)})
 		}
 	}
 	sort.SliceStable(diags, func(i, j int) bool { return diags[i].Port < diags[j].Port })
