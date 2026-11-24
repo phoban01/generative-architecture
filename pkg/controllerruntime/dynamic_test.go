@@ -484,3 +484,39 @@ func TestDynamicCreateUpdateRecordFieldManager(t *testing.T) {
 		t.Fatal("a rejected call reached the hook")
 	}
 }
+
+// Dynamic DeleteCollection is observed as deleteAllOf in the endpoint's
+// namespace with an equality label selector; delete options and other list
+// options fail closed.
+func TestDynamicDeleteCollectionIsObserved(t *testing.T) {
+	ctx := context.Background()
+	selected := map[string]string{"app": "mirror"}
+	binding, base, observer, rec := dynamicPeople(t, []string{"deleteAllOf"},
+		person("tenant", "one", selected), person("tenant", "two", map[string]string{"app": "other"}), person("other", "three", selected))
+	resource := observer.Dynamic(base, peopleMapper(t, binding)).Resource(binding.GVR()).Namespace("tenant")
+	if err := resource.DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{LabelSelector: "app=mirror"}); err != nil {
+		t.Fatal(err)
+	}
+	if len(rec.calls) != 1 {
+		t.Fatalf("expected one observed call, got %d", len(rec.calls))
+	}
+	call := rec.calls[0]
+	if call.Descriptor.Operation != "deleteAllOf" || call.Key != (effect.Key{Namespace: "tenant"}) || call.Options["labelSelector"] != "app=mirror" || call.Submitted != nil || rec.results[0].Snapshot != nil {
+		t.Fatalf("wrong call: %+v, result %+v", call, rec.results[0])
+	}
+	// The fake dynamic client does not act on DeleteCollection, so only the
+	// observation is checked here.
+	grace := int64(0)
+	for name, err := range map[string]error{
+		"delete options": resource.DeleteCollection(ctx, metav1.DeleteOptions{GracePeriodSeconds: &grace}, metav1.ListOptions{}),
+		"field selector": resource.DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{FieldSelector: "metadata.name=one"}),
+		"set selector":   resource.DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{LabelSelector: "app in (a,b)"}),
+	} {
+		if err == nil {
+			t.Errorf("%s accepted", name)
+		}
+	}
+	if len(rec.calls) != 1 {
+		t.Fatal("a rejected call reached the hook")
+	}
+}

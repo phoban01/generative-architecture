@@ -211,8 +211,36 @@ func (r *dynamicResource) Delete(ctx context.Context, name string, opts metav1.D
 		return nil, r.base().Delete(ctx, name, opts)
 	})
 }
-func (*dynamicResource) DeleteCollection(context.Context, metav1.DeleteOptions, metav1.ListOptions) error {
-	return unsupported("dynamic.DeleteCollection")
+
+// DeleteCollection records a deleteAllOf in the endpoint's namespace, with
+// no name and no snapshots. An equality label selector is recorded as the
+// labelSelector option. Delete options and other list options fail closed.
+func (r *dynamicResource) DeleteCollection(ctx context.Context, opts metav1.DeleteOptions, listOpts metav1.ListOptions) error {
+	if !reflect.DeepEqual(opts, metav1.DeleteOptions{}) {
+		return unsupported("dynamic.DeleteCollection delete options")
+	}
+	if !reflect.DeepEqual(listOpts, metav1.ListOptions{LabelSelector: listOpts.LabelSelector}) {
+		return unsupported("dynamic.DeleteCollection list options other than the label selector")
+	}
+	var recorded map[string]string
+	if listOpts.LabelSelector != "" {
+		parsed, err := labels.Parse(listOpts.LabelSelector)
+		if err != nil {
+			return err
+		}
+		selector, err := equalitySelector(parsed)
+		if err != nil {
+			return err
+		}
+		recorded = map[string]string{"labelSelector": selector}
+	}
+	gvk, err := r.resolve()
+	if err != nil {
+		return err
+	}
+	return r.observe(ctx, gvk, "deleteAllOf", "", nil, recorded, func() (map[string]any, error) {
+		return nil, r.base().DeleteCollection(ctx, opts, listOpts)
+	})
 }
 
 // List records a direct list in the endpoint's namespace, with no name. An

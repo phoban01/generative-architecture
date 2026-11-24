@@ -498,3 +498,67 @@ func TestTypedStatusPatchIsObserved(t *testing.T) {
 		t.Fatal("rejected status patch reached the hook")
 	}
 }
+
+// A patch with an optimistic lock carries metadata.resourceVersion; the
+// observer records it as the resourceVersion option the patch summary reads.
+func TestTypedPatchRecordsOptimisticLock(t *testing.T) {
+	ctx := context.Background()
+	scheme := coreScheme(t)
+	base := fake.NewClientBuilder().WithScheme(scheme).WithObjects(configMap("test", "one", nil)).Build()
+	rec := &recorder{}
+	wrapped := cr.Observer{Scheme: scheme, Registry: configMapRegistry(t, [2]string{"patch", "direct"}), Hook: rec.hook}.Client(base, "cached")
+	held := &corev1.ConfigMap{}
+	if err := base.Get(ctx, client.ObjectKey{Namespace: "test", Name: "one"}, held); err != nil {
+		t.Fatal(err)
+	}
+	original := held.DeepCopy()
+	held.Data["value"] = "locked"
+	if err := wrapped.Patch(ctx, held, client.MergeFromWithOptions(original, client.MergeFromWithOptimisticLock{})); err != nil {
+		t.Fatal(err)
+	}
+	if got := rec.calls[0].Options["resourceVersion"]; got == "" || got != original.ResourceVersion {
+		t.Fatalf("resourceVersion %q recorded, want %q: %+v", got, original.ResourceVersion, rec.calls[0].Options)
+	}
+	unlocked := held.DeepCopy()
+	held.Data["value"] = "unlocked"
+	if err := wrapped.Patch(ctx, held, client.MergeFrom(unlocked)); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := rec.calls[1].Options["resourceVersion"]; ok {
+		t.Fatalf("a patch without a lock recorded a resourceVersion: %+v", rec.calls[1].Options)
+	}
+}
+
+// Status().Apply is observed as status.apply with the options Apply records.
+// Other subresources and a subresource body fail closed.
+func TestTypedStatusApplyIsObserved(t *testing.T) {
+	ctx := context.Background()
+	scheme := coreScheme(t)
+	node := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "one"}}
+	base := fake.NewClientBuilder().WithScheme(scheme).WithObjects(node).WithStatusSubresource(node).Build()
+	rec := &recorder{}
+	registry, err := effect.NewRegistry([]effect.Descriptor{{ID: "status.apply", Resource: effect.Resource{Version: "v1", Kind: "Node"}, Operation: "status.apply", Consistency: "direct"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wrapped := cr.Observer{Scheme: scheme, Registry: registry, Hook: rec.hook}.Client(base, "cached")
+	configuration := corev1ac.Node("one").WithStatus(corev1ac.NodeStatus().WithPhase(corev1.NodeRunning))
+	if err := wrapped.Status().Apply(ctx, configuration, client.FieldOwner("x"), client.ForceOwnership); err != nil {
+		t.Fatal(err)
+	}
+	if len(rec.calls) != 1 {
+		t.Fatalf("expected one observed call, got %d", len(rec.calls))
+	}
+	call := rec.calls[0]
+	if call.Descriptor.Operation != "status.apply" || call.Key != (effect.Key{Name: "one"}) || call.Options["fieldManager"] != "x" || call.Options["force"] != "true" {
+		t.Fatalf("wrong call: %+v", call)
+	}
+	if call.Submitted["status"].(map[string]any)["phase"] != "Running" {
+		t.Fatalf("submitted snapshot is not the configuration: %+v", call.Submitted)
+	}
+	expectRejected(t, wrapped.Status().Apply(ctx, configuration), "status.Apply without a field manager")
+	expectRejected(t, wrapped.SubResource("scale").Apply(ctx, configuration, client.FieldOwner("x")), "scale.Apply")
+	if len(rec.calls) != 1 {
+		t.Fatal("a rejected call reached the hook")
+	}
+}

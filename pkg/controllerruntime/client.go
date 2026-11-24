@@ -293,7 +293,29 @@ func patchCall(op, subresource string, obj client.Object, patch client.Patch, dr
 	}
 	recorded["patchType"] = string(patch.Type())
 	recorded["patch"] = string(data)
+	if rv := patchResourceVersion(patch.Type(), data); rv != "" {
+		recorded["resourceVersion"] = rv
+	}
 	return operation, recorded, nil
+}
+
+// patchResourceVersion returns the metadata.resourceVersion a merge or
+// strategic merge patch carries, which an optimistic lock
+// (client.MergeFromWithOptimisticLock) sets. The patch summary reads it as
+// $options.resourceVersion. A patch without one returns "".
+func patchResourceVersion(pt types.PatchType, data []byte) string {
+	if pt != types.MergePatchType && pt != types.StrategicMergePatchType {
+		return ""
+	}
+	var body struct {
+		Metadata struct {
+			ResourceVersion string `json:"resourceVersion"`
+		} `json:"metadata"`
+	}
+	if err := json.Unmarshal(data, &body); err != nil {
+		return ""
+	}
+	return body.Metadata.ResourceVersion
 }
 
 // DeleteAllOf records a direct deleteAllOf keyed by the namespace option,
@@ -332,15 +354,23 @@ func (c *clientProxy) DeleteAllOf(ctx context.Context, obj client.Object, opts .
 func (c *clientProxy) Apply(ctx context.Context, configuration runtime.ApplyConfiguration, opts ...client.ApplyOption) error {
 	options := &client.ApplyOptions{}
 	options.ApplyOptions(opts)
-	recorded, err := writeOptions("Apply", true, options.DryRun, options.FieldManager, options.Force, !reflect.DeepEqual(*options, client.ApplyOptions{DryRun: options.DryRun, FieldManager: options.FieldManager, Force: options.Force}))
+	return c.o.applyCall(ctx, "Apply", "apply", configuration, *options, func() error { return c.Client.Apply(ctx, configuration, opts...) })
+}
+
+// applyCall records an apply or status.apply of configuration, keyed by the
+// configuration's name and namespace, with the field manager, which apply
+// requires, and force. The snapshots are the configuration before and
+// after the call.
+func (o Observer) applyCall(ctx context.Context, method, operation string, configuration runtime.ApplyConfiguration, options client.ApplyOptions, execute func() error) error {
+	recorded, err := writeOptions(method, true, options.DryRun, options.FieldManager, options.Force, !reflect.DeepEqual(options, client.ApplyOptions{DryRun: options.DryRun, FieldManager: options.FieldManager, Force: options.Force}))
 	if err != nil {
 		return err
 	}
 	if options.FieldManager == "" {
-		return unsupported("Apply without a field manager")
+		return unsupported(method + " without a field manager")
 	}
 	if configuration == nil || reflect.ValueOf(configuration).IsNil() {
-		return unsupported("Apply of a nil configuration")
+		return unsupported(method + " of a nil configuration")
 	}
 	submitted, err := applyContent(configuration)
 	if err != nil {
@@ -351,8 +381,8 @@ func (c *clientProxy) Apply(ctx context.Context, configuration runtime.ApplyConf
 	if gvk.Version == "" || gvk.Kind == "" || u.GetName() == "" {
 		return fmt.Errorf("apply observation requires apiVersion, kind and name in the configuration")
 	}
-	return c.o.observe(ctx, gvk, "apply", "direct", client.ObjectKey{Namespace: u.GetNamespace(), Name: u.GetName()}, submitted, recorded, func() (map[string]any, error) {
-		if err := c.Client.Apply(ctx, configuration, opts...); err != nil {
+	return o.observe(ctx, gvk, operation, "direct", client.ObjectKey{Namespace: u.GetNamespace(), Name: u.GetName()}, submitted, recorded, func() (map[string]any, error) {
+		if err := execute(); err != nil {
 			return nil, err
 		}
 		return applyContent(configuration)
@@ -421,8 +451,19 @@ func (s *subresource) Patch(ctx context.Context, obj client.Object, patch client
 	}
 	return s.parent.o.invoke(ctx, operation, "direct", client.ObjectKeyFromObject(obj), obj, recorded, func() error { return s.parent.Client.Status().Patch(ctx, obj, patch, opts...) })
 }
-func (s *subresource) Apply(context.Context, runtime.ApplyConfiguration, ...client.SubResourceApplyOption) error {
-	return unsupported(s.name + ".Apply")
+
+// Apply records status.apply with the options Apply records. Other
+// subresources fail closed.
+func (s *subresource) Apply(ctx context.Context, configuration runtime.ApplyConfiguration, opts ...client.SubResourceApplyOption) error {
+	if s.name != "status" {
+		return unsupported(s.name + ".Apply")
+	}
+	options := &client.SubResourceApplyOptions{}
+	options.ApplyOpts(opts)
+	if options.SubResourceBody != nil {
+		return unsupported("status.Apply with a subresource body")
+	}
+	return s.parent.o.applyCall(ctx, "status.Apply", "status.apply", configuration, options.ApplyOptions, func() error { return s.parent.Client.Status().Apply(ctx, configuration, opts...) })
 }
 
 // SplitClient combines an explicitly controlled reader with direct writes.
