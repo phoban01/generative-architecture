@@ -88,3 +88,13 @@ func TestPredicatesFailClosed(t *testing.T) {
 		})
 	}
 }
+
+func TestSeenVar(t *testing.T) {
+	gvk := ir.GVK{Group: "demo", Version: "v1", Kind: "Database"}
+	if got, want := watchmodel.SeenVar(watchmodel.GenerationVar(gvk)), "databaseGenerationSeen"; got != want {
+		t.Errorf("SeenVar(GenerationVar) = %s, want %s", got, want)
+	}
+	if got, want := watchmodel.SeenVar(watchmodel.ResourceVersionVar(gvk)), "databaseResourceVersionSeen"; got != want {
+		t.Errorf("SeenVar(ResourceVersionVar) = %s, want %s", got, want)
+	}
+}

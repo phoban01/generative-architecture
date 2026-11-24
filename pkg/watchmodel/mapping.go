@@ -181,7 +181,7 @@ func (g *generator) routeField(t *target, r *resource, w ir.Watch) error {
 	v := FieldVar(r.gvk, w.Mapping.FieldPath)
 	if !g.declared[v] {
 		initial := model.Variable{Type: "string", Initial: expr.Expression(strconv.Quote(value))}
-		for _, name := range []string{v, seen(v)} {
+		for _, name := range []string{v, SeenVar(v)} {
 			if err := g.addState(w, name, initial); err != nil {
 				return err
 			}
@@ -192,7 +192,7 @@ func (g *generator) routeField(t *target, r *resource, w ir.Watch) error {
 	// controller-runtime maps both ObjectOld and ObjectNew of an update, so
 	// a reference that moved enqueues the old target as well as the new.
 	g.routeValue(t, r.object, v, "true")
-	g.routeValue(t, r.object, seen(v), EventVar(r.gvk)+` == "update"`)
+	g.routeValue(t, r.object, SeenVar(v), EventVar(r.gvk)+` == "update"`)
 	return nil
 }
 

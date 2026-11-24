@@ -83,7 +83,7 @@ func Emit(resource ir.GVK, event string, generation bool) (map[string]expr.Expre
 	case Create:
 		u[ev], u[pending] = `"create"`, "false"
 		u[gen] = expr.Expression(gen + " + 1")
-		u[seen(gen)], u[seen(rv)] = u[gen], u[rv]
+		u[SeenVar(gen)], u[SeenVar(rv)] = u[gen], u[rv]
 	case Delete:
 		u[ev], u[pending] = `"delete"`, "false"
 	case Update:
@@ -176,7 +176,7 @@ func (g *generator) generate() (model.Spec, error) {
 			return g.spec, err
 		}
 		for _, v := range []string{GenerationVar(r.gvk), ResourceVersionVar(r.gvk)} {
-			for _, name := range []string{v, seen(v)} {
+			for _, name := range []string{v, SeenVar(v)} {
 				if err := g.addState(r.rules[0], name, model.Variable{Type: "int", Initial: "0"}); err != nil {
 					return g.spec, err
 				}
@@ -238,7 +238,7 @@ func (g *generator) deliver(r *resource) (model.Action, error) {
 	// then keep the value from before the create, which can add an old
 	// target but never drops one.
 	for _, v := range append([]string{GenerationVar(r.gvk), ResourceVersionVar(r.gvk)}, r.fieldVars...) {
-		updates[seen(v)] = expr.Expression(fmt.Sprintf(`%s == "create" ? %s : %s`, ev, seen(v), v))
+		updates[SeenVar(v)] = expr.Expression(fmt.Sprintf(`%s == "create" ? %s : %s`, ev, SeenVar(v), v))
 	}
 	for v, conditions := range hits {
 		updates[v] = raise(v, conditions)

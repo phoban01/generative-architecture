@@ -119,18 +119,15 @@ func (a *Adapter) observeWatches(into map[string]any) {
 		into[watchmodel.EventVar(o.gvk)] = o.event
 		into[watchmodel.PendingVar(o.gvk)] = o.pending
 		into[watchmodel.GenerationVar(o.gvk)] = o.generation
-		into[seenVar(watchmodel.GenerationVar(o.gvk))] = o.generationSeen
+		into[watchmodel.SeenVar(watchmodel.GenerationVar(o.gvk))] = o.generationSeen
 		into[watchmodel.ResourceVersionVar(o.gvk)] = o.resourceVersion
-		into[seenVar(watchmodel.ResourceVersionVar(o.gvk))] = o.resourceVersionSeen
+		into[watchmodel.SeenVar(watchmodel.ResourceVersionVar(o.gvk))] = o.resourceVersionSeen
 	}
 	instance := a.objects["DatabaseInstance"]
 	reference := watchmodel.FieldVar(instance.gvk, []string{"Spec", "DatabaseName"})
 	into[reference] = instance.reference
-	into[seenVar(reference)] = instance.referenceSeen
+	into[watchmodel.SeenVar(reference)] = instance.referenceSeen
 }
-
-// seenVar names the last delivered copy of v, as watchmodel does.
-func seenVar(v string) string { return v + "Seen" }
 
 // deliver hands the event of the object of kind to every extracted watch
 // rule on kind, through the native predicates and handlers.

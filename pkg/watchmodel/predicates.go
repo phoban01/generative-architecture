@@ -16,9 +16,11 @@ func ResourceVersionVar(resource ir.GVK) string {
 	return lowerFirst(resource.Kind) + "ResourceVersion"
 }
 
-// seen names the copy of a counter or field that the last delivered event
-// left behind: the ObjectOld of the next update.
-func seen(v string) string { return v + "Seen" }
+// SeenVar names the copy of the counter or field variable v that the last
+// delivered event left behind: the ObjectOld of the next update. Adapters
+// that mirror the model state use it instead of their own copy of the
+// convention.
+func SeenVar(v string) string { return v + "Seen" }
 
 // passes returns the condition under which the event of r passes every
 // predicate of w. Predicates without a model fail closed.
@@ -124,5 +126,5 @@ func (p *predicateParser) leaf(name string) (string, error) {
 	default:
 		return "", fmt.Errorf("predicate %s is not modelled", name)
 	}
-	return fmt.Sprintf(`%s != "update" || %s != %s`, ev, counter, seen(counter)), nil
+	return fmt.Sprintf(`%s != "update" || %s != %s`, ev, counter, SeenVar(counter)), nil
 }
