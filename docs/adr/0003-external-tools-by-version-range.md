@@ -21,3 +21,4 @@ by the library. The supported Go toolchain is the two most recent minor releases
 - Version checks parse semver and compare ranges; every execution receipt records the exact resolved version, so a range never weakens reproducibility.
 - CI runs a small matrix across the supported range.
 - The devbox environment is a convenience pin at the minimum supported versions, not the compatibility contract.
+- Quint writes its run metadata (a date, the path of the module in a temporary directory, a timestamp) into the `#meta` block of every ITF trace. `quint.Sample` removes those members before it returns a trace. The trace hashes in a report and in the receipts therefore cover the states and the seed, not the run. Two refreshes of an unchanged model with the same seed write the same bytes.

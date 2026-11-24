@@ -43,46 +43,46 @@ status:
     writeTarget_error: 9
     writeTarget_ok: 3
   traceHashes:
-    trace-000.itf.json: 0353cd56b576663d5136f2ca8313da4434055d77a6f8b1e0c480f5b004773a02
-    trace-001.itf.json: 872a746cf9f6286a2c6a919b445efb206797ddcde3492e4382a73315247881d7
-    trace-002.itf.json: a7d49f97ff59edc8995748ceac46ebd7358d46ae29ee900fe74033d70830c15b
-    trace-003.itf.json: 2ecd91465b4384d9e7114bfa90caffc21413f3525a4bf6d2319d7f02480cf20e
-    trace-004.itf.json: 26b2785ae7e748cd3d3b4e86488a9670723d7f8e7a433b3c1bf993f103636d67
-    trace-005.itf.json: 6e7899f56f08766d3c27826fcf2e173aafb57f4ec8e0c60b8d2f282ef6233fa9
-    trace-006.itf.json: 461487656be1c898c9494b2162ab7902b83d827099d97a968b0456de06f34eca
-    trace-007.itf.json: 8a81da9af8a0239b6ea0fad2d63a8a3042a617475d6b05ea47a6c92e06a0f347
-    trace-008.itf.json: 52017dacaa871995a943fd7ee25392090701ad4c29e6d0132cee756c68675de9
-    trace-009.itf.json: 6f5bbf15e6c55562b95989f9edb0870c9b73ef0e6f60057999d3cd365289f9ad
-    trace-010.itf.json: aa65cf52560fff18d0d63a5fbe99a8e008092e3ef954c7ba818fd5f6c955f602
-    trace-011.itf.json: 5a501eda3585f412dce0d0ab4560b2e158c85cceeb480d2494f0926172c87360
-    trace-012.itf.json: 34d9dccdd7963bc07eb1a3eb3bc1f12ac73c0649e509ad1c5c652355071ce633
-    trace-013.itf.json: ebaff607fff5476dd8f2a0f4949fccb17a518f749ad2c9a0a30f7705c9281c80
-    trace-014.itf.json: da52af49ca6d8215bd2797da6e2e8bc30a0395e17ffcae7bb7eec8f2261aa20b
-    trace-015.itf.json: 7a90db8eedb6e2cfc3a56e6ce89c7411b5630a654cade2f7ca3e494471116b1f
-    trace-016.itf.json: 9d8c90434243e89e759751f1727203471e4b20474066a5d2ba7e916dca45baeb
-    trace-017.itf.json: 395c14fd2d317bf84721a1ee9206de12c856566099f66c6e192bfaacec76d4ed
-    trace-018.itf.json: b7afd30ff28b53815fa4e7548da8c010db7ffe1116a98e1ea1d3bf629c273639
-    trace-019.itf.json: 140cc440721d2d13bf417b0ac4b935fe4b60ae90e96d6419553a53a4ae643eab
-    trace-020.itf.json: 61e67b021cbfeef749259f8633bbf2f46d9ae2d27aa9b63cbb6d1e3b9efa3f76
-    trace-021.itf.json: da35d6d79f2e36cbef54268ad5b6d13a9c5a47a1ac5bd6a2f38da0beb9b702e6
-    trace-022.itf.json: 2cba27a2bb0ac5321bb5c5a684dfc6865e486d96f94e293176663a19e4043ed8
-    trace-023.itf.json: fead4e21aaaf3da99b7342d3a5944430ce3d49c28595f42bccc52997df328d47
-    trace-024.itf.json: 043e617025ca0db17a96b06f5668762f7f78f16534a3c315fd18b90008636ad4
-    trace-025.itf.json: 6f139fe9058f72b9006a8c3e0f0a5d69540cd0dcdb4f66ad1d27aa3d0c9778e4
-    trace-026.itf.json: c1afaac7b1185818ef7eb99203691d34cc8b75b5f908a6918a086bfbc9385022
-    trace-027.itf.json: b5be1be7e276fb756f1b2c52113e0b7ab4d7006a3a208744de5492b0d7e36817
-    trace-028.itf.json: 6028b4294ffb7b6f2e8ce7ec449cf3e88d4eaec1186ca819ddecfa97b89d59bc
-    trace-029.itf.json: 41b440767c5ddaac1601af57069f7ea129c0797b03f83a3f90e1c10dffd35d69
-    trace-030.itf.json: 93e246c7e0abf29c5e04e3fd58a85d2327042c317b9c747de18ded97136f4760
-    trace-031.itf.json: 271b38663de60f82de408e18da1883d288e42d071b74f9addb29584430031a37
-    trace-032.itf.json: 89d88ba162742009d52092393369f4a0de0c050fc65f3b6b50470112ad6b7363
-    trace-033.itf.json: ff2922397a63b986567adba6de69a5802d43a1cb9560f3b4ac0c86c9852ed7fc
-    trace-034.itf.json: db5617896fabff9b802577d90d11d0dbf2b35bc2fd5d48c1ecb4015829c4733d
-    trace-035.itf.json: f88b3c82e1a6449a840dc2820ded7ddd121a3a1c7db95c36934e51e4ab30aed9
-    trace-036.itf.json: c4bf69f081ac2b05143c6a0ec6799ff2733e51c76b98aece4ff6b69faa473c3f
-    trace-037.itf.json: 50b466e9d1eabe1ded4fd66d39f0ddcf5bb6778a4434fde04f4a4b12be7d96a0
-    trace-038.itf.json: 745a8adf1ed5bdd94a14edc3818e4804e6da5f4990b6dfe25e17dbbb4325677e
-    trace-039.itf.json: 6cc83a3932032447dd7987b1eb0b3ed5faad2700d995489b7b872c1868d2ae3a
+    trace-000.itf.json: 5098dc32039d6ef7bd20a9fa7870800cbc0875c144546b9e3e9b6c2253d71509
+    trace-001.itf.json: a699aa83ff0ba308e67e635c38ff01e533f65a069d2af579cedfe8a616545fa3
+    trace-002.itf.json: 4a59030b8851aa77332d67c7692d79ccd5569cfdd651038bf7d49850fa73624e
+    trace-003.itf.json: 860e8d7f8170036f9b75f85a3646f9c787bcef94a003dc78a8b5b400a9622d88
+    trace-004.itf.json: 13d15e462453dd132c8f2d8c2f0872c2552b6184d1ccb5b0155634631792f41f
+    trace-005.itf.json: a63a19fae99c6a8a4cef18e7fd17051f61e719db6a47e7c6921fdf5e0bcf990a
+    trace-006.itf.json: a2d779948d1c765f92a88e7008febc9158c5352b29fad581e16fd2481df4948f
+    trace-007.itf.json: b26e01f33a16bd3ac9f0593831d6a3954e351d1fe95afbaaa9177250fd57f783
+    trace-008.itf.json: 531d220f5ac0f542ce0ad752feab88a58e9c9fa9dd45c8cd7b077c56dae6b91c
+    trace-009.itf.json: a2ff6b164fe89527e1b59db49dd0ff518290c2ba2d510b2d97409cd084bcb9ed
+    trace-010.itf.json: bf22fa34503d940ce06c33be8dceb91ee0ebc09906ff7a6f895e1d80994c1e29
+    trace-011.itf.json: 7b89eb15fd26ce05b4ffadfa6ca42c42be4430262ccd4b1e2e1921589488e203
+    trace-012.itf.json: ff66e92b83398bfec34784c845004d358777af8f75b6f5d001cc8fa82cdcd3ac
+    trace-013.itf.json: c90c1722051d75ae216666dc528091512f18043e464199b390bf890c3ae8b7ad
+    trace-014.itf.json: 4424e21bb8bc72e1446a35a1287b1d044082009f08c7ef362bf37c2394cd2453
+    trace-015.itf.json: 648cf4e28ed5cba8dff482b770005ee7dfaa054759d83a76ea2813a05a3f4c67
+    trace-016.itf.json: e8b1ae04d65aa1209c9ae04cffe19fd285b4aa78ea48979d3015fa047992bb0b
+    trace-017.itf.json: d8b456f849adc2392fe1a63578f8deb02931abdace59d3630c47148da6e2c6b2
+    trace-018.itf.json: 396b0a57b2a6d74a5636ebf9b2e661d5061f8f458ed89a1592a3673ef46f38ab
+    trace-019.itf.json: a21fa7a503edb27c1cd4a42722882d5944821dcfcbc584bba98da6275203a52d
+    trace-020.itf.json: 0497b6252556fcc773269825232b2735714a9588066f56dc0066d7860fd983ae
+    trace-021.itf.json: cde2bff97e2a40b59295fe113151f54fe905586a26eb482be44bb086ecb220c8
+    trace-022.itf.json: 1de3d7d358be39ea4f594e6496c22e3c68f0d76d9703d2886590822090267b9e
+    trace-023.itf.json: 0469e9a4e0245b432c211bb333b2c9db01dd2246070d84e67846eee7b877ca9a
+    trace-024.itf.json: 1cec19f66a84489257fd4b3392626855167912761c7b0aa37bb6316598909981
+    trace-025.itf.json: df9a153543f59daef51deb2cc0493e5db4baf933a67d44786850959e1cdaefa0
+    trace-026.itf.json: ce3c4cd216bb27884cf94dc876dc0343aa4ef425cd869c960ec0e740e1c3fe7f
+    trace-027.itf.json: a85c39aa56de8da28ad2785d7ae3d6ea597479f4fa757f8c2b7a6101c1a85f29
+    trace-028.itf.json: 094e62118d74f3cceb6dea1eb0ccde4f89a8b5524942cb4989f5da0d03eb880b
+    trace-029.itf.json: f96f212cd08ae21c6155dad75ae712375a167c0056c009428fb79d88b46afc5d
+    trace-030.itf.json: b1c2a6c12d50d46f6d49ff40c443f01fcb3a828d70114f8356bd87d83fcf30e7
+    trace-031.itf.json: 1897616759d401818567124aa9d73ca0ecf2fb328bbbfe0684592f64a6208267
+    trace-032.itf.json: 90760292abc61eb726cfff72e9e2752b191b303aa7c56fda0faaa8fc418f5073
+    trace-033.itf.json: b9ee594d5e7a53986166b3e8042cc8d744c98786d1f4808cfc5bfc1b4529aaeb
+    trace-034.itf.json: a747f3254ee484eef071e066f4edd14ec196924cd7281e93c147a83e6d3c5bd2
+    trace-035.itf.json: a76245078a2dfa7b01d8a67a557649c19c34dcff2e7d6d9e616bd99d8249fd8f
+    trace-036.itf.json: 92da9d94965c9dd347a8e666e0d1624ff61f9d68f8be839fd53776e556247e94
+    trace-037.itf.json: e7db084acf2d2ad2ed960c291003f2a6e83509e3f0a791cd85de1bb07d68140a
+    trace-038.itf.json: 14cd71a06bf7db4f870a57d7ed568cec469ca7b4514bcc1f4e0dc7a256edbc3a
+    trace-039.itf.json: 81cab7659f95a48fd707df255ae5e9d973e2da638a3f6580ed0e15a7f1f0561c
   findings: []
   receipt:
     module: github.com/phoban01/generative-architecture
@@ -163,13 +163,13 @@ status:
       - path: pkg/composition/autolink.go
         sha256: e1dbc8610059a7f01ddd2307b121ebcb9eac04fae3eb7dd7582be7fee88bcb42
       - path: pkg/composition/compose.go
-        sha256: a15b470f4ee36010cbb2b61893f7713212deee2eb7a8a26e81384efdbd458d76
+        sha256: 1c12eab2eceb731a82d821833c328532c7e5545953c89c734a8492feb1037584
       - path: pkg/composition/derive.go
-        sha256: a8e9a0c8f1fd1845226c8295e9456d3449a16f9e3b07a59e6bd0073c7bc49806
+        sha256: 02082fcdd734baf76c1e76a9fa655ea9b5a8e183497ea356766c97dd6c6f2cf8
       - path: pkg/composition/join.go
-        sha256: b6b1f97cc6f0021191dd0bf2b6156a025c30d530ff8e3a5711728ab228e72937
+        sha256: eec57bb6d2c1523efa398fac9998222bef380ca31bd30cdafd2466d96003ff7b
       - path: pkg/composition/load.go
-        sha256: d3c324292852905fb8f3180df7200c2b70a1dec1c8b6949b243e0cadc76e5f41
+        sha256: e9c0e241759a09c62a5daf7ef574fb05ef24199b7ae01daaf9d972c29bedda96
       - path: pkg/composition/protocol.go
         sha256: 9cde933b3d1e4f7598e12e1254e48ab1cd10540d485f4f88983be0288a6075ec
       - path: pkg/composition/report.go
@@ -217,25 +217,29 @@ status:
       - path: pkg/expr/rewrite.go
         sha256: 3bcb1cf7e5ce057cc7f1adf05f4b7c36ff76b1d8c39757d73fd04605ecb3ec9a
       - path: pkg/goflow/diagnostic.go
-        sha256: ab20480e4db1d855f81418cbb8807d7ce50d0b993673d473b26e9e4545f41ce7
+        sha256: d5074f481ce0c73766b96532fdec9e40e22c97059456158249fb9f2163f46113
       - path: pkg/goflow/external.go
         sha256: cc720b09df02824b8e2937dffa0314e802b180673a117026487b62aacea4526c
       - path: pkg/goflow/extract.go
-        sha256: f1706a34db2e44b1a2b37f4366d414b57998736dc10e24aa0c6c13921c4f8f15
+        sha256: f0562c92e4b5f43c147fc68128f786d2de087a97d3527adf4114aeb0b99dc8ee
       - path: pkg/goflow/idioms.go
-        sha256: e85ece40318dda403d7c1fe3dbd703978304e698c033724e01c72ede038832aa
+        sha256: ff6b2d8a354533d7764c907c163b76d20fdf51dc7ef950eafd6a3982d78ac23d
+      - path: pkg/goflow/logging.go
+        sha256: 976a52f7cc940f2f7bcc5bf9fefe1e98bf890a4ea24187ebd6c8df23f3618484
       - path: pkg/goflow/objectcall.go
         sha256: 534943c36c996faffe9794b6bcc223287e21640d47fce31a1febf4b0e815be21
       - path: pkg/goflow/objects.go
-        sha256: 1cf72c90e6a1e033d64bdff9131b9d14228dd4b519d3a14bdc3802c4b8803b5f
+        sha256: 1aae08d0c91efa5af8a399ad25a625763fe9a9d31db9c66694e5baa8cf307716
+      - path: pkg/goflow/pure.go
+        sha256: 1bf500d5f760815e1aab7aed54227056ab9de0f299e9004973895e14ebfe8a87
       - path: pkg/goflow/quantity.go
         sha256: 98259b932d634f109f21b07ed63206b658b05a6ce21ecdf70b3845edfc238934
       - path: pkg/goflow/requeue.go
-        sha256: f2ecb833f11789f018549f1b39d791cfd1e82b1ec0cfb18f8ca78405cfd3d52b
+        sha256: fd7195f0637cdb151ca95cf623764e32536aaf396f0ce86accef3014f4cc9eee
       - path: pkg/goflow/select.go
         sha256: 70e423da85d957b5fa52cd8468e22c1b790cce7e66dc05dbea0bc1909ab978d8
       - path: pkg/goflow/typed.go
-        sha256: bd3ec385ba43d21a7e85ea00d680c2d9f7c0bce3f576473087cadf74dee2f04d
+        sha256: e2282bc6b2cd409166b99192caa0711dda64129ed3d0da451fcada0608254633
       - path: pkg/ir/diff.go
         sha256: 53ce5cd7b39351e926a923e19445ab0cb76f0423f31d9744b25d699f7e15e153
       - path: pkg/ir/document.go
@@ -294,8 +298,10 @@ status:
         sha256: 2cef3ffa11c8ce7577a9594ef347f63d13fde414acfe528621295610d86f15d9
       - path: pkg/quint/kill_unix.go
         sha256: 4fa9073f9c329fdbc1e68a4c5d39a8fb16f50a6c1494fa5b647565f5a7331efa
+      - path: pkg/quint/meta.go
+        sha256: 2baa502c431105ac0067442632f3418a742db5bfe629411074f6e6466ce42efb
       - path: pkg/quint/run.go
-        sha256: 8e9e0ec39c22be72d99f21d8e516eb924200601e0ba84f4f3589cfe1f1a837dc
+        sha256: 897cf7dc8de823cba06330697ab2baadcaf56dd09c57b996fd735d7ae48d8e19
       - path: pkg/quint/steer.go
         sha256: 468fd125bf4748ecfd1cd226e9835acf6725f4e1ff9eceee474b3680f34a2c7c
       - path: pkg/quint/verify.go

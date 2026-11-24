@@ -71,6 +71,9 @@ func canonical(v string) string {
 	return v
 }
 
+// Result holds the sampled traces. ITF holds the trace files as Quint wrote
+// them, with the run metadata (date, source path, timestamp) removed from
+// the #meta block so that the bytes depend on the model and the seed only.
 type Result struct {
 	Version string
 	Traces  []conformance.Trace
@@ -145,6 +148,11 @@ func Sample(ctx context.Context, m *model.Compiled, opts Options) (Result, error
 		}
 		b, err := os.ReadFile(p)
 		if err != nil {
+			return result, err
+		}
+		// The trace bytes carry no run metadata, so an unchanged model
+		// yields byte-identical traces on every refresh.
+		if b, err = stripRunMetadata(b); err != nil {
 			return result, err
 		}
 		result.Traces = append(result.Traces, t)

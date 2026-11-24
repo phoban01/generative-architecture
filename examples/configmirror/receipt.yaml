@@ -81,13 +81,13 @@ status:
     - path: pkg/composition/autolink.go
       sha256: e1dbc8610059a7f01ddd2307b121ebcb9eac04fae3eb7dd7582be7fee88bcb42
     - path: pkg/composition/compose.go
-      sha256: a15b470f4ee36010cbb2b61893f7713212deee2eb7a8a26e81384efdbd458d76
+      sha256: 1c12eab2eceb731a82d821833c328532c7e5545953c89c734a8492feb1037584
     - path: pkg/composition/derive.go
-      sha256: a8e9a0c8f1fd1845226c8295e9456d3449a16f9e3b07a59e6bd0073c7bc49806
+      sha256: 02082fcdd734baf76c1e76a9fa655ea9b5a8e183497ea356766c97dd6c6f2cf8
     - path: pkg/composition/join.go
-      sha256: b6b1f97cc6f0021191dd0bf2b6156a025c30d530ff8e3a5711728ab228e72937
+      sha256: eec57bb6d2c1523efa398fac9998222bef380ca31bd30cdafd2466d96003ff7b
     - path: pkg/composition/load.go
-      sha256: d3c324292852905fb8f3180df7200c2b70a1dec1c8b6949b243e0cadc76e5f41
+      sha256: e9c0e241759a09c62a5daf7ef574fb05ef24199b7ae01daaf9d972c29bedda96
     - path: pkg/composition/protocol.go
       sha256: 9cde933b3d1e4f7598e12e1254e48ab1cd10540d485f4f88983be0288a6075ec
     - path: pkg/composition/report.go
@@ -135,25 +135,29 @@ status:
     - path: pkg/expr/rewrite.go
       sha256: 3bcb1cf7e5ce057cc7f1adf05f4b7c36ff76b1d8c39757d73fd04605ecb3ec9a
     - path: pkg/goflow/diagnostic.go
-      sha256: ab20480e4db1d855f81418cbb8807d7ce50d0b993673d473b26e9e4545f41ce7
+      sha256: d5074f481ce0c73766b96532fdec9e40e22c97059456158249fb9f2163f46113
     - path: pkg/goflow/external.go
       sha256: cc720b09df02824b8e2937dffa0314e802b180673a117026487b62aacea4526c
     - path: pkg/goflow/extract.go
-      sha256: f1706a34db2e44b1a2b37f4366d414b57998736dc10e24aa0c6c13921c4f8f15
+      sha256: f0562c92e4b5f43c147fc68128f786d2de087a97d3527adf4114aeb0b99dc8ee
     - path: pkg/goflow/idioms.go
-      sha256: e85ece40318dda403d7c1fe3dbd703978304e698c033724e01c72ede038832aa
+      sha256: ff6b2d8a354533d7764c907c163b76d20fdf51dc7ef950eafd6a3982d78ac23d
+    - path: pkg/goflow/logging.go
+      sha256: 976a52f7cc940f2f7bcc5bf9fefe1e98bf890a4ea24187ebd6c8df23f3618484
     - path: pkg/goflow/objectcall.go
       sha256: 534943c36c996faffe9794b6bcc223287e21640d47fce31a1febf4b0e815be21
     - path: pkg/goflow/objects.go
-      sha256: 1cf72c90e6a1e033d64bdff9131b9d14228dd4b519d3a14bdc3802c4b8803b5f
+      sha256: 1aae08d0c91efa5af8a399ad25a625763fe9a9d31db9c66694e5baa8cf307716
+    - path: pkg/goflow/pure.go
+      sha256: 1bf500d5f760815e1aab7aed54227056ab9de0f299e9004973895e14ebfe8a87
     - path: pkg/goflow/quantity.go
       sha256: 98259b932d634f109f21b07ed63206b658b05a6ce21ecdf70b3845edfc238934
     - path: pkg/goflow/requeue.go
-      sha256: f2ecb833f11789f018549f1b39d791cfd1e82b1ec0cfb18f8ca78405cfd3d52b
+      sha256: fd7195f0637cdb151ca95cf623764e32536aaf396f0ce86accef3014f4cc9eee
     - path: pkg/goflow/select.go
       sha256: 70e423da85d957b5fa52cd8468e22c1b790cce7e66dc05dbea0bc1909ab978d8
     - path: pkg/goflow/typed.go
-      sha256: bd3ec385ba43d21a7e85ea00d680c2d9f7c0bce3f576473087cadf74dee2f04d
+      sha256: e2282bc6b2cd409166b99192caa0711dda64129ed3d0da451fcada0608254633
     - path: pkg/ir/diff.go
       sha256: 53ce5cd7b39351e926a923e19445ab0cb76f0423f31d9744b25d699f7e15e153
     - path: pkg/ir/document.go
@@ -212,8 +216,10 @@ status:
       sha256: 2cef3ffa11c8ce7577a9594ef347f63d13fde414acfe528621295610d86f15d9
     - path: pkg/quint/kill_unix.go
       sha256: 4fa9073f9c329fdbc1e68a4c5d39a8fb16f50a6c1494fa5b647565f5a7331efa
+    - path: pkg/quint/meta.go
+      sha256: 2baa502c431105ac0067442632f3418a742db5bfe629411074f6e6466ce42efb
     - path: pkg/quint/run.go
-      sha256: 8e9e0ec39c22be72d99f21d8e516eb924200601e0ba84f4f3589cfe1f1a837dc
+      sha256: 897cf7dc8de823cba06330697ab2baadcaf56dd09c57b996fd735d7ae48d8e19
     - path: pkg/quint/steer.go
       sha256: 468fd125bf4748ecfd1cd226e9835acf6725f4e1ff9eceee474b3680f34a2c7c
     - path: pkg/quint/verify.go
