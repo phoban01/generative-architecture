@@ -57,7 +57,8 @@ func runDiff(g globals, args []string) error {
 }
 
 // printDelta writes one line per record: + added, - removed, ~ changed with
-// the changed fields in parentheses.
+// the changed fields in parentheses. A changed watch whose ID changed with
+// its content names the old ID after "was".
 func printDelta(w io.Writer, d ir.Delta) {
 	for _, c := range d.Added {
 		fmt.Fprintf(w, "+ %s %s\n", c.Kind, c.ID)
@@ -66,6 +67,10 @@ func printDelta(w io.Writer, d ir.Delta) {
 		fmt.Fprintf(w, "- %s %s\n", c.Kind, c.ID)
 	}
 	for _, c := range d.Changed {
-		fmt.Fprintf(w, "~ %s %s (%s)\n", c.Kind, c.ID, strings.Join(c.Fields, ", "))
+		was := ""
+		if c.PreviousID != "" {
+			was = " was " + c.PreviousID
+		}
+		fmt.Fprintf(w, "~ %s %s%s (%s)\n", c.Kind, c.ID, was, strings.Join(c.Fields, ", "))
 	}
 }

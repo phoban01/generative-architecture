@@ -65,3 +65,16 @@ func TestDiffCommand(t *testing.T) {
 		t.Fatal("expected a usage error for one argument")
 	}
 }
+
+// TestDiffCommandPrintsPreviousID checks that the text output names the
+// old ID of a watch whose ID changed with its mapping.
+func TestDiffCommandPrintsPreviousID(t *testing.T) {
+	a := ir.Change{Kind: ir.RecordWatch, ID: "watch-new", PreviousID: "watch-old", Fields: []string{"mapping"}}
+	b := ir.Change{Kind: ir.RecordEffect, ID: "effect", Fields: []string{"operation"}}
+	var out bytes.Buffer
+	printDelta(&out, ir.Delta{Changed: []ir.Change{a, b}})
+	want := "~ watch watch-new was watch-old (mapping)\n~ effect effect (operation)\n"
+	if got := out.String(); got != want {
+		t.Fatalf("printDelta =\n%s\nwant\n%s", got, want)
+	}
+}
