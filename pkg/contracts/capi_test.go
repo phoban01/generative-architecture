@@ -124,6 +124,7 @@ func TestClusterAPIContractsAgainstProviderFixture(t *testing.T) {
 		},
 		{name: "cluster port is a Go int", contract: "capi.infrastructure-cluster/v1beta1", goType: "ClusterWithIntPort", wantErr: "field spec.controlPlaneEndpoint.port: expected int32, got int"},
 		{name: "cluster without ready", contract: "capi.infrastructure-cluster/v1beta1", goType: "ClusterWithoutReady", wantErr: "field status.ready: missing contract field status.ready"},
+		{name: "cluster with a host and no port", contract: "capi.infrastructure-cluster/v1beta1", goType: "HostOnlyCluster", wantErr: "fields spec.controlPlaneEndpoint.host, spec.controlPlaneEndpoint.port are declared together: spec.controlPlaneEndpoint.host present, spec.controlPlaneEndpoint.port absent"},
 		{
 			name: "bootstrap config", contract: "capi.bootstrap-config/v1beta1", goType: "BootstrapConfig",
 			wantPaths: map[string]string{"status.ready": "status.ready", "status.dataSecretName": "status.dataSecretName", "status.failureReason": "status.failureReason", "status.failureMessage": "status.failureMessage"},

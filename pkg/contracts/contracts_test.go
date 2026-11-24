@@ -84,6 +84,10 @@ func TestDefinitionValidate(t *testing.T) {
 		{name: "double pointer", def: Definition{Name: "c", Version: "v1", Fields: map[string]string{"a": "**string"}}, wantErr: `field a: unsupported type "**string"`},
 		{name: "unsupported optional type", def: Definition{Name: "c", Version: "v1", Fields: map[string]string{"a": "bool"}, Optional: map[string]string{"b": "[]string"}}, wantErr: `field b: unsupported type "[]string"`},
 		{name: "required and optional", def: Definition{Name: "c", Version: "v1", Fields: map[string]string{"a": "bool"}, Optional: map[string]string{"a": "bool"}}, wantErr: "field a is both required and optional"},
+		{name: "together", def: Definition{Name: "c", Version: "v1", Fields: map[string]string{"a": "bool"}, Optional: map[string]string{"h": "string", "p": "int32"}, Together: [][]string{{"h", "p"}}}},
+		{name: "together needs two", def: Definition{Name: "c", Version: "v1", Fields: map[string]string{"a": "bool"}, Optional: map[string]string{"h": "string"}, Together: [][]string{{"h"}}}, wantErr: "together[0] needs at least two fields"},
+		{name: "together names a required field", def: Definition{Name: "c", Version: "v1", Fields: map[string]string{"a": "bool"}, Optional: map[string]string{"h": "string"}, Together: [][]string{{"h", "a"}}}, wantErr: "together[0]: a is not an optional field"},
+		{name: "together repeats a field", def: Definition{Name: "c", Version: "v1", Fields: map[string]string{"a": "bool"}, Optional: map[string]string{"h": "string", "p": "int32", "q": "int32"}, Together: [][]string{{"h", "p"}, {"p", "q"}}}, wantErr: "together[1]: p is in two groups"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			err := tc.def.Validate()

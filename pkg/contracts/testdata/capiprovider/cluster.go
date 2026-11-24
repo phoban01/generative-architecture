@@ -75,3 +75,14 @@ type BootstrapWithoutDataSecretName struct {
 		Ready bool `json:"ready"`
 	} `json:"status"`
 }
+
+// HostOnlyCluster breaks the contract: the endpoint has a host but no port,
+// and the contract declares the two together.
+type HostOnlyCluster struct {
+	Spec struct {
+		ControlPlaneEndpoint struct {
+			Host string `json:"host"`
+		} `json:"controlPlaneEndpoint"`
+	} `json:"spec"`
+	Status InfraClusterStatus `json:"status"`
+}

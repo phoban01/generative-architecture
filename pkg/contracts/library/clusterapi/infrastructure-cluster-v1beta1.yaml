@@ -3,7 +3,8 @@
 # that the clustercache boundary in pkg/boundary/library/clusterapi pins.
 #
 # spec.controlPlaneEndpoint is optional: a provider sets it only when no other
-# component provides the endpoint. Its host and port are typed when present.
+# component provides the endpoint. Its host and port are typed when present,
+# and a type that has one of them must have both.
 #
 # A "*" type also accepts a pointer, because a pointer has the same JSON shape.
 #
@@ -26,3 +27,5 @@ spec:
     spec.controlPlaneEndpoint.port: int32
     status.failureReason: "*string"
     status.failureMessage: "*string"
+  together:
+    - [spec.controlPlaneEndpoint.host, spec.controlPlaneEndpoint.port]

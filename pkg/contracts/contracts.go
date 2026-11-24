@@ -29,6 +29,9 @@ type Definition struct {
 	Version  string            `yaml:"version"`
 	Fields   map[string]string `yaml:"fields"`
 	Optional map[string]string `yaml:"optional,omitempty"`
+	// Together lists groups of optional fields that an implementing type
+	// has all or none of: an endpoint with a host but no port fails.
+	Together [][]string `yaml:"together,omitempty"`
 }
 
 // Validate checks names, versions and field types of a contract.
@@ -49,6 +52,21 @@ func (d Definition) Validate() error {
 	for logical := range d.Optional {
 		if _, ok := d.Fields[logical]; ok {
 			return fmt.Errorf("interaction contract %s/%s: field %s is both required and optional", d.Name, d.Version, logical)
+		}
+	}
+	grouped := map[string]bool{}
+	for i, group := range d.Together {
+		if len(group) < 2 {
+			return fmt.Errorf("interaction contract %s/%s: together[%d] needs at least two fields", d.Name, d.Version, i)
+		}
+		for _, logical := range group {
+			if _, ok := d.Optional[logical]; !ok {
+				return fmt.Errorf("interaction contract %s/%s: together[%d]: %s is not an optional field", d.Name, d.Version, i, logical)
+			}
+			if grouped[logical] {
+				return fmt.Errorf("interaction contract %s/%s: together[%d]: %s is in two groups", d.Name, d.Version, i, logical)
+			}
+			grouped[logical] = true
 		}
 	}
 	return nil
@@ -319,6 +337,9 @@ func Inspect(root string, definitions []Definition, patterns []string, external 
 				return nil, fmt.Errorf("%s: unknown mapped contract field %s", where, logical)
 			}
 		}
+		if err := d.together(evidence.Absent); err != nil {
+			return nil, fmt.Errorf("%s: %w", where, err)
+		}
 		// Hash the resolved contract paths, including fields of imported structs.
 		sort.Strings(shapes)
 		evidence.SourceHashes["type-shape"] = goflow.Hash([]byte(types.TypeString(object.Type().Underlying(), nil) + "\n" + strings.Join(shapes, "\n")))
@@ -377,4 +398,27 @@ func sourceKey(root string, m *packages.Module, path string) (string, error) {
 		return "", err
 	}
 	return filepath.ToSlash(rel), nil
+}
+
+// together checks the Together groups against the optional fields a type
+// lacks: a group whose fields are partly present fails, naming both sides.
+func (d Definition) together(absent []string) error {
+	missing := map[string]bool{}
+	for _, logical := range absent {
+		missing[logical] = true
+	}
+	for _, group := range d.Together {
+		var present, lacking []string
+		for _, logical := range group {
+			if missing[logical] {
+				lacking = append(lacking, logical)
+			} else {
+				present = append(present, logical)
+			}
+		}
+		if len(present) > 0 && len(lacking) > 0 {
+			return fmt.Errorf("fields %s are declared together: %s present, %s absent", strings.Join(group, ", "), strings.Join(present, ", "), strings.Join(lacking, ", "))
+		}
+	}
+	return nil
 }
