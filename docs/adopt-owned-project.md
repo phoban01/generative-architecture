@@ -55,7 +55,9 @@ to the document. Package patterns are relative to the module root. arch
 finds the module root by walking up from the document to the `go.mod` that
 declares the module.
 
-`arch init` writes no catalog, abstraction or controller declarations.
+`arch init` writes an empty catalog unless `--crd` and `--discovery` name
+the CRD manifests and discovery snapshots, and no abstraction or controller
+declarations.
 The next sections add them by hand. `examples/refsystem/project.yaml` is
 the result for the reference system.
 

@@ -64,13 +64,17 @@ arch init --module tutorial.kubebuilder.io/project \
   --package ./internal/controller --package ./api/v1 --name cronjob
 ```
 
-It writes `project.yaml` and an empty `constraints.yaml`. It writes no
-catalog, abstraction or controller declarations.
+It writes `project.yaml` and an empty `constraints.yaml`. Without `--crd`
+and `--discovery` the catalog section is empty, with a comment that names
+both fields, and `arch init` writes no
+abstraction or controller declarations.
 
 ## 3. Add a catalog from CRDs and a discovery snapshot
 
 Name the upstream CRD manifests and a discovery snapshot for the built-in
-kinds:
+kinds. `arch init --crd config/crd/bases --discovery catalog/batch-v1.json`
+writes this section; a `--crd` directory contributes every manifest in it.
+By hand, the section reads:
 
 ```yaml
 spec:
