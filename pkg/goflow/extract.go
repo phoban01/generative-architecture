@@ -281,6 +281,11 @@ func (e *extractor) statement(s ast.Stmt, next int) (int, error) {
 			if ok {
 				return e.summarized(n, s, next)
 			}
+			// A statement that only logs has no model effect and
+			// adds no node.
+			if ok, err := e.logging(s, call, c); ok || err != nil {
+				return next, err
+			}
 		}
 	}
 	if e.opts.Statement != nil {

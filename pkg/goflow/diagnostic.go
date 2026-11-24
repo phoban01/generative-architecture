@@ -59,6 +59,11 @@ func AsDiagnostics(err error) ([]*Diagnostic, bool) {
 	return nil, false
 }
 
+// JoinDiagnostics returns ds as one error: nil for none, the Diagnostic
+// itself for one, else a Diagnostics list in source order. Frontends that
+// collect diagnostics outside an extractor use it.
+func JoinDiagnostics(ds []*Diagnostic) error { return diagnosticsError(ds) }
+
 // diagnosticsError returns ds as an error: nil for none, the Diagnostic
 // itself for one, else the list sorted into source order.
 func diagnosticsError(ds []*Diagnostic) error {
