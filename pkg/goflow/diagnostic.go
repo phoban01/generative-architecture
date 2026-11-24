@@ -20,7 +20,9 @@ type Diagnostic struct {
 	Construct string
 	Reason    string
 	Source    string
-	// pos orders diagnostics of one file in source order.
+	// pos orders diagnostics of one file in source order. It is an offset
+	// into the FileSet of one load, so two loads of the same source give
+	// different values. Compare diagnostics by their exported fields.
 	pos token.Pos
 }
 

@@ -1,6 +1,8 @@
 package sourcegen
 
 import (
+	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -43,6 +45,8 @@ func stubRoot(t *testing.T, files map[string]string) string {
 
 const stubController = `package demo
 import (
+	"encoding/json"
+	"fmt"
  "context"
  ctrl "sigs.k8s.io/controller-runtime"
  "sigs.k8s.io/controller-runtime/pkg/client"
@@ -106,9 +110,41 @@ func TestDiscoverControllersFromExamplesWithoutMarkers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(d, again) {
-		t.Fatal("nondeterministic discovery")
+	// Diagnostic carries an unexported source position. Its value is an
+	// offset into the FileSet, which go/packages fills from concurrent
+	// parses, so it differs between two loads. Compare the exported form.
+	if dj, aj := jsonOf(t, d), jsonOf(t, again); dj != aj {
+		t.Fatalf("nondeterministic discovery:\n%s", lineDiff(dj, aj))
 	}
+}
+
+func jsonOf(t *testing.T, v any) string {
+	t.Helper()
+	b, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
+// lineDiff lists the lines on which a and b differ, so a nondeterministic
+// result is diagnosable from the failure alone.
+func lineDiff(a, b string) string {
+	al, bl := strings.Split(a, "\n"), strings.Split(b, "\n")
+	var out []string
+	for i := 0; i < len(al) || i < len(bl); i++ {
+		var x, y string
+		if i < len(al) {
+			x = al[i]
+		}
+		if i < len(bl) {
+			y = bl[i]
+		}
+		if x != y {
+			out = append(out, fmt.Sprintf("line %d:\n  first:  %s\n  second: %s", i+1, x, y))
+		}
+	}
+	return strings.Join(out, "\n")
 }
 
 func TestDiscoverControllersFailsClosedOnDiagnostics(t *testing.T) {
@@ -135,6 +171,8 @@ func TestDiscoverDiagnosesUnsupportedInjection(t *testing.T) {
 	// but does not stand in for a client.
 	source := `package demo
 import (
+	"encoding/json"
+	"fmt"
  "context"
  ctrl "sigs.k8s.io/controller-runtime"
  "sigs.k8s.io/controller-runtime/pkg/client"
