@@ -136,6 +136,9 @@ type extractor struct {
 	info    *types.Info // nil in text mode; set by ExtractTyped
 	// diagnostics collects every skipped statement's failure.
 	diagnostics []*Diagnostic
+	// results maps each local that holds a reconcile result literal for
+	// good to that literal (see resultLocals).
+	results map[types.Object]*ast.CompositeLit
 }
 
 func (e *extractor) expression(n ast.Expr, want string) (expr.Expression, error) {
@@ -416,6 +419,11 @@ func (e *extractor) run(source []byte, method *ast.FuncDecl) (*Program, error) {
 	e.opts.Errors = copyErrors(e.opts.Errors)
 	if e.info != nil {
 		e.declareErrors(method.Body)
+		for _, r := range e.opts.Returns {
+			if r.Zero && r.Requeue {
+				e.results = e.resultLocals(method.Body)
+			}
+		}
 	}
 	e.program.SourceSHA256 = Hash(source)
 	e.program.MethodSHA256 = Hash([]byte(Code(method)))

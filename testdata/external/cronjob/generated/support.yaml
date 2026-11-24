@@ -289,12 +289,6 @@ status:
       location:
         file: internal/controller/cronjob_controller.go
         line: 400
-    - kind: assign
-      construct: 'scheduledResult := ctrl.Result{RequeueAfter: nextRun.Sub(r.Now())}'
-      reason: unsupported Go statement
-      location:
-        file: internal/controller/cronjob_controller.go
-        line: 412
     - kind: call
       construct: r.Now()
       reason: call to tutorial.kubebuilder.io/project/internal/controller.CronJobReconciler.Now inside a logging call; dropping the log would drop it
@@ -307,12 +301,6 @@ status:
       location:
         file: internal/controller/cronjob_controller.go
         line: 420
-    - kind: return
-      construct: scheduledResult
-      reason: result must be the zero value of its type or a reconcile result literal
-      location:
-        file: internal/controller/cronjob_controller.go
-        line: 422
     - kind: assign
       construct: tooLate := false
       reason: unsupported Go statement
@@ -337,24 +325,12 @@ status:
       location:
         file: internal/controller/cronjob_controller.go
         line: 431
-    - kind: return
-      construct: scheduledResult
-      reason: result must be the zero value of its type or a reconcile result literal
-      location:
-        file: internal/controller/cronjob_controller.go
-        line: 434
     - kind: expression
       construct: len(activeJobs)
       reason: unsupported Go expression
       location:
         file: internal/controller/cronjob_controller.go
         line: 444
-    - kind: return
-      construct: scheduledResult
-      reason: result must be the zero value of its type or a reconcile result literal
-      location:
-        file: internal/controller/cronjob_controller.go
-        line: 446
     - kind: range
       construct: |-
         for _, activeJob := range activeJobs {
@@ -394,18 +370,6 @@ status:
       location:
         file: internal/controller/cronjob_controller.go
         line: 504
-    - kind: return
-      construct: scheduledResult
-      reason: result must be the zero value of its type or a reconcile result literal
-      location:
-        file: internal/controller/cronjob_controller.go
-        line: 508
-    - kind: return
-      construct: scheduledResult
-      reason: result must be the zero value of its type or a reconcile result literal
-      location:
-        file: internal/controller/cronjob_controller.go
-        line: 528
     - kind: preamble
       construct: |-
         if r.Clock == nil {

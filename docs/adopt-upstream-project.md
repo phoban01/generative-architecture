@@ -101,7 +101,7 @@ arch extract
 It prints:
 
 ```text
-arch extract: unsupported constructs: 41 found, listed in generated/support.yaml
+arch extract: unsupported constructs: 35 found, listed in generated/support.yaml
 ```
 
 `arch extract` writes `generated/support.yaml` and no `ir.yaml`, because a
@@ -123,7 +123,7 @@ unsupported  declaration  var cronJob batchv1.CronJob /* ...                    
 unsupported  preamble     if r.Clock == nil { ...                                                internal/controller/cronjob_controller.go:553  expected an unstructured object declaration
 unsupported  preamble     if err := mgr.GetFieldIndexer().IndexField(...                         internal/controller/cronjob_controller.go:557  expected an unstructured object declaration
 unresolved   field        cronJob.spec.concurrencyPolicy                                         internal/controller/cronjob_controller.go:444  no abstraction selects this field
-inventory mode: 42 unsupported or unresolved items in the selected packages; --strict fails on them
+inventory mode: 36 unsupported or unresolved items in the selected packages; --strict fails on them
 ```
 
 Read the two lists that matter for adoption:
@@ -148,7 +148,7 @@ arch --strict support
 ```
 
 ```text
-arch support: verification mode (--strict) refuses incomplete semantics: 42 unsupported or unresolved items in the selected packages, first declaration var cronJob batchv1.CronJob /* ... */ at internal/controller/cronjob_controller.go:115
+arch support: verification mode (--strict) refuses incomplete semantics: 36 unsupported or unresolved items in the selected packages, first declaration var cronJob batchv1.CronJob /* ... */ at internal/controller/cronjob_controller.go:115
 ```
 
 ## 6. What fails closed
@@ -162,7 +162,7 @@ arch --strict extract
 ```
 
 ```text
-arch extract: unsupported constructs: 42 found, listed in generated/support.yaml
+arch extract: unsupported constructs: 36 found, listed in generated/support.yaml
 ```
 
 Without an IR, the later commands refuse to run:

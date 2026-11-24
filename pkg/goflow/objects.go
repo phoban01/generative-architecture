@@ -51,6 +51,14 @@ func (e *extractor) typedStatement(s ast.Stmt, next int) (int, bool, error) {
 			// loop-free and the local is not visible before this point.
 			return next, true, nil
 		}
+		if id, ok := x.Lhs[0].(*ast.Ident); ok && x.Tok == token.DEFINE {
+			if lit, ok := e.results[e.info.Defs[id]]; ok && lit == ast.Unparen(x.Rhs[0]) {
+				// The local holds a reconcile result literal for good.
+				// A return of it reads the literal, so the definition
+				// adds no node.
+				return next, true, nil
+			}
+		}
 		if x.Tok == token.ASSIGN && e.opts.Field != nil {
 			if sel, ok := ast.Unparen(x.Lhs[0]).(*ast.SelectorExpr); ok {
 				if s, ok := e.info.Selections[sel]; ok && s.Kind() == types.FieldVal {
