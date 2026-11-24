@@ -122,16 +122,20 @@ smallest extension that would support it.
   summary (gap 11). Logging statements inside unsupported loops and
   closures (gaps 8 and 9) still go with those constructs.
 
-### 7. Non-zero reconcile.Result
+### 7. Non-zero reconcile.Result (closed by #158)
 
 - Construct: `scheduledResult := ctrl.Result{RequeueAfter: nextRun.Sub(r.Now())}`
   and `return scheduledResult, nil`.
-- Location: line 412; returns at lines 422, 434, 446, 508 and 528 (528 is
-  reported first).
+- Location: line 412; returns at lines 422, 434, 446, 508 and 528.
 - Diagnostic: `return: result must be the zero value of its type`.
-- Smallest extension: accept `ctrl.Result{RequeueAfter: <expr>}` (directly
-  or through one local) as a "requeue after" outcome. Summarize the duration
-  as an unknown positive value.
+- Resolution: `goflow` accepts `return reconcile.Result{RequeueAfter: d}, nil`
+  since f4acdb5. Since #158 it also accepts a return of a local that is
+  defined once from a reconcile result literal. Nothing may assign the
+  local, a field of it or an element of it again, or take its address. The
+  definition adds no node, and each return reads the literal. The six
+  items left `generated/support.yaml`.
+- Remaining: the delay keeps its Go source and the model uses its own
+  delay, as for a literal in the return.
 
 ### 8. Calls of function literals bound to locals
 

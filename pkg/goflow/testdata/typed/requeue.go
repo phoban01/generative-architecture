@@ -44,3 +44,20 @@ func (r *Reconciler) RequeueSoon(ctx context.Context, ready bool) (Result, error
 	}
 	return Result{RequeueAfter: Delay}, nil
 }
+
+// RequeueLocal builds the result once and returns the local twice, as the
+// kubebuilder CronJob controller does.
+func (r *Reconciler) RequeueLocal(ctx context.Context) (Result, error) {
+	scheduled := Result{RequeueAfter: Delay}
+	if err := r.write(ctx, &ConfigMap{}); err != nil {
+		return scheduled, nil
+	}
+	return scheduled, nil
+}
+
+// RequeueLocalChanged changes the local after it is defined.
+func (r *Reconciler) RequeueLocalChanged(ctx context.Context, again bool) (Result, error) {
+	scheduled := Result{RequeueAfter: Delay}
+	scheduled = Result{Requeue: again}
+	return scheduled, nil
+}

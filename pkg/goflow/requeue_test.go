@@ -2,6 +2,7 @@ package goflow
 
 import (
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -20,6 +21,7 @@ func TestRequeueResults(t *testing.T) {
 		{method: "RequeueLater", requeues: []requeue{{ir.RequeueImmediate, ""}, {ir.RequeueAfter, "Delay"}}},
 		{method: "RequeueBoth", requeues: []requeue{{ir.RequeueAfter, "time.Minute"}}},
 		{method: "RequeueNone", requeues: []requeue{{"", ""}}},
+		{method: "RequeueLocal", requeues: []requeue{{ir.RequeueAfter, "Delay"}, {ir.RequeueAfter, "Delay"}}},
 		{method: "RequeueVariable", diagnostic: "Requeue must be a constant"},
 		{method: "RequeueByPosition", diagnostic: "reconcile result fields must be set by name"},
 	} {
@@ -56,5 +58,15 @@ func TestRequeueResults(t *testing.T) {
 	_, err := ExtractTyped(loadFixture(t, "./pkg/goflow/testdata/typed", "Reconciler", "RequeueBoth"), copyOptions())
 	if d, ok := AsDiagnostic(err); !ok || d.Reason != "result must be the zero value of its type" {
 		t.Fatalf("requeue accepted without Return.Requeue: %v", err)
+	}
+	// A result local that is assigned again is not read as its literal.
+	opts := copyOptions()
+	opts.Returns = []Return{{Zero: true, Requeue: true}, {Error: true}}
+	_, err = ExtractTyped(loadFixture(t, "./pkg/goflow/testdata/typed", "Reconciler", "RequeueLocalChanged"), opts)
+	ds, _ := AsDiagnostics(err)
+	if !slices.ContainsFunc(ds, func(d *Diagnostic) bool {
+		return d.Construct == "return" && strings.HasPrefix(d.Reason, "result must be the zero value")
+	}) {
+		t.Fatalf("changed result local accepted: %v", err)
 	}
 }
