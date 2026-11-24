@@ -251,8 +251,15 @@ func TestTypedDeleteAllOfIsObserved(t *testing.T) {
 		t.Fatalf("empty options must give an empty key: %+v", rec.calls[1].Key)
 	}
 	expectRejected(t, wrapped.DeleteAllOf(ctx, &corev1.ConfigMap{}, client.InNamespace("test"), client.DryRunAll), "DeleteAllOf with dry run")
-	expectRejected(t, wrapped.DeleteAllOf(ctx, &corev1.ConfigMap{}, client.MatchingLabels{"app": "x"}), "DeleteAllOf options other than the namespace")
-	if len(rec.calls) != 2 {
+	expectRejected(t, wrapped.DeleteAllOf(ctx, &corev1.ConfigMap{}, client.HasLabels{"app"}), "only equality requirements are modelled")
+	expectRejected(t, wrapped.DeleteAllOf(ctx, &corev1.ConfigMap{}, client.MatchingFields{"metadata.name": "x"}), "DeleteAllOf options other than the namespace and label selector")
+	if err := wrapped.DeleteAllOf(ctx, &corev1.ConfigMap{}, client.InNamespace("test"), client.MatchingLabels{"app": "x"}); err != nil {
+		t.Fatal(err)
+	}
+	if call := rec.calls[len(rec.calls)-1]; call.Key != (effect.Key{Namespace: "test"}) || call.Options["labelSelector"] != "app=x" {
+		t.Fatalf("label selector not recorded: %+v", call)
+	}
+	if len(rec.calls) != 3 {
 		t.Fatal("rejected deleteAllOf reached the hook")
 	}
 }

@@ -297,22 +297,31 @@ func patchCall(op, subresource string, obj client.Object, patch client.Patch, dr
 }
 
 // DeleteAllOf records a direct deleteAllOf keyed by the namespace option,
-// with no name. It sends and returns no object, so it has no snapshots.
-// Options other than the namespace fail closed.
+// with no name. It sends and returns no object, so it has no snapshots. An
+// equality label selector is recorded as the labelSelector option, as List
+// records it. Other options fail closed.
 func (c *clientProxy) DeleteAllOf(ctx context.Context, obj client.Object, opts ...client.DeleteAllOfOption) error {
 	options := &client.DeleteAllOfOptions{}
 	options.ApplyOptions(opts)
 	if err := rejectDryRun("DeleteAllOf", options.DryRun); err != nil {
 		return err
 	}
-	if !reflect.DeepEqual(*options, client.DeleteAllOfOptions{ListOptions: client.ListOptions{Namespace: options.Namespace}}) {
-		return unsupported("DeleteAllOf options other than the namespace")
+	if !reflect.DeepEqual(*options, client.DeleteAllOfOptions{ListOptions: client.ListOptions{Namespace: options.Namespace, LabelSelector: options.LabelSelector}}) {
+		return unsupported("DeleteAllOf options other than the namespace and label selector")
+	}
+	var recorded map[string]string
+	if options.LabelSelector != nil {
+		selector, err := equalitySelector(options.LabelSelector)
+		if err != nil {
+			return err
+		}
+		recorded = map[string]string{"labelSelector": selector}
 	}
 	gvk, err := c.o.gvkFor(obj)
 	if err != nil {
 		return err
 	}
-	return c.o.observe(ctx, gvk, "deleteAllOf", "direct", client.ObjectKey{Namespace: options.Namespace}, nil, nil, func() (map[string]any, error) {
+	return c.o.observe(ctx, gvk, "deleteAllOf", "direct", client.ObjectKey{Namespace: options.Namespace}, nil, recorded, func() (map[string]any, error) {
 		return nil, c.Client.DeleteAllOf(ctx, obj, opts...)
 	})
 }
