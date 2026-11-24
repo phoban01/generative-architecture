@@ -1,0 +1,10 @@
+apiVersion: architecture.local/v1alpha1
+kind: ViewHints
+metadata:
+  name: config-mirror
+spec:
+  # Presentation only: titles and layout of the generated views.
+  titles:
+    context: ConfigMirror in context
+  layout:
+    context: LeftRight

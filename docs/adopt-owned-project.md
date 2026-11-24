@@ -312,7 +312,9 @@ arch --project cmd/arch/testdata/configmirror/project.yaml --out /tmp/configmirr
 ```
 
 - `arch generate` writes `model.yaml`, `Model.qnt`, the LikeC4 workspace
-  and `receipts.yaml`.
+  and `receipts.yaml`. A `viewHints` document named in the project document
+  sets the titles, groups and layout of the generated views; it adds no
+  element.
 - `arch check` samples the model with Quint, writes the traces and
   `report.yaml`, and fails on a constraint violation. It prints:
 

@@ -198,3 +198,34 @@ func TestGenerateCarriesRequeue(t *testing.T) {
 		t.Fatalf("after=%v reportsAfter=%v: the requeue did not reach the model", after, reportsAfter)
 	}
 }
+
+// The project document's viewHints are applied to the generated workspace:
+// the context view carries the hinted title and layout.
+func TestGenerateAppliesViewHints(t *testing.T) {
+	out, err := generateTo(t, configMirror)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(filepath.Join(out, likec4Dir, "views", "context.c4"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"title 'ConfigMirror in context'", "autoLayout LeftRight"} {
+		if !strings.Contains(string(b), want) {
+			t.Errorf("views lack %q:\n%s", want, b)
+		}
+	}
+	r, err := readReceipt(filepath.Join(out, receiptsFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var recorded bool
+	for _, f := range r.Files {
+		if strings.HasSuffix(f.Path, "hints.yaml") {
+			recorded = true
+		}
+	}
+	if !recorded {
+		t.Errorf("the receipt does not record the hints document: %+v", r.Files)
+	}
+}

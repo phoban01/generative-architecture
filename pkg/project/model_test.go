@@ -1,6 +1,7 @@
 package project
 
 import (
+	"slices"
 	"strings"
 	"testing"
 )
@@ -95,7 +96,7 @@ func TestLoadHashesAbstraction(t *testing.T) {
 		t.Fatalf("abstraction not hashed: %v", p.Hashes)
 	}
 	docs := p.Documents()
-	if docs[len(docs)-1] != "abstraction.yaml" {
+	if !slices.Contains(docs, "abstraction.yaml") || docs[len(docs)-1] != "hints.yaml" {
 		t.Fatalf("documents %v", docs)
 	}
 	if c, ok := p.Spec.Controller("Reconciler"); !ok || c.Name != "mirror" || len(c.Effects) != 3 {

@@ -314,6 +314,17 @@ func (gen generated) write(out string) error {
 	if err != nil {
 		return err
 	}
+	if gen.project.Spec.ViewHints != "" {
+		// Presentation hints change titles, groups and layouts only; a
+		// hint that names an unknown element or view fails generation.
+		hints, err := likec4.LoadHints(filepath.Join(gen.project.Dir, gen.project.Spec.ViewHints))
+		if err != nil {
+			return err
+		}
+		if err := likec4.Apply(&w, hints); err != nil {
+			return err
+		}
+	}
 	if err := w.Write(filepath.Join(out, likec4Dir)); err != nil {
 		return err
 	}

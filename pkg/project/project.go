@@ -53,6 +53,9 @@ type Spec struct {
 	// Abstraction names the Abstraction document that maps objects to
 	// bounded model state (ADR-0005).
 	Abstraction string `yaml:"abstraction,omitempty"`
+	// ViewHints names a ViewHints document with presentation hints for
+	// the generated LikeC4 workspace (VIS-3): titles, groups and layouts.
+	ViewHints string `yaml:"viewHints,omitempty"`
 	// Controllers declares the model facts of each reconciler that the
 	// source and the abstraction do not carry.
 	Controllers []Controller `yaml:"controllers,omitempty"`
@@ -127,7 +130,13 @@ func (s Spec) Validate() error {
 		}
 		seen[pattern] = true
 	}
-	for field, paths := range map[string][]string{"catalog.crds": s.Catalog.CRDs, "catalog.discovery": s.Catalog.Discovery, "constraints": s.Constraints, "boundaries": s.Boundaries} {
+	single := func(v string) []string {
+		if v == "" {
+			return nil
+		}
+		return []string{v}
+	}
+	for field, paths := range map[string][]string{"catalog.crds": s.Catalog.CRDs, "catalog.discovery": s.Catalog.Discovery, "constraints": s.Constraints, "boundaries": s.Boundaries, "abstraction": single(s.Abstraction), "viewHints": single(s.ViewHints)} {
 		for _, rel := range paths {
 			if rel == "" || filepath.IsAbs(rel) || strings.HasPrefix(filepath.ToSlash(rel), "../") {
 				return fmt.Errorf("%s: path %q must be relative to the document and inside its directory", field, rel)
@@ -156,6 +165,9 @@ func (p Project) Documents() []string {
 	out = append(out, p.Spec.Boundaries...)
 	if p.Spec.Abstraction != "" {
 		out = append(out, p.Spec.Abstraction)
+	}
+	if p.Spec.ViewHints != "" {
+		out = append(out, p.Spec.ViewHints)
 	}
 	return out
 }
