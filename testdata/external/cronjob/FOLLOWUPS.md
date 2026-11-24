@@ -293,7 +293,7 @@ documents keep what an adopter would write.
 - Smallest extension: an `owner` reference form that selects the entry
   with `controller: true` and checks its kind and name.
 
-### 20. arch generate after a failed extract names the wrong step
+### 20. arch generate after a failed extract names the wrong step (closed by #155)
 
 - Construct: `arch generate` after `arch extract` failed closed.
 - Diagnostic: `generated/ir.yaml not found; run arch extract first`.
@@ -301,6 +301,10 @@ documents keep what an adopter would write.
   extraction failed and point to `support.yaml`.
 - Smallest extension: when `support.yaml` exists beside the missing IR and
   lists unsupported items, name the first one in the error.
+- Resolution: since #155, `arch generate` reads `support.yaml` beside the
+  missing IR. When it lists unsupported constructs, the error says that
+  `arch extract` failed closed, gives the count and the report path, and
+  names the first construct with its file and line.
 
 After gaps 16 and 17 were removed, the first `Reconcile` diagnostic was
 gap 7 at line 528 (`result must be the zero value of its type`).

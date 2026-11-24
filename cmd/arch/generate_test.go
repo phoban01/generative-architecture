@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/phoban01/generative-architecture/pkg/goflow"
+	"github.com/phoban01/generative-architecture/pkg/report"
 )
 
 // configMirror is the ConfigMirror sample with its model declarations in
@@ -117,6 +118,22 @@ func TestGenerateFailsClosed(t *testing.T) {
 		err := run([]string{"--project", configMirror, "--out", t.TempDir(), "generate"}, &stdout, &stderr)
 		if err == nil || !strings.Contains(err.Error(), "run arch extract first") {
 			t.Fatalf("got %v", err)
+		}
+	})
+	t.Run("extract failed closed", func(t *testing.T) {
+		out := t.TempDir()
+		support := report.Support{Unsupported: []report.Item{
+			{Kind: "statement", Construct: "for range jobs", Reason: "range loops are not summarized", Location: report.Location{File: "controller.go", Line: 163}},
+			{Kind: "call", Construct: "len(active)", Location: report.Location{File: "controller.go", Line: 170}},
+		}}
+		if err := support.Write(filepath.Join(out, supportFile)); err != nil {
+			t.Fatal(err)
+		}
+		var stdout, stderr bytes.Buffer
+		err := run([]string{"--project", configMirror, "--out", out, "generate"}, &stdout, &stderr)
+		want := "arch extract failed closed on 2 unsupported constructs, listed in " + filepath.Join(out, supportFile) + "; first: statement for range jobs at controller.go:163"
+		if err == nil || !strings.Contains(err.Error(), want) || strings.Contains(err.Error(), "run arch extract first") {
+			t.Fatalf("got %v, want %q", err, want)
 		}
 	})
 	t.Run("no declaration", func(t *testing.T) {
