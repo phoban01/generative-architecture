@@ -10,13 +10,18 @@ permissions:
 
 jobs:
   go:
-    name: Build, vet and test
+    name: Build, vet and test (Go ${{ matrix.go }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The supported Go releases listed in README.md.
+        go: ["1.26.x", "1.27.x"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
+          go-version: ${{ matrix.go }}
           check-latest: true
       - name: Build
         run: go build ./...

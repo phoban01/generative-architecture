@@ -225,3 +225,21 @@ func TestTestParallelismCap(t *testing.T) {
 		}
 	}
 }
+
+// The go job builds, vets and tests on every supported Go release, so a
+// change that compiles on one release and not the other fails CI.
+func TestGoJobMatrix(t *testing.T) {
+	w := readWorkflow(t, filepath.Join(root, ".github", "workflows", "ci.yml"))
+	j, ok := w.Jobs["go"]
+	if !ok {
+		t.Fatal("ci.yml has no go job")
+	}
+	if got, want := matrixGo(t, j), supportedGo(t); !slices.Equal(got, want) {
+		t.Errorf("go job matrix %v; README.md supports %v", got, want)
+	}
+	for _, s := range j.Steps {
+		if s.Uses != "" && strings.HasPrefix(s.Uses, "actions/setup-go") && s.With["go-version"] != "${{ matrix.go }}" {
+			t.Errorf("setup-go uses go-version %q; want the matrix release", s.With["go-version"])
+		}
+	}
+}
