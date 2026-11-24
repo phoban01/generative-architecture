@@ -47,6 +47,9 @@ spec:
     now:
       type: int
       initial: "0"
+    outcome:
+      type: string
+      initial: '"success"'
     pc:
       type: int
       initial: "8"
@@ -130,6 +133,7 @@ spec:
         err: "false"
         failed: "false"
         finished: "false"
+        outcome: '"success"'
         pc: "8"
         processing: "true"
         ready: "false"
@@ -144,13 +148,34 @@ spec:
         due: "-1"
         ready: ready || !processing
     - name: finish
-      guard: processing && finished && !failed
+      guard: processing && finished && outcome == "success"
       updates:
         processing: "false"
         ready: dirty
         retries: "0"
     - name: finishError
-      guard: processing && finished && failed
+      guard: processing && finished && outcome == "error"
+      updates:
+        due: '(due < 0 || now + 2 < due) ? (now + 2) : due'
+        processing: "false"
+        ready: dirty
+        retries: retries + 1
+    - name: finishRequeue
+      guard: processing && finished && outcome == "requeue"
+      updates:
+        due: '(due < 0 || now + 2 < due) ? (now + 2) : due'
+        processing: "false"
+        ready: dirty
+        retries: retries + 1
+    - name: finishAfter
+      guard: processing && finished && outcome == "after"
+      updates:
+        due: '(due < 0 || now + 2 < due) ? (now + 2) : due'
+        processing: "false"
+        ready: dirty
+        retries: "0"
+    - name: finishErrorAfter
+      guard: processing && finished && outcome == "errorAfter"
       updates:
         due: '(due < 0 || now + 2 < due) ? (now + 2) : due'
         processing: "false"
@@ -161,6 +186,7 @@ spec:
       updates:
         failed: err
         finished: "true"
+        outcome: 'err ? "error" : "success"'
         pc: "-1"
     - name: writeTarget_ok
       guard: '!finished && pc == 1 && (ConfigMap_copy_exists && ConfigMap_copy_metadata_resourceVersion == target_metadata_resourceVersion)'
@@ -199,6 +225,7 @@ spec:
       updates:
         failed: err
         finished: "true"
+        outcome: 'err ? "error" : "success"'
         pc: "-1"
     - name: node4_branch
       guard: '!finished && pc == 4 && (true)'
@@ -229,6 +256,7 @@ spec:
       updates:
         failed: err
         finished: "true"
+        outcome: 'err ? "error" : "success"'
         pc: "-1"
     - name: node7_branch
       guard: '!finished && pc == 7 && (true)'

@@ -12,6 +12,8 @@ import (
 	"testing"
 
 	"github.com/phoban01/generative-architecture/pkg/goflow"
+	"github.com/phoban01/generative-architecture/pkg/krm"
+	"github.com/phoban01/generative-architecture/pkg/model"
 	"github.com/phoban01/generative-architecture/pkg/report"
 )
 
@@ -166,5 +168,33 @@ func likec4Validate(t *testing.T, dir string) {
 	out, err := exec.Command(bin, "validate", dir).CombinedOutput()
 	if err != nil || !strings.Contains(string(out), "Valid") {
 		t.Fatalf("likec4 validate: %v\n%s", err, out)
+	}
+}
+
+// A return that asks for a delayed requeue reaches the generated model: the
+// process reports the after outcome and the runtime schedules the key.
+func TestGenerateCarriesRequeue(t *testing.T) {
+	out, err := generateTo(t, "testdata/requeue/project.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var spec model.Spec
+	if _, err := krm.Read(filepath.Join(out, specFile), "TransitionModel", &spec); err != nil {
+		t.Fatal(err)
+	}
+	if v, ok := spec.State[outcomeVariable]; !ok || v.Type != "string" {
+		t.Fatalf("model has no string %s variable: %+v", outcomeVariable, spec.State[outcomeVariable])
+	}
+	var after, reportsAfter bool
+	for _, a := range spec.Actions {
+		if a.Name == eventFinishAfter {
+			after = true
+		}
+		if strings.Contains(string(a.Updates[outcomeVariable]), `"after"`) {
+			reportsAfter = true
+		}
+	}
+	if !after || !reportsAfter {
+		t.Fatalf("after=%v reportsAfter=%v: the requeue did not reach the model", after, reportsAfter)
 	}
 }

@@ -41,7 +41,7 @@ status:
     - path: examples/configmirror/evidence.go
       sha256: caa5a9a803ffb54b3b61f32b75083cb6ad41055f7dcaae7452209f1e0191f631
     - path: examples/configmirror/generate.go
-      sha256: 384d9ef0960688c6bd8b22c0e0e8e36b074ae6512677aa525169f2a0e4dd2878
+      sha256: a30cba92e5dd1a2e1c3c1b7187e587cf6af16a5cefba115912753ac80bb061b0
     - path: examples/configmirror/generated/environment_generated.go
       sha256: 89c807e758ae5c150fbf7351455ce4ffe06c8f008ad31bb2540d34e17ab6519f
     - path: examples/configmirror/generated/gating_generated.go
@@ -49,7 +49,7 @@ status:
     - path: examples/configmirror/generated/projection_generated.go
       sha256: c10998d9a47abfc3555c57c1a323301ca9086fb10f3c0cf05f5545f00c0a506a
     - path: examples/configmirror/generated/runtime_generated.go
-      sha256: f5899cfae11606b22a294c9b89f75ec274a73008dff549aff80f14fa08eacf86
+      sha256: dbc2fa10ae83bea001a18b0f7deb8692eac41bf3b9832dea6f5ca57e65bb6e74
     - path: examples/configmirror/mutations.yaml
       sha256: bea30bec9225450c82a5e08ea7edb7dc8ccd34fb65d9b36a75b580df690e4df8
     - path: examples/configmirror/project.yaml

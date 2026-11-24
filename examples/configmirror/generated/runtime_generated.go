@@ -31,7 +31,13 @@ func ApplyRuntime(worker RuntimeWorker, event string) (bool, error) {
 		return true, nil
 	case "finish":
 		return true, worker.Wait()
+	case "finishAfter":
+		return true, worker.Wait()
 	case "finishError":
+		return true, worker.Wait()
+	case "finishErrorAfter":
+		return true, worker.Wait()
+	case "finishRequeue":
 		return true, worker.Wait()
 	case "fire":
 		return true, worker.Fire()

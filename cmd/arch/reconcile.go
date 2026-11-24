@@ -135,7 +135,7 @@ func extractOptions(l goflow.Loaded, abs abstraction.Abstraction, decl project.C
 	if err != nil {
 		return nil, goflow.Options{}, err
 	}
-	opts := goflow.Options{File: l.Path, Scope: scope, Returns: []goflow.Return{{Zero: true}, {Error: true}}}
+	opts := goflow.Options{File: l.Path, Scope: scope, Returns: []goflow.Return{{Zero: true, Requeue: true}, {Error: true}}}
 	opts.Call = x.call
 	opts.Field = x.field
 	return x, opts, nil

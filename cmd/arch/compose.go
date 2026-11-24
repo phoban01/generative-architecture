@@ -27,8 +27,13 @@ const (
 	eventBegin       = "begin"
 	eventFinish      = "finish"
 	eventFinishError = "finishError"
-	eventAdvance     = "advance"
-	eventFire        = "fire"
+	// The requeue outcomes a return node reports through the outcome
+	// variable; the runtime model schedules the key again after them.
+	eventFinishRequeue    = "finishRequeue"
+	eventFinishAfter      = "finishAfter"
+	eventFinishErrorAfter = "finishErrorAfter"
+	eventAdvance          = "advance"
+	eventFire             = "fire"
 )
 
 // Model variables the composition adds to the abstraction's state.
@@ -36,6 +41,9 @@ const (
 	pcVariable       = "pc"
 	finishedVariable = "finished"
 	failedVariable   = "failed"
+	// outcomeVariable holds the runtime outcome of the last return: success,
+	// error, requeue, after or errorAfter (see process.Outcome*).
+	outcomeVariable = "outcome"
 )
 
 // controllerModel is the input of one controller's model.
@@ -97,7 +105,10 @@ func (c controllerModel) build() (model.Spec, []effect.Descriptor, error) {
 	// Process locals are the variables summaries and assignments bind Go
 	// object locals and errors to; they are reset when an invocation
 	// begins.
-	locals := map[string]model.Variable{failedVariable: {Type: abstraction.TypeBool, Initial: "false"}}
+	locals := map[string]model.Variable{
+		failedVariable:  {Type: abstraction.TypeBool, Initial: "false"},
+		outcomeVariable: {Type: abstraction.TypeString, Initial: expr.Expression(strconv.Quote(process.OutcomeSuccess))},
+	}
 	cached := map[string]objectInfo{}
 	reads, writes := map[string]objectInfo{}, map[string]objectInfo{}
 	var effects []effect.Descriptor
@@ -106,7 +117,8 @@ func (c controllerModel) build() (model.Spec, []effect.Descriptor, error) {
 		if n.Error != "" {
 			locals[string(n.Error)] = model.Variable{Type: abstraction.TypeBool, Initial: "false"}
 		}
-		if n.ReturnError != "" {
+		// A constant error result (nil or a literal) binds no local.
+		if n.ReturnError != "" && n.ReturnError != "true" && n.ReturnError != "false" {
 			locals[string(n.ReturnError)] = model.Variable{Type: abstraction.TypeBool, Initial: "false"}
 		}
 		if n.Effect == "" {
@@ -158,7 +170,7 @@ func (c controllerModel) build() (model.Spec, []effect.Descriptor, error) {
 	}
 
 	spec, err := process.Expand(model.Spec{Name: c.name, State: state, Effects: effects}, c.program, process.Config{
-		PC: pcVariable, Finished: finishedVariable, Results: []string{"", failedVariable}, Summaries: summaries.Builtin(),
+		PC: pcVariable, Finished: finishedVariable, Outcome: outcomeVariable, Results: []string{"", failedVariable}, Summaries: summaries.Builtin(),
 	})
 	if err != nil {
 		return model.Spec{}, nil, err
@@ -258,7 +270,7 @@ func (c controllerModel) runtimeActions(reset map[string]expr.Expression) (model
 		out.State[short] = v
 	}
 	rename := func(e expr.Expression) (expr.Expression, error) { return expr.Rewrite(e, names) }
-	actionNames := map[string]string{"advance": eventAdvance, prefix + "enqueue": eventEnqueue, prefix + "start": eventBegin, prefix + "fire": eventFire, prefix + "success": eventFinish, prefix + "error": eventFinishError}
+	actionNames := map[string]string{"advance": eventAdvance, prefix + "enqueue": eventEnqueue, prefix + "start": eventBegin, prefix + "fire": eventFire, prefix + "success": eventFinish, prefix + "error": eventFinishError, prefix + "requeue": eventFinishRequeue, prefix + "after": eventFinishAfter, prefix + "errorAfter": eventFinishErrorAfter}
 	for _, a := range g.Spec.Actions {
 		name, ok := actionNames[a.Name]
 		if !ok {
@@ -287,10 +299,10 @@ func (c controllerModel) runtimeActions(reset map[string]expr.Expression) (model
 			}
 			updates[pcVariable] = expr.Expression(strconv.Itoa(c.program.Entry))
 			updates[finishedVariable] = "false"
-		case eventFinish:
-			guard = expr.Expression(fmt.Sprintf("%s && %s && !%s", guard, finishedVariable, failedVariable))
-		case eventFinishError:
-			guard = expr.Expression(fmt.Sprintf("%s && %s && %s", guard, finishedVariable, failedVariable))
+		case eventFinish, eventFinishError, eventFinishRequeue, eventFinishAfter, eventFinishErrorAfter:
+			// A finish event fires when the process has returned with its
+			// outcome, so no requeue request is dropped.
+			guard = expr.Expression(fmt.Sprintf("%s && %s && %s == %q", guard, finishedVariable, outcomeVariable, finishOutcomes[name]))
 		}
 		out.Actions = append(out.Actions, model.Action{Name: name, Guard: guard, Updates: updates})
 	}
@@ -342,4 +354,14 @@ func sortedObjects(m map[string]objectInfo) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// finishOutcomes maps each finish event to the outcome the process must
+// report for it.
+var finishOutcomes = map[string]string{
+	eventFinish:           process.OutcomeSuccess,
+	eventFinishError:      process.OutcomeError,
+	eventFinishRequeue:    process.OutcomeRequeue,
+	eventFinishAfter:      process.OutcomeAfter,
+	eventFinishErrorAfter: process.OutcomeErrorAfter,
 }
