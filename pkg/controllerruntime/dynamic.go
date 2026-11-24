@@ -151,19 +151,34 @@ func (r *dynamicResource) Get(ctx context.Context, name string, opts metav1.GetO
 		return r.base().Get(ctx, name, opts)
 	})
 }
+
+// Create records a create keyed by the object's name. The field manager is
+// recorded as the typed observer records it; other options, a subresource
+// and a nil object fail closed.
 func (r *dynamicResource) Create(ctx context.Context, obj *unstructured.Unstructured, opts metav1.CreateOptions, sub ...string) (*unstructured.Unstructured, error) {
-	if !reflect.DeepEqual(opts, metav1.CreateOptions{}) || len(sub) != 0 || obj == nil {
-		return nil, unsupported("dynamic.Create options/subresource/nil object")
+	if len(sub) != 0 || obj == nil {
+		return nil, unsupported("dynamic.Create subresource/nil object")
 	}
-	return r.invoke(ctx, "create", obj.GetName(), obj, nil, func(input *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+	recorded, err := writeOptions("dynamic.Create", false, opts.DryRun, opts.FieldManager, nil, !reflect.DeepEqual(opts, metav1.CreateOptions{DryRun: opts.DryRun, FieldManager: opts.FieldManager}))
+	if err != nil {
+		return nil, err
+	}
+	return r.invoke(ctx, "create", obj.GetName(), obj, recorded, func(input *unstructured.Unstructured) (*unstructured.Unstructured, error) {
 		return r.base().Create(ctx, input, opts)
 	})
 }
+
+// Update records an update keyed by the object's name, with the field
+// manager as Create records it.
 func (r *dynamicResource) Update(ctx context.Context, obj *unstructured.Unstructured, opts metav1.UpdateOptions, sub ...string) (*unstructured.Unstructured, error) {
-	if !reflect.DeepEqual(opts, metav1.UpdateOptions{}) || len(sub) != 0 || obj == nil {
-		return nil, unsupported("dynamic.Update options/subresource/nil object")
+	if len(sub) != 0 || obj == nil {
+		return nil, unsupported("dynamic.Update subresource/nil object")
 	}
-	return r.invoke(ctx, "update", obj.GetName(), obj, nil, func(input *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+	recorded, err := writeOptions("dynamic.Update", false, opts.DryRun, opts.FieldManager, nil, !reflect.DeepEqual(opts, metav1.UpdateOptions{DryRun: opts.DryRun, FieldManager: opts.FieldManager}))
+	if err != nil {
+		return nil, err
+	}
+	return r.invoke(ctx, "update", obj.GetName(), obj, recorded, func(input *unstructured.Unstructured) (*unstructured.Unstructured, error) {
 		return r.base().Update(ctx, input, opts)
 	})
 }

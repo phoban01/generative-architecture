@@ -3,6 +3,7 @@ package controllerruntime_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	cr "github.com/phoban01/generative-architecture/pkg/controllerruntime"
@@ -420,4 +421,66 @@ func TestDynamicApplyIsObserved(t *testing.T) {
 		_, err := resource.Apply(ctx, "one", desired, metav1.ApplyOptions{FieldManager: "x", DryRun: []string{metav1.DryRunAll}})
 		return err
 	}(), "dynamic.Apply with dry run")
+}
+
+// Dynamic Create and Update accept a field manager and record it as the
+// typed observer does; dry run and other options still fail closed.
+func TestDynamicCreateUpdateRecordFieldManager(t *testing.T) {
+	ctx := context.Background()
+	binding := dynamicgen.Binding{Expression: "resource", Resource: effect.Resource{Group: "example.org", Version: "v1", Kind: "Person"}, Plural: "people", Scope: "Namespaced"}
+	mapper, err := (dynamicgen.Catalog{Bindings: []dynamicgen.Binding{binding}}).Mapper()
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry, err := effect.NewRegistry([]effect.Descriptor{
+		{ID: "create", Resource: binding.Resource, Operation: "create", Consistency: "direct"},
+		{ID: "update", Resource: binding.Resource, Operation: "update", Consistency: "direct"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var calls []effect.Call
+	observer := cr.Observer{Registry: registry, Hook: func(ctx context.Context, c effect.Call, next func() effect.Result) effect.Result {
+		calls = append(calls, c)
+		return next()
+	}}
+	resource := observer.Dynamic(dynamicfake.NewSimpleDynamicClient(runtime.NewScheme()), mapper).Resource(binding.GVR()).Namespace("tenant")
+	obj := &unstructured.Unstructured{Object: map[string]any{"spec": map[string]any{"value": "initial"}}}
+	obj.SetGroupVersionKind(binding.GVK())
+	obj.SetName("one")
+	obj.SetNamespace("tenant")
+	created, err := resource.Create(ctx, obj, metav1.CreateOptions{FieldManager: "x"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = resource.Update(ctx, created, metav1.UpdateOptions{FieldManager: "y"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = resource.Update(ctx, created, metav1.UpdateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if len(calls) != 3 || calls[0].Options["fieldManager"] != "x" || calls[1].Options["fieldManager"] != "y" || calls[2].Options != nil {
+		t.Fatalf("field managers not recorded: %+v", calls)
+	}
+	for name, err := range map[string]error{
+		"create dry run": func() error {
+			_, err := resource.Create(ctx, obj, metav1.CreateOptions{DryRun: []string{metav1.DryRunAll}})
+			return err
+		}(),
+		"update dry run": func() error {
+			_, err := resource.Update(ctx, created, metav1.UpdateOptions{DryRun: []string{metav1.DryRunAll}})
+			return err
+		}(),
+		"create validation": func() error {
+			_, err := resource.Create(ctx, obj, metav1.CreateOptions{FieldValidation: "Strict"})
+			return err
+		}(),
+	} {
+		if err == nil || !strings.Contains(err.Error(), "unsupported") {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	if len(calls) != 3 {
+		t.Fatal("a rejected call reached the hook")
+	}
 }
