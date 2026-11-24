@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 )
 
 // Projects are explicit local checkouts. The library neither fetches nor updates
@@ -25,12 +26,23 @@ type Project struct {
 // ComponentRef names one component: a TransitionModel with declared ports,
 // or a BoundaryModel that brings its own model, ports and facts. Exactly one
 // of Model and Boundary is set. Both paths are relative to the project.
+//
+// IR names an ArchitectureIR document, relative to the project, that holds
+// the facts of a model component. Its watches and api effects derive the
+// component's resource ports (ADR-0010), and Ports adds declared ports to
+// them. Controller selects the controller of the document by ID or name;
+// it may be empty when the document holds one controller. Cluster places
+// the component in a cluster for the resource joins; empty is the implicit
+// cluster.
 type ComponentRef struct {
-	Name     string          `yaml:"name"`
-	Project  string          `yaml:"project,omitempty"`
-	Model    string          `yaml:"model,omitempty"`
-	Boundary string          `yaml:"boundary,omitempty"`
-	Ports    map[string]Port `yaml:"ports,omitempty"`
+	Name       string          `yaml:"name"`
+	Project    string          `yaml:"project,omitempty"`
+	Model      string          `yaml:"model,omitempty"`
+	Boundary   string          `yaml:"boundary,omitempty"`
+	IR         string          `yaml:"ir,omitempty"`
+	Controller string          `yaml:"controller,omitempty"`
+	Cluster    ir.ClusterID    `yaml:"cluster,omitempty"`
+	Ports      map[string]Port `yaml:"ports,omitempty"`
 }
 type Document struct {
 	Name       string             `yaml:"name"`
@@ -43,9 +55,16 @@ type Document struct {
 type Loaded struct {
 	Result Result
 	// Components are the loaded components in document order, with their
-	// evidence and IR facts.
+	// evidence and IR facts. When a component derives its ports from an IR
+	// document, ResolveProviders has chosen the provider of each resource.
 	Components []Component
-	Inputs     map[string]string
+	// Links are the explicit links followed by the derived ones.
+	Links []Link
+	// Diagnostics are the duplicate-port and join findings. Load returns
+	// an error with them when any is present, because an unresolved or
+	// ambiguous provider leaves an input unbound. Result is then empty.
+	Diagnostics []Diagnostic
+	Inputs      map[string]string
 }
 
 func Load(root, path string) (Loaded, error) {
@@ -104,13 +123,22 @@ func Load(root, path string) (Loaded, error) {
 		}
 	}
 	components := []Component{}
+	cluster := map[string]ir.ClusterID{}
+	var diags []Diagnostic
+	derived := false
 	for i, ref := range doc.Components {
 		dir, ok := roots[ref.Project]
 		if !ok {
 			return out, fmt.Errorf("unknown project %s", ref.Project)
 		}
+		at := fmt.Sprintf("%s: spec.components[%d] (%s)", full, i, ref.Name)
+		if ref.Cluster != "" {
+			cluster[ref.Name] = ref.Cluster
+		}
 		if ref.Boundary != "" {
-			at := fmt.Sprintf("%s: spec.components[%d] (%s)", full, i, ref.Name)
+			if ref.IR != "" {
+				return out, fmt.Errorf("%s: ir and boundary are exclusive; the boundary brings its facts", at)
+			}
 			c, files, err := loadBoundary(dir, ref)
 			if err != nil {
 				return out, fmt.Errorf("%s: %w", at, err)
@@ -123,6 +151,9 @@ func Load(root, path string) (Loaded, error) {
 			components = append(components, c)
 			continue
 		}
+		if ref.Model == "" {
+			return out, fmt.Errorf("%s: model or boundary required", at)
+		}
 		file, err := sourcegen.LocalPath(dir, ref.Model)
 		if err != nil {
 			return out, err
@@ -134,14 +165,45 @@ func Load(root, path string) (Loaded, error) {
 		if err = record(file); err != nil {
 			return out, err
 		}
-		components = append(components, Component{Name: ref.Name, Model: spec, Ports: ref.Ports})
+		c := Component{Name: ref.Name, Model: spec, Ports: ref.Ports}
+		if ref.IR != "" {
+			facts, err := loadFacts(dir, ref)
+			if err != nil {
+				return out, fmt.Errorf("%s: %w", at, err)
+			}
+			if err = record(facts.file); err != nil {
+				return out, err
+			}
+			c.Watches, c.Effects, c.Evidence = facts.watches, facts.effects, facts.evidence
+			var ds []Diagnostic
+			c.Ports, ds = MergePorts(ref.Name, ref.Ports, PortsFromIR(ref.Name, c.Watches, c.Effects))
+			diags = append(diags, ds...)
+			derived = true
+		}
+		components = append(components, c)
 	}
 	links := doc.Links
+	if derived {
+		// Derived resource ports join by resource identity; the provider
+		// of each resource is its owner, or else its sole creator.
+		joined, ds, err := JoinByResource(components, cluster, links)
+		if err != nil {
+			return out, err
+		}
+		components = ResolveProviders(components, cluster)
+		links = joined
+		diags = append(diags, ds...)
+	}
+	out.Components, out.Links, out.Diagnostics = components, links, diags
+	if len(diags) > 0 {
+		return out, fmt.Errorf("%s: %d port findings, first %s", full, len(diags), diags[0])
+	}
 	if doc.AutoLink {
 		links, err = AutoLink(components, links)
 		if err != nil {
 			return out, err
 		}
+		out.Links = links
 	}
 	// A link's protocol is a ProtocolContract file relative to root.
 	protocols := map[string]protocol.Contract{}
@@ -162,9 +224,80 @@ func Load(root, path string) (Loaded, error) {
 		}
 		protocols[l.Protocol] = c
 	}
-	out.Components = components
 	out.Result, err = ComposeWithProtocols(doc.Name, components, links, doc.Properties, protocols)
 	return out, err
+}
+
+// facts are the IR facts of one controller: the file they came from, its
+// watches and api effects, and the component evidence they support.
+type facts struct {
+	file     string
+	watches  []ir.Watch
+	effects  []ir.Effect
+	evidence ir.Evidence
+}
+
+// loadFacts reads the ArchitectureIR document ref.IR names and selects the
+// controller ref.Controller names by ID or name, or the only controller
+// when ref.Controller is empty. The component's evidence is the weakest
+// evidence of its facts: a component is known no better than its least
+// known fact. A controller without facts leaves the evidence empty.
+func loadFacts(dir string, ref ComponentRef) (facts, error) {
+	var out facts
+	file, err := sourcegen.LocalPath(dir, ref.IR)
+	if err != nil {
+		return out, fmt.Errorf("ir: %w", err)
+	}
+	doc, err := ir.Read(file)
+	if err != nil {
+		return out, fmt.Errorf("ir: %w", err)
+	}
+	out.file = file
+	var selected *ir.Controller
+	for i := range doc.Controllers {
+		c := &doc.Controllers[i]
+		if ref.Controller != "" && c.ID != ref.Controller && c.Name != ref.Controller {
+			continue
+		}
+		if selected != nil {
+			ids := make([]string, 0, len(doc.Controllers))
+			for _, c := range doc.Controllers {
+				ids = append(ids, c.ID)
+			}
+			return out, fmt.Errorf("ir %s holds %d controllers; set controller to one of %s", ref.IR, len(doc.Controllers), strings.Join(ids, ", "))
+		}
+		selected = c
+	}
+	if selected == nil {
+		if ref.Controller == "" {
+			return out, fmt.Errorf("ir %s holds no controller", ref.IR)
+		}
+		return out, fmt.Errorf("ir %s holds no controller %q", ref.IR, ref.Controller)
+	}
+	for _, w := range doc.Watches {
+		if w.Controller == selected.ID {
+			out.watches = append(out.watches, w)
+			out.evidence = weakest(out.evidence, w.Evidence)
+		}
+	}
+	for _, e := range doc.Effects {
+		if e.Actor == selected.ID {
+			out.effects = append(out.effects, e)
+			out.evidence = weakest(out.evidence, e.Evidence)
+		}
+	}
+	return out, nil
+}
+
+// weakest returns the lower-ranked of a and b; an empty a yields b.
+func weakest(a, b ir.Evidence) ir.Evidence {
+	if a == "" {
+		return b
+	}
+	if ir.Strongest(a, b) == a {
+		return b
+	}
+	return a
 }
 
 // loadBoundary loads the BoundaryModel a component names. The component's
