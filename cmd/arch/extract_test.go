@@ -37,17 +37,17 @@ const refsystemDir = "../../examples/refsystem"
 
 // TestExtractReferenceSystem runs arch --strict extract on the reference
 // system. It finds the three controllers and their seven watches and no
-// unsupported construct. The reference system has no abstraction yet, so
-// every field its Reconcile methods touch is unresolved and verification
-// mode still fails on those, after it writes the IR. The committed IR and
+// unsupported construct. Its abstraction document selects every field the
+// Reconcile methods touch, so no field is unresolved and verification mode
+// passes. The committed IR and
 // support report must match the run byte for byte; regenerate them with
 // go run ./cmd/arch --project examples/refsystem/project.yaml --out examples/refsystem/generated extract.
 func TestExtractReferenceSystem(t *testing.T) {
 	out := t.TempDir()
 	var stdout, stderr bytes.Buffer
 	err := run([]string{"--project", filepath.Join(refsystemDir, "project.yaml"), "--out", out, "--strict", "extract"}, &stdout, &stderr)
-	if !errors.Is(err, errStrict) || errors.Is(err, errUnsupported) {
-		t.Fatalf("expected verification mode to fail on unresolved fields only, got %v", err)
+	if err != nil {
+		t.Fatalf("verification mode failed on the reference system: %v\n%s", err, stderr.String())
 	}
 	doc, err := ir.Read(filepath.Join(out, irFile))
 	if err != nil {
@@ -99,13 +99,8 @@ func TestExtractReferenceSystem(t *testing.T) {
 	if reconciles != 3 {
 		t.Fatalf("%d Reconcile methods extracted, want 3", reconciles)
 	}
-	if len(s.Unresolved) == 0 {
-		t.Fatal("no unresolved field, but the reference system has no abstraction")
-	}
-	for _, it := range s.Unresolved {
-		if it.Kind != "field" || !strings.HasPrefix(it.Location.File, "examples/refsystem/controllers/") || it.Location.Line == 0 {
-			t.Fatalf("unresolved item %+v is not a located controller field", it)
-		}
+	if len(s.Unresolved) != 0 {
+		t.Fatalf("unresolved %+v, want none", s.Unresolved)
 	}
 	for _, name := range []string{irFile, supportFile} {
 		got, err := os.ReadFile(filepath.Join(out, name))

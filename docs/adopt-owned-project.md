@@ -8,9 +8,9 @@ controller that you must not change, read
 The example is the reference system in `examples/refsystem`
 ([ADR-0004](adr/0004-reference-system.md)). It has three controllers:
 tenant, database and backup. Today arch extracts all three with no
-unsupported construct. The reference system has no abstraction document
-yet, and `arch generate` takes one controller per project. So sections 7 to
-9 use the ConfigMirror test project, `cmd/arch/testdata/configmirror`,
+unsupported construct, and its abstraction document leaves no field
+unresolved. `arch generate` takes one controller per project. So sections 8
+and 9 use the ConfigMirror test project, `cmd/arch/testdata/configmirror`,
 which runs the whole pipeline.
 
 `TestOwnedProjectGuideWalk` in `cmd/arch/guide_test.go` runs every command
@@ -98,16 +98,17 @@ information. It needs no marker. It reads each `SetupWithManager` and each
 `Reconcile`, and writes `support.yaml` and `ir.yaml` to the `--out`
 directory. It writes `ir.yaml` only when no construct is unsupported.
 
-On the reference system it finds 3 controllers and 7 watches, and it
-prints:
+On the reference system it finds 3 controllers and 7 watches. Nothing is
+unsupported or unresolved, so it prints nothing.
+
+A field is unresolved when `Reconcile` reads or writes it but no
+abstraction selects it. Until you write the abstraction document (section
+7), every such field is unresolved. Without its abstraction, the reference
+system has 39 unresolved fields, and inventory mode prints:
 
 ```text
 inventory mode: 39 unsupported or unresolved items in the selected packages; --strict fails on them
 ```
-
-All 39 items are unresolved fields. None is unsupported. A field is
-unresolved when `Reconcile` reads or writes it but no abstraction selects
-it. The reference system has no abstraction yet.
 
 The support report has four lists:
 
@@ -131,7 +132,12 @@ On the reference system the table starts like this (columns shortened):
 STATUS      KIND        CONSTRUCT                                                                                    LOCATION                                                REASON
 included    controller  github.com/phoban01/generative-architecture/examples/refsystem/controllers/backup.BackupReconciler  examples/refsystem/controllers/backup/controller.go:34
 included    reconcile   github.com/phoban01/generative-architecture/examples/refsystem/controllers/backup.BackupReconciler  examples/refsystem/controllers/backup/controller.go:45  39 process nodes
-...
+```
+
+Without the abstraction, the table ends with the unresolved fields, such
+as:
+
+```text
 unresolved  field       backup.metadata.namespace                                                                    examples/refsystem/controllers/backup/controller.go:56  no abstraction selects this field
 ```
 
@@ -146,11 +152,14 @@ the command:
 arch --strict --project examples/refsystem/project.yaml --out examples/refsystem/generated extract
 ```
 
+On the reference system this passes. Without the abstraction it fails on
+the first unresolved field:
+
 ```text
 arch extract: verification mode (--strict) refuses incomplete semantics: 39 unsupported or unresolved items in the selected packages, first field backup.metadata.namespace at examples/refsystem/controllers/backup/controller.go:56
 ```
 
-The command writes the same files and then exits non-zero. `--strict`
+On a failure the command writes the same files and then exits non-zero. `--strict`
 applies to `extract`, `generate`, `check`, `support` and `replay`. Use
 inventory mode while you adopt. Use strict mode in CI once the report is
 clean.
@@ -194,7 +203,9 @@ For each resource, declare:
 Then set `bounds` (`maxObjectsPerResource`, `maxInvocations`) and list what
 the abstraction leaves out under `excludes`. Reports repeat both.
 
-The reference system has no abstraction document yet. ConfigMirror's is
+`examples/refsystem/abstraction.yaml` declares one object of each of the
+seven kinds the reference system reads or creates. ConfigMirror's is
+shorter. It is
 `examples/configmirror/abstraction.yaml`:
 
 ```yaml
@@ -221,7 +232,7 @@ spec:
 ```
 
 With an abstraction, the fields it selects are no longer unresolved.
-`arch --strict` passes on ConfigMirror.
+`arch --strict` passes on ConfigMirror and on the reference system.
 
 ## 8. Declare the controller and write constraints
 
@@ -344,6 +355,5 @@ in strict mode by default (`strict: true`). Replay runs in inventory mode
 `ci.yml` runs the workflow on the ConfigMirror test project.
 
 The workflow fails at its Extract step in strict mode while any item is
-unsupported or unresolved. On the reference system that is today. Until
-the report is clean, run `arch support` in a job of your own. It exits zero
+unsupported or unresolved. Until the report is clean, run `arch support` in a job of your own. It exits zero
 in inventory mode and prints the table above.

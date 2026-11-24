@@ -17,6 +17,7 @@ spec:
     # The built-in kinds the controllers create and watch.
     discovery:
       - config/discovery/builtin.json
+  abstraction: abstraction.yaml
   runtime:
     profile: controller-runtime
   bounds:

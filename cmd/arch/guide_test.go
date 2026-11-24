@@ -190,13 +190,12 @@ func TestOwnedProjectGuideWalk(t *testing.T) {
 	}
 
 	// Section 4: inventory extraction matches the committed output: three
-	// controllers, seven watches, no unsupported construct and 39
-	// unresolved fields.
+	// controllers, seven watches and nothing unsupported or unresolved.
 	t.Chdir(root)
 	w.out = t.TempDir()
 	refOut := filepath.Join(w.out, "examples/refsystem/generated")
 	_, stderr, err := w.arch("arch --project examples/refsystem/project.yaml --out examples/refsystem/generated extract")
-	if err != nil || !strings.Contains(stderr, "inventory mode: 39 unsupported or unresolved items in the selected packages; --strict fails on them\n") {
+	if err != nil || stderr != "" {
 		t.Fatalf("arch extract: %v\n%s", err, stderr)
 	}
 	for _, name := range []string{irFile, supportFile} {
@@ -220,7 +219,7 @@ func TestOwnedProjectGuideWalk(t *testing.T) {
 	for _, it := range s.Included {
 		kinds[it.Kind]++
 	}
-	if kinds["controller"] != 3 || kinds["watch"] != 7 || len(s.Unsupported) != 0 || len(s.Unresolved) != 39 {
+	if kinds["controller"] != 3 || kinds["watch"] != 7 || len(s.Unsupported) != 0 || len(s.Unresolved) != 0 {
 		t.Fatalf("support report: included %v, %d unsupported, %d unresolved", kinds, len(s.Unsupported), len(s.Unresolved))
 	}
 	out, _, err := w.arch("arch --project examples/refsystem/project.yaml support")
@@ -231,16 +230,19 @@ func TestOwnedProjectGuideWalk(t *testing.T) {
 		"STATUS KIND CONSTRUCT LOCATION REASON",
 		"included controller github.com/phoban01/generative-architecture/examples/refsystem/controllers/backup.BackupReconciler examples/refsystem/controllers/backup/controller.go:34",
 		"included reconcile github.com/phoban01/generative-architecture/examples/refsystem/controllers/backup.BackupReconciler examples/refsystem/controllers/backup/controller.go:45 39 process nodes",
-		"unresolved field backup.metadata.namespace examples/refsystem/controllers/backup/controller.go:56 no abstraction selects this field",
 	} {
 		if !strings.Contains(squeeze(out), row) {
 			t.Fatalf("arch support lacks %q:\n%s", row, out)
 		}
 	}
+	if strings.Contains(out, "unresolved") {
+		t.Fatalf("arch support lists unresolved items:\n%s", out)
+	}
 
-	// Section 5: strict mode fails on the first unresolved field.
-	_, _, err = w.arch("arch --strict --project examples/refsystem/project.yaml --out examples/refsystem/generated extract")
-	wantErr(err, "arch extract: verification mode (--strict) refuses incomplete semantics: 39 unsupported or unresolved items in the selected packages, first field backup.metadata.namespace at examples/refsystem/controllers/backup/controller.go:56")
+	// Section 5: strict mode passes on the reference system.
+	if _, _, err = w.arch("arch --strict --project examples/refsystem/project.yaml --out examples/refsystem/generated extract"); err != nil {
+		t.Fatal(err)
+	}
 
 	// Section 9: generate refuses three controllers.
 	_, _, err = w.arch("arch --project examples/refsystem/project.yaml --out examples/refsystem/generated generate")

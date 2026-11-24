@@ -25,18 +25,15 @@ func support(t *testing.T, projectPath string, strict bool) (string, string, err
 }
 
 // TestSupportReferenceSystemHasNoUnsupportedItems checks ADOPT-4: the
-// table lists no unsupported item. Without an abstraction the fields of
-// each Reconcile are unresolved, so verification mode fails on a field.
+// table lists no unsupported item. The abstraction selects every field of
+// each Reconcile, so nothing is unresolved and verification mode passes.
 func TestSupportReferenceSystemHasNoUnsupportedItems(t *testing.T) {
 	out, _, err := support(t, "../../examples/refsystem/project.yaml", true)
-	if !errors.Is(err, errStrict) || !strings.Contains(err.Error(), "first field ") {
-		t.Fatalf("expected verification mode to fail on an unresolved field, got %v", err)
+	if err != nil {
+		t.Fatalf("verification mode failed: %v", err)
 	}
-	if strings.Contains(out, report.Unsupported) {
-		t.Fatalf("unexpected unsupported item:\n%s", out)
-	}
-	if !strings.Contains(out, "\n"+report.Unresolved+" ") {
-		t.Fatalf("no unresolved field in the table:\n%s", out)
+	if strings.Contains(out, report.Unsupported) || strings.Contains(out, "\n"+report.Unresolved+" ") {
+		t.Fatalf("unexpected unsupported or unresolved item:\n%s", out)
 	}
 }
 
