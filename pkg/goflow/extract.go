@@ -208,15 +208,25 @@ func (e *extractor) translate(n ast.Expr) (expr.Expression, error) {
 			return expr.Expression(x.Op.String()) + "(" + v + ")", err
 		}
 	case *ast.BinaryExpr:
-		if e.opts.Errors[Code(x.X)] && Code(x.Y) == "nil" {
-			v, err := e.translate(x.X)
+		if Code(x.Y) == "nil" && (x.Op == token.EQL || x.Op == token.NEQ) {
+			// err != nil tests a summarized error; an error filter such
+			// as client.IgnoreNotFound(err) is tested the same way.
+			var v expr.Expression
+			var ok bool
+			var err error
+			if e.opts.Errors[Code(x.X)] {
+				v, err = e.translate(x.X)
+				ok = true
+			} else {
+				v, ok, err = e.errorFilter(x.X)
+			}
 			if err != nil {
 				return "", err
 			}
-			if x.Op == token.EQL {
-				return "!(" + v + ")", nil
-			}
-			if x.Op == token.NEQ {
+			if ok {
+				if x.Op == token.EQL {
+					return "!(" + v + ")", nil
+				}
 				return v, nil
 			}
 		}
@@ -289,6 +299,11 @@ func (e *extractor) statement(s ast.Stmt, next int) (int, error) {
 			if ok, err := e.logging(s, call, c); ok || err != nil {
 				return next, err
 			}
+			// A statement that only calls a pure helper has no model
+			// effect either.
+			if ok, err := e.pure(s, call, c); ok || err != nil {
+				return next, err
+			}
 		}
 	}
 	if e.opts.Statement != nil {
@@ -356,6 +371,8 @@ func (e *extractor) statement(s ast.Stmt, next int) (int, error) {
 				}
 			} else if r.Error && Code(result) == "nil" {
 				v = "false"
+			} else if f, ok, ferr := e.errorFilter(result); ok && r.Error {
+				v, err = f, ferr
 			} else {
 				if r.Error && !e.opts.Errors[Code(result)] {
 					return 0, e.diagnose(result, "error", "unsummarized returned error")

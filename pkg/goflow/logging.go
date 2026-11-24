@@ -44,6 +44,13 @@ func (e *extractor) logging(s ast.Stmt, call *ast.CallExpr, c Callee) (bool, err
 			return true, e.diagnose(x.Lhs[0], "assign", "logger local "+id.Name+" is a model symbol")
 		}
 	}
+	return true, e.innerCalls(call, loggingCallee, "a logging call", "the log")
+}
+
+// innerCalls diagnoses a call inside call that allow rejects, and a call
+// of a function value, because dropping the statement (named by what)
+// would drop that call too. Builtins and conversions are allowed.
+func (e *extractor) innerCalls(call *ast.CallExpr, allow func(Callee) bool, inside, what string) error {
 	var err error
 	ast.Inspect(call, func(n ast.Node) bool {
 		inner, ok := n.(*ast.CallExpr)
@@ -51,18 +58,18 @@ func (e *extractor) logging(s ast.Stmt, call *ast.CallExpr, c Callee) (bool, err
 			return err == nil
 		}
 		if ic, ok := e.callee(inner); ok {
-			if !loggingCallee(ic) {
-				err = e.diagnose(inner, "call", "call to "+ic.String()+" inside a logging call; dropping the log would drop it")
+			if !allow(ic) {
+				err = e.diagnose(inner, "call", "call to "+ic.String()+" inside "+inside+"; dropping "+what+" would drop it")
 			}
 			return true
 		}
 		if tv, ok := e.info.Types[inner.Fun]; ok && (tv.IsType() || tv.IsBuiltin()) {
 			return true
 		}
-		err = e.diagnose(inner, "call", "call of a function value inside a logging call; dropping the log would drop it")
+		err = e.diagnose(inner, "call", "call of a function value inside "+inside+"; dropping "+what+" would drop it")
 		return true
 	})
-	return true, err
+	return err
 }
 
 // loggerVar reports whether id names a variable of type logr.Logger.

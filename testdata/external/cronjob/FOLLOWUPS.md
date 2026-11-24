@@ -205,21 +205,31 @@ smallest extension that would support it.
   pointer declaration such as `var x *T` is nil, not an object, and stays
   a diagnostic. The two items left `generated/support.yaml`.
 
-### 14. Library helpers without a summary
+### 14. Library helpers without a summary (partly closed by #148)
 
 - Constructs and locations: `client.IgnoreNotFound` (121, 287, 453),
   `sort.Slice` (277, 296), `ctrl.SetControllerReference` (495),
   `ref.GetReference` (234), `cron.ParseStandard` (345), `fmt.Sprintf`
   (477), `DeepCopy` (486), `append` to a status slice (239) and map writes
   in a loop (488 to 494).
-- Diagnostics recorded: `call: unsummarized call to sigs.k8s.io/controller-runtime/pkg/client.IgnoreNotFound; ...`
-  (121) and `call: unsummarized call to sort.Slice; ...` (296). The others
-  were removed together with other constructs.
-- Smallest extension: built-in summaries for `client.IgnoreNotFound` (an
-  error filter on `notFound`) and `ctrl.SetControllerReference` (sets the
-  owner reference on a local). A pure-helper summary class for `sort`,
-  `fmt`, `DeepCopy` and `GetReference`. `cron.ParseStandard` needs an author
-  summary.
+- Diagnostics recorded before #148: `call: unsummarized call to
+  sigs.k8s.io/controller-runtime/pkg/client.IgnoreNotFound; ...` (121) and
+  `call: unsummarized call to sort.Slice; ...` (277, 296). The others were
+  hidden behind other constructs.
+- Resolution (#148): `client.IgnoreNotFound(err)` on a summarized error
+  lowers to `err && !err_notFound`, in a return and in a condition.
+  `ctrl.SetControllerReference` resolves through controller-runtime's
+  package variable alias to the `controllerutil` summary. A statement that
+  only calls a pure helper (`sort`, `strings`, `strconv`, the `fmt`
+  formatters, `time` without its waits,
+  `metav1.Time` methods, `DeepCopy`, `reference.GetReference`) adds no
+  node; a call with a possible effect inside it is a diagnostic. The three
+  items left `generated/support.yaml`.
+- Remaining: a pure helper in an expression, such as `fmt.Sprintf` (477),
+  `DeepCopy` (486) and `ref.GetReference` (234), still needs a value the
+  frontend cannot give. `cron.ParseStandard` needs an author summary. The
+  `append` to a status slice and the map writes in a loop are list and map
+  constructs, not helpers, and stay open.
 
 ### 15. List options are not in the effect
 

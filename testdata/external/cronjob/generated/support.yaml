@@ -11,12 +11,6 @@ status:
         line: 49
   summarized: []
   unsupported:
-    - kind: call
-      construct: client.IgnoreNotFound(err)
-      reason: unsummarized call to sigs.k8s.io/controller-runtime/pkg/client.IgnoreNotFound; declare it as a client operation or an external effect
-      location:
-        file: internal/controller/cronjob_controller.go
-        line: 121
     - kind: declaration
       construct: |-
         var activeJobs [ // find the active list of jobs
@@ -146,18 +140,6 @@ status:
       location:
         file: internal/controller/cronjob_controller.go
         line: 276
-    - kind: call
-      construct: |-
-        sort.Slice(failedJobs, func(i, j int) bool {
-        	if failedJobs[i].Status.StartTime == nil {
-        		return failedJobs[j].Status.StartTime != nil
-        	}
-        	return failedJobs[i].Status.StartTime.Before(failedJobs[j].Status.StartTime)
-        })
-      reason: unsummarized call to sort.Slice; declare it as a client operation or an external effect
-      location:
-        file: internal/controller/cronjob_controller.go
-        line: 277
     - kind: range
       construct: |-
         for i, job := range failedJobs {
@@ -180,18 +162,6 @@ status:
       location:
         file: internal/controller/cronjob_controller.go
         line: 295
-    - kind: call
-      construct: |-
-        sort.Slice(successfulJobs, func(i, j int) bool {
-        	if successfulJobs[i].Status.StartTime == nil {
-        		return successfulJobs[j].Status.StartTime != nil
-        	}
-        	return successfulJobs[i].Status.StartTime.Before(successfulJobs[j].Status.StartTime)
-        })
-      reason: unsummarized call to sort.Slice; declare it as a client operation or an external effect
-      location:
-        file: internal/controller/cronjob_controller.go
-        line: 296
     - kind: range
       construct: |-
         for i, job := range successfulJobs {

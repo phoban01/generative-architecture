@@ -454,6 +454,11 @@ func (e *extractor) returnCall(x *ast.ReturnStmt, next int) (int, bool, error) {
 		if !ok {
 			continue
 		}
+		if errorFilterCallee(c) {
+			// client.IgnoreNotFound(err) is an error value, not a call
+			// to summarize; the return lowering filters it.
+			continue
+		}
 		n, ok, err := e.summarizeCall(c, call)
 		if err != nil {
 			return 0, true, err

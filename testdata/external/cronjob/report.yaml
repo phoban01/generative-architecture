@@ -9,13 +9,11 @@ status:
     conformance: 0
     safety: 0
     tool: 0
-    unsupported: 37
+    unsupported: 34
   scope: 'no model: arch extract failed closed on the unmodified controller, so arch generate, check and replay did not run; no tool sampled or replayed anything'
   traces: 0
   transitions: 0
   findings:
-    - category: unsupported
-      message: 'arch extract: internal/controller/cronjob_controller.go:121: call "client.IgnoreNotFound(err)": unsummarized call to sigs.k8s.io/controller-runtime/pkg/client.IgnoreNotFound; declare it as a client operation or an external effect'
     - category: unsupported
       message: 'arch extract: internal/controller/cronjob_controller.go:163: declaration "var activeJobs [ // find the active list of jobs": unsupported Go statement'
     - category: unsupported
@@ -43,13 +41,9 @@ status:
     - category: unsupported
       message: 'arch extract: internal/controller/cronjob_controller.go:276: field "cronJob.Spec.FailedJobsHistoryLimit": unmapped field cronJob.spec.failedJobsHistoryLimit'
     - category: unsupported
-      message: 'arch extract: internal/controller/cronjob_controller.go:277: call "sort.Slice(failedJobs, func(i, j int) bool {": unsummarized call to sort.Slice; declare it as a client operation or an external effect'
-    - category: unsupported
       message: 'arch extract: internal/controller/cronjob_controller.go:283: range "for i, job := range failedJobs {": unsupported Go statement'
     - category: unsupported
       message: 'arch extract: internal/controller/cronjob_controller.go:295: field "cronJob.Spec.SuccessfulJobsHistoryLimit": unmapped field cronJob.spec.successfulJobsHistoryLimit'
-    - category: unsupported
-      message: 'arch extract: internal/controller/cronjob_controller.go:296: call "sort.Slice(successfulJobs, func(i, j int) bool {": unsummarized call to sort.Slice; declare it as a client operation or an external effect'
     - category: unsupported
       message: 'arch extract: internal/controller/cronjob_controller.go:302: range "for i, job := range successfulJobs {": unsupported Go statement'
     - category: unsupported
@@ -93,6 +87,6 @@ status:
     catalog/batch-v1.json: a972f6b207e83e52f80baf5821e20d7b154c788b092a412945c2254566159d15
     config/crd/bases/batch.tutorial.kubebuilder.io_cronjobs.yaml: 4016e4984192bbd6ae9e460e5b39bda35a7fac44ed19a63efa60c16018e83630
     constraints.yaml: d65c2cebdb865f0f4234cfdd8470927640fb9aacf68e7d5f51e7ac7cc57657a4
-    generated/support.yaml: 718651f5faa89a61c7bbbc049a0d27fa136fa1971f98b6b4c6cf01a0b9b68fb7
+    generated/support.yaml: fa25b6c9a08adb06e333cdb0d6878689e4094ed62cf387c66375590f60217920
     internal/controller/cronjob_controller.go: b9bde9f751609f2661062c88b86e73e70125e4fd136475bb6e1eec37686db5aa
     project.yaml: b964264e5f1f239bef530a8ed965b19c33baddd4f79e39dcae057b03f84dc2f5

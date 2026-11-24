@@ -326,12 +326,12 @@ func TestUpstreamProjectGuideWalk(t *testing.T) {
 	// SetupWithManager and Reconcile and lists every gap, including the
 	// setup preamble and the first Reconcile statement.
 	_, _, err = w.arch("arch extract")
-	wantErr(err, "arch extract: unsupported constructs: 33 found, listed in generated/support.yaml")
+	wantErr(err, "arch extract: unsupported constructs: 30 found, listed in generated/support.yaml")
 	s, err := report.Read(filepath.Join(generatedDir, supportFile))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(s.Unsupported) != 33 || len(s.Unresolved) != 1 || s.Unresolved[0].Construct != "cronJob.spec.concurrencyPolicy" {
+	if len(s.Unsupported) != 30 || len(s.Unresolved) != 1 || s.Unresolved[0].Construct != "cronJob.spec.concurrencyPolicy" {
 		t.Fatalf("report without a catalog: %d unsupported, unresolved %+v", len(s.Unsupported), s.Unresolved)
 	}
 	if _, err := os.Stat(filepath.Join(generatedDir, irFile)); !os.IsNotExist(err) {
@@ -347,13 +347,18 @@ func TestUpstreamProjectGuideWalk(t *testing.T) {
 			t.Fatalf("arch support lacks %q: %v\n%s", row, err, out)
 		}
 	}
-	if !strings.Contains(stderr, "inventory mode: 34 unsupported or unresolved items in the selected packages; --strict fails on them") {
+	if !strings.Contains(stderr, "inventory mode: 31 unsupported or unresolved items in the selected packages; --strict fails on them") {
 		t.Fatalf("arch support: %s", stderr)
 	}
 
 	// Section 5: strict mode fails on the first construct in file order.
 	_, _, err = w.arch("arch --strict support")
-	wantErr(err, "arch support: verification mode (--strict) refuses incomplete semantics: 34 unsupported or unresolved items in the selected packages, first call client.IgnoreNotFound(err) at internal/controller/cronjob_controller.go:121")
+	// The first construct spans two source lines, so only its start and
+	// its location are compared.
+	if err == nil || !strings.HasPrefix(err.Error(), "arch support: verification mode (--strict) refuses incomplete semantics: 31 unsupported or unresolved items in the selected packages, first declaration var activeJobs [") ||
+		!strings.HasSuffix(err.Error(), "at internal/controller/cronjob_controller.go:163") {
+		t.Fatalf("arch --strict support: %v", err)
+	}
 
 	// Section 6 with the committed project and abstraction. The
 	// abstraction selects spec.suspend and status.lastScheduleTime, so
@@ -362,7 +367,7 @@ func TestUpstreamProjectGuideWalk(t *testing.T) {
 		copyTree(t, filepath.Join(src, name), filepath.Join(dir, name))
 	}
 	_, _, err = w.arch("arch --strict extract")
-	wantErr(err, "arch extract: unsupported constructs: 34 found, listed in generated/support.yaml")
+	wantErr(err, "arch extract: unsupported constructs: 31 found, listed in generated/support.yaml")
 	got, err := os.ReadFile(filepath.Join(generatedDir, supportFile))
 	if err != nil {
 		t.Fatal(err)

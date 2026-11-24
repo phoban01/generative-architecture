@@ -63,6 +63,9 @@ func (e *extractor) callee(call *ast.CallExpr) (Callee, bool) {
 		}
 		obj = e.info.Uses[f.Sel]
 	}
+	if c, ok := aliasOf(obj); ok {
+		return c, true
+	}
 	return calleeOf(obj, nil)
 }
 
@@ -329,4 +332,34 @@ func (e *extractor) constant(n ast.Node, c *types.Const) (expr.Expression, error
 		}
 	}
 	return "", e.diagnose(n, "constant", "unsupported constant value "+v.ExactString())
+}
+
+// Package paths of controller-runtime: its root package aliases functions
+// of its subpackages as package variables, and controllerutil declares the
+// owner reference helpers.
+const (
+	runtimePackage        = "sigs.k8s.io/controller-runtime"
+	controllerutilPackage = "sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+)
+
+// funcAliases resolves a package variable that holds another package's
+// function, such as ctrl.SetControllerReference, to that function.
+// go/types sees the variable and not its initializer, so the table lists
+// the entries of controller-runtime's alias.go that the frontend
+// summarizes.
+var funcAliases = map[Callee]Callee{
+	{Package: runtimePackage, Method: "SetControllerReference"}: {Package: controllerutilPackage, Method: "SetControllerReference"},
+	{Package: runtimePackage, Method: "CreateOrUpdate"}:         {Package: controllerutilPackage, Method: "CreateOrUpdate"},
+	{Package: runtimePackage, Method: "CreateOrPatch"}:          {Package: controllerutilPackage, Method: "CreateOrPatch"},
+	{Package: runtimePackage, Method: "LoggerFrom"}:             {Package: runtimeLogging, Method: "FromContext"},
+}
+
+// aliasOf resolves a package-level variable through funcAliases.
+func aliasOf(obj types.Object) (Callee, bool) {
+	v, ok := obj.(*types.Var)
+	if !ok || v.Pkg() == nil || v.Parent() != v.Pkg().Scope() {
+		return Callee{}, false
+	}
+	c, ok := funcAliases[Callee{Package: v.Pkg().Path(), Method: v.Name()}]
+	return c, ok
 }
