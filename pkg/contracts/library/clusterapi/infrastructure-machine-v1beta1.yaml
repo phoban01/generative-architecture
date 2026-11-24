@@ -5,8 +5,8 @@
 # A "*" type also accepts a pointer, because a pointer has the same JSON shape.
 # The contract page lists spec.providerID as *string and calls it mandatory.
 #
-# Not checked yet: status.addresses (a list) and status.conditions. The
-# contract vocabulary has no list or condition types.
+# Not checked yet: status.addresses, a list of structs, which the contract
+# vocabulary cannot name. status.conditions is checked as conditions.
 apiVersion: architecture.local/v1alpha1
 kind: InteractionContract
 metadata:
@@ -21,6 +21,7 @@ spec:
     spec.providerID: "*string"
     status.ready: bool
   optional:
+    status.conditions: conditions
     spec.failureDomain: "*string"
     status.failureReason: "*string"
     status.failureMessage: "*string"

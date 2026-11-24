@@ -21,8 +21,8 @@ import (
 // Definition is an InteractionContract. Fields must exist in an implementing
 // type. Optional fields may be absent, but when present they must have the
 // declared type. A field type is a primitive (string, bool, int for int64,
-// int32), or a
-// primitive prefixed with "*", which also accepts a pointer to it (a JSON
+// int32), conditions (a list of metav1.Condition), []T, map[K]V, or a
+// type prefixed with "*", which also accepts a pointer to it (a JSON
 // field that may be null).
 type Definition struct {
 	Name     string            `yaml:"-"`
@@ -72,12 +72,44 @@ func (d Definition) Validate() error {
 	return nil
 }
 
+// conditionsType is the shorthand for a list of metav1.Condition, the
+// conditions slice most APIs carry under status.
+const conditionsType = "conditions"
+
+// metaConditionPackage declares metav1.Condition.
+const metaConditionPackage = "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+// validFieldType reports whether t is in the contract vocabulary: a
+// primitive (string, bool, int, int32), conditions, []T or map[K]V with K a
+// primitive and T or V any of these. A "*" prefix accepts a pointer to the
+// type too.
 func validFieldType(t string) bool {
-	switch strings.TrimPrefix(t, "*") {
+	t = strings.TrimPrefix(t, "*")
+	if elem, ok := strings.CutPrefix(t, "[]"); ok {
+		return elem != "" && !strings.HasPrefix(elem, "*") && validFieldType(elem)
+	}
+	if key, elem, ok := mapType(t); ok {
+		return isPrimitive(key) && !strings.HasPrefix(elem, "*") && validFieldType(elem)
+	}
+	return t == conditionsType || isPrimitive(t)
+}
+
+func isPrimitive(t string) bool {
+	switch t {
 	case "string", "bool", "int", "int32":
 		return true
 	}
 	return false
+}
+
+// mapType splits map[K]V into K and V.
+func mapType(t string) (key, elem string, ok bool) {
+	rest, ok := strings.CutPrefix(t, "map[")
+	if !ok {
+		return "", "", false
+	}
+	key, elem, ok = strings.Cut(rest, "]")
+	return key, elem, ok && key != "" && elem != ""
 }
 
 // matches reports whether a resolved Go type has the contract field type.
@@ -85,6 +117,23 @@ func matches(t types.Type, want string) bool {
 	base, nullable := strings.CutPrefix(want, "*")
 	if nullable {
 		t = deref(t)
+	}
+	t = types.Unalias(t)
+	if elem, ok := strings.CutPrefix(base, "[]"); ok {
+		s, isSlice := t.Underlying().(*types.Slice)
+		return isSlice && matches(s.Elem(), elem)
+	}
+	if key, elem, ok := mapType(base); ok {
+		m, isMap := t.Underlying().(*types.Map)
+		return isMap && primitive(m.Key()) == key && matches(m.Elem(), elem)
+	}
+	if base == conditionsType {
+		s, isSlice := t.Underlying().(*types.Slice)
+		if !isSlice {
+			return false
+		}
+		n, isNamed := types.Unalias(s.Elem()).(*types.Named)
+		return isNamed && n.Obj().Pkg() != nil && n.Obj().Pkg().Path() == metaConditionPackage && n.Obj().Name() == "Condition"
 	}
 	return primitive(t) == base
 }

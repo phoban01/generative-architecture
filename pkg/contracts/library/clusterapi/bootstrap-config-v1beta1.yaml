@@ -6,8 +6,7 @@
 # The page does not give a Go type for status.dataSecretName. Cluster API's own
 # KubeadmConfig uses *string.
 #
-# Not checked yet: status.conditions. The contract vocabulary has no condition
-# type.
+# status.conditions is checked as conditions.
 apiVersion: architecture.local/v1alpha1
 kind: InteractionContract
 metadata:
@@ -22,5 +21,6 @@ spec:
     status.ready: bool
     status.dataSecretName: "*string"
   optional:
+    status.conditions: conditions
     status.failureReason: "*string"
     status.failureMessage: "*string"

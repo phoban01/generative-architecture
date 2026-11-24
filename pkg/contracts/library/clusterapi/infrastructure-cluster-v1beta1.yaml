@@ -8,8 +8,8 @@
 #
 # A "*" type also accepts a pointer, because a pointer has the same JSON shape.
 #
-# Not checked yet: status.failureDomains (a map) and status.conditions. The
-# contract vocabulary has no map or condition types.
+# Not checked yet: status.failureDomains, a map of structs, which the
+# contract vocabulary cannot name. status.conditions is checked as conditions.
 apiVersion: architecture.local/v1alpha1
 kind: InteractionContract
 metadata:
@@ -23,6 +23,7 @@ spec:
   fields:
     status.ready: bool
   optional:
+    status.conditions: conditions
     spec.controlPlaneEndpoint.host: string
     spec.controlPlaneEndpoint.port: int32
     status.failureReason: "*string"

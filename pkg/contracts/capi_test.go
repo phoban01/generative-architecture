@@ -98,16 +98,18 @@ func TestClusterAPIContractsAgainstProviderFixture(t *testing.T) {
 	}{
 		{
 			name: "machine v1beta1 with optional fields", contract: "capi.infrastructure-machine/v1beta1", goType: "InfraMachine",
-			wantPaths: map[string]string{"spec.providerID": "spec.providerID", "status.ready": "status.ready", "status.failureReason": "status.failureReason", "status.failureMessage": "status.failureMessage", "spec.failureDomain": "spec.failureDomain"},
+			wantPaths:  map[string]string{"spec.providerID": "spec.providerID", "status.ready": "status.ready", "status.failureReason": "status.failureReason", "status.failureMessage": "status.failureMessage", "spec.failureDomain": "spec.failureDomain"},
+			wantAbsent: []string{"status.conditions"},
 		},
 		{
 			name: "machine v1beta1 required fields only", contract: "capi.infrastructure-machine/v1beta1", goType: "MinimalInfraMachine",
 			wantPaths:  map[string]string{"spec.providerID": "spec.providerID", "status.ready": "status.ready"},
-			wantAbsent: []string{"spec.failureDomain", "status.failureMessage", "status.failureReason"},
+			wantAbsent: []string{"spec.failureDomain", "status.conditions", "status.failureMessage", "status.failureReason"},
 		},
 		{
 			name: "machine v1beta2", contract: "capi.infrastructure-machine/v1beta2", goType: "InfraMachineV1Beta2",
-			wantPaths: map[string]string{"spec.providerID": "spec.providerID", "status.initialization.provisioned": "status.initialization.provisioned", "status.failureDomain": "status.failureDomain"},
+			wantPaths:  map[string]string{"spec.providerID": "spec.providerID", "status.initialization.provisioned": "status.initialization.provisioned", "status.failureDomain": "status.failureDomain"},
+			wantAbsent: []string{"status.conditions"},
 		},
 		{name: "v1beta1 machine against v1beta2", contract: "capi.infrastructure-machine/v1beta2", goType: "InfraMachine", wantErr: "field status.initialization.provisioned: missing contract field"},
 		{name: "missing providerID", contract: "capi.infrastructure-machine/v1beta1", goType: "MachineWithoutProviderID", wantErr: "field spec.providerID: missing contract field spec.providerID"},
@@ -115,19 +117,21 @@ func TestClusterAPIContractsAgainstProviderFixture(t *testing.T) {
 		{name: "optional field with wrong type", contract: "capi.infrastructure-machine/v1beta1", goType: "MachineWithBoolFailureReason", wantErr: "field status.failureReason: expected *string, got bool"},
 		{
 			name: "cluster with endpoint", contract: "capi.infrastructure-cluster/v1beta1", goType: "InfraCluster",
-			wantPaths: map[string]string{"status.ready": "status.ready", "spec.controlPlaneEndpoint.host": "spec.controlPlaneEndpoint.host", "spec.controlPlaneEndpoint.port": "spec.controlPlaneEndpoint.port", "status.failureReason": "status.failureReason", "status.failureMessage": "status.failureMessage"},
+			wantPaths:  map[string]string{"status.ready": "status.ready", "spec.controlPlaneEndpoint.host": "spec.controlPlaneEndpoint.host", "spec.controlPlaneEndpoint.port": "spec.controlPlaneEndpoint.port", "status.failureReason": "status.failureReason", "status.failureMessage": "status.failureMessage"},
+			wantAbsent: []string{"status.conditions"},
 		},
 		{
 			name: "cluster with external endpoint", contract: "capi.infrastructure-cluster/v1beta1", goType: "ExternalEndpointCluster",
 			wantPaths:  map[string]string{"status.ready": "status.ready"},
-			wantAbsent: []string{"spec.controlPlaneEndpoint.host", "spec.controlPlaneEndpoint.port", "status.failureMessage", "status.failureReason"},
+			wantAbsent: []string{"spec.controlPlaneEndpoint.host", "spec.controlPlaneEndpoint.port", "status.conditions", "status.failureMessage", "status.failureReason"},
 		},
 		{name: "cluster port is a Go int", contract: "capi.infrastructure-cluster/v1beta1", goType: "ClusterWithIntPort", wantErr: "field spec.controlPlaneEndpoint.port: expected int32, got int"},
 		{name: "cluster without ready", contract: "capi.infrastructure-cluster/v1beta1", goType: "ClusterWithoutReady", wantErr: "field status.ready: missing contract field status.ready"},
 		{name: "cluster with a host and no port", contract: "capi.infrastructure-cluster/v1beta1", goType: "HostOnlyCluster", wantErr: "fields spec.controlPlaneEndpoint.host, spec.controlPlaneEndpoint.port are declared together: spec.controlPlaneEndpoint.host present, spec.controlPlaneEndpoint.port absent"},
 		{
 			name: "bootstrap config", contract: "capi.bootstrap-config/v1beta1", goType: "BootstrapConfig",
-			wantPaths: map[string]string{"status.ready": "status.ready", "status.dataSecretName": "status.dataSecretName", "status.failureReason": "status.failureReason", "status.failureMessage": "status.failureMessage"},
+			wantPaths:  map[string]string{"status.ready": "status.ready", "status.dataSecretName": "status.dataSecretName", "status.failureReason": "status.failureReason", "status.failureMessage": "status.failureMessage"},
+			wantAbsent: []string{"status.conditions"},
 		},
 		{name: "bootstrap without data secret", contract: "capi.bootstrap-config/v1beta1", goType: "BootstrapWithoutDataSecretName", wantErr: "field status.dataSecretName: missing contract field status.dataSecretName"},
 		{name: "machine is not a bootstrap config", contract: "capi.bootstrap-config/v1beta1", goType: "InfraMachine", wantErr: "field status.dataSecretName: missing contract field"},

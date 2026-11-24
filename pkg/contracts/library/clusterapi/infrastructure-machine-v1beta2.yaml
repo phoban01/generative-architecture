@@ -7,8 +7,8 @@
 #
 # A "*" type also accepts a pointer, because a pointer has the same JSON shape.
 #
-# Not checked yet: status.addresses (a list) and status.conditions. The
-# contract vocabulary has no list or condition types.
+# Not checked yet: status.addresses, a list of structs, which the contract
+# vocabulary cannot name. status.conditions is checked as conditions.
 apiVersion: architecture.local/v1alpha1
 kind: InteractionContract
 metadata:
@@ -23,4 +23,5 @@ spec:
     spec.providerID: "*string"
     status.initialization.provisioned: "*bool"
   optional:
+    status.conditions: conditions
     status.failureDomain: "*string"

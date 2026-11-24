@@ -60,3 +60,52 @@ func TestExternalSelectorInModuleCache(t *testing.T) {
 		})
 	}
 }
+
+// Lists, maps and conditions resolve against k8s.io/api types from the
+// module cache: a string map, a string list and a metav1.Condition list.
+func TestCollectionFieldTypes(t *testing.T) {
+	root, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defs := []Definition{
+		{Name: "config-data", Version: "v1", Fields: map[string]string{"data": "map[string]string"}},
+		{Name: "command", Version: "v1", Fields: map[string]string{"args": "[]string"}},
+		{Name: "conditioned", Version: "v1", Fields: map[string]string{"conditions": "conditions"}},
+		{Name: "list-data", Version: "v1", Fields: map[string]string{"data": "[]string"}},
+		{Name: "pod-conditions", Version: "v1", Fields: map[string]string{"conditions": "conditions"}},
+	}
+	for _, tc := range []struct {
+		name     string
+		impl     Implementation
+		wantPath string
+		wantErr  string
+	}{
+		{name: "string map", impl: Implementation{Contract: "config-data/v1", Package: "k8s.io/api/core/v1", Type: "ConfigMap"}, wantPath: "data"},
+		{name: "string list", impl: Implementation{Contract: "command/v1", Package: "k8s.io/api/core/v1", Type: "Container"}, wantPath: "args"},
+		{name: "metav1 conditions", impl: Implementation{Contract: "conditioned/v1", Package: "k8s.io/api/networking/v1", Type: "ServiceCIDRStatus"}, wantPath: "conditions"},
+		{name: "map is not a list", impl: Implementation{Contract: "list-data/v1", Package: "k8s.io/api/core/v1", Type: "ConfigMap"}, wantErr: "field data: expected []string, got map[string]string"},
+		{name: "pod conditions are not metav1 conditions", impl: Implementation{Contract: "pod-conditions/v1", Package: "k8s.io/api/core/v1", Type: "PodStatus"}, wantErr: "field conditions: expected conditions, got []k8s.io/api/core/v1.PodCondition"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			evidence, err := Inspect(root, defs, nil, []Implementation{tc.impl})
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("got error %v, want %q", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(evidence) != 1 || len(evidence[0].JSONPaths) != 1 {
+				t.Fatalf("evidence %+v", evidence)
+			}
+			for logical, path := range evidence[0].JSONPaths {
+				if path != tc.wantPath {
+					t.Fatalf("field %s resolved to %s, want %s", logical, path, tc.wantPath)
+				}
+			}
+		})
+	}
+}
