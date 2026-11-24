@@ -45,8 +45,6 @@ func stubRoot(t *testing.T, files map[string]string) string {
 
 const stubController = `package demo
 import (
-	"encoding/json"
-	"fmt"
  "context"
  ctrl "sigs.k8s.io/controller-runtime"
  "sigs.k8s.io/controller-runtime/pkg/client"
@@ -171,8 +169,6 @@ func TestDiscoverDiagnosesUnsupportedInjection(t *testing.T) {
 	// but does not stand in for a client.
 	source := `package demo
 import (
-	"encoding/json"
-	"fmt"
  "context"
  ctrl "sigs.k8s.io/controller-runtime"
  "sigs.k8s.io/controller-runtime/pkg/client"
