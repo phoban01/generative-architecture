@@ -162,12 +162,6 @@ func TestOwnedProjectGuideWalk(t *testing.T) {
 	t.Setenv("GOPROXY", "off")
 	t.Setenv("GOFLAGS", "-mod=readonly")
 	w := &guideWalk{t: t}
-	wantErr := func(err error, msg string) {
-		t.Helper()
-		if err == nil || err.Error() != msg {
-			t.Fatalf("got error %v, want %q", err, msg)
-		}
-	}
 
 	// Section 1.
 	w.skip("go install github.com/phoban01/generative-architecture/cmd/arch@v0.1.0", "needs the network")
@@ -244,9 +238,11 @@ func TestOwnedProjectGuideWalk(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Section 9: generate refuses three controllers.
+	// Section 9: generate composes the three controllers.
 	_, _, err = w.arch("arch --project examples/refsystem/project.yaml --out examples/refsystem/generated generate")
-	wantErr(err, "arch generate: controller github.com/phoban01/generative-architecture/examples/refsystem/controllers/backup.BackupReconciler has no declaration; add one with receiver BackupReconciler under spec.controllers of examples/refsystem/project.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Section 9: the ConfigMirror pipeline.
 	const cm = "arch --project examples/configmirror/project.yaml --out /tmp/configmirror "
