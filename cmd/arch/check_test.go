@@ -215,13 +215,22 @@ func TestCheckConfigMirror(t *testing.T) {
 	if r := readVerification(t, filepath.Join(out, replayReport)); r.Traces != 5 {
 		t.Fatalf("replay read %d traces", r.Traces)
 	}
-	// A mutation suite is listed, not run.
-	if _, err := arch(t, configMirror, out, false, "check", "--samples", "2", "--steps", "10", "--mutations", "../../examples/configmirror/mutations.yaml"); err != nil {
-		t.Fatal(err)
+	// A mutation suite runs with both detectors. The controller mutation is
+	// caught by the model and by the replay; the mutation of ConfigMirror's
+	// hand-written adapter changes nothing arch uses, so it escapes and the
+	// check fails on it.
+	if _, err := arch(t, configMirror, out, false, "check", "--samples", "10", "--steps", "40", "--mutations", "../../examples/configmirror/mutations.yaml"); err == nil {
+		t.Fatal("an escaped mutation must fail the check")
 	}
 	v = readVerification(t, filepath.Join(out, checkReport))
-	if v.Result != report.Incomplete || len(v.Findings) != 2 || !strings.Contains(v.Findings[0].Message, "direct-source") {
+	if v.Result != report.Failed || len(v.Findings) != 1 || v.Findings[0].Category != report.CategoryConformance || !strings.Contains(v.Findings[0].Message, "direct-source: ConfigMap_copy_data_value") {
 		t.Fatalf("mutation findings %+v", v.Findings)
+	}
+	if row := v.Mutations["wrong-write"]; !row["ConfigMap_copy_data_value"] || !row["writesObservedValue"] || v.Mutations["direct-source"]["ConfigMap_copy_data_value"] {
+		t.Fatalf("mutation matrix %v", v.Mutations)
+	}
+	if !strings.Contains(v.Scope, "model detector and the replay detector") {
+		t.Fatalf("scope %q", v.Scope)
 	}
 }
 

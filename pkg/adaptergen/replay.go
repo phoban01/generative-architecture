@@ -215,10 +215,12 @@ package {{.Package}}
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"time"
 
@@ -246,6 +248,11 @@ type replayResult struct {
 	Step     int            ` + "`" + `json:"step,omitempty"` + "`" + `
 	Event    string         ` + "`" + `json:"event,omitempty"` + "`" + `
 	Message  string         ` + "`" + `json:"message,omitempty"` + "`" + `
+	// Property names the violated property of a safety failure; Diverged
+	// lists the observed variables whose projection differs from the
+	// trace at the failing step of a conformance failure.
+	Property string   ` + "`" + `json:"property,omitempty"` + "`" + `
+	Diverged []string ` + "`" + `json:"diverged,omitempty"` + "`" + `
 }
 
 func main() {
@@ -271,7 +278,8 @@ func main() {
 		if err != nil {
 			r.Category, r.Message = string(conformance.CategoryTool), err.Error()
 		} else {
-			report, err := replayTrace(m, trace, *timeout)
+			report, diverged, property, err := replayTrace(m, trace, *timeout)
+			r.Diverged, r.Property = diverged, property
 			r.Steps, r.Coverage = report.Steps, report.Coverage
 			if f, ok := conformance.AsFailure(err); ok {
 				r.Category, r.Step, r.Event, r.Message = string(f.Category), f.Step, f.Event, f.Error()
@@ -290,20 +298,39 @@ func fail(err error) {
 	os.Exit(1)
 }
 
-// replayTrace replays one trace through a fresh implementation.
-func replayTrace(m *model.Compiled, trace conformance.Trace, timeout time.Duration) (conformance.Report, error) {
+// replayTrace replays one trace through a fresh implementation. On a
+// conformance failure it lists the observed variables that diverged at the
+// failing step; on a safety failure it names the violated property.
+func replayTrace(m *model.Compiled, trace conformance.Trace, timeout time.Duration) (conformance.Report, []string, string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	a, err := newAdapter(ctx, m)
 	if err != nil {
-		return conformance.Report{}, err
+		return conformance.Report{}, nil, "", err
 	}
 	report, err := conformance.ReplayObserved(ctx, m, trace, a, a.observed)
+	var diverged []string
+	property := ""
+	if f, ok := conformance.AsFailure(err); ok {
+		var violation *model.PropertyViolation
+		if errors.As(f.Err, &violation) {
+			property = violation.Property
+		}
+		if f.Category == conformance.CategoryConformance && f.Step < len(trace.States) {
+			if actual, perr := a.Project(ctx); perr == nil {
+				for _, name := range a.observed {
+					if !reflect.DeepEqual(actual[name], trace.States[f.Step].Values[name]) {
+						diverged = append(diverged, name)
+					}
+				}
+			}
+		}
+	}
 	closed := a.Close()
 	if err == nil {
 		err = closed
 	}
-	return report, err
+	return report, diverged, property, err
 }
 
 // adapter supplies the fixtures and routes replay events to the generated

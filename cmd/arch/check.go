@@ -41,7 +41,7 @@ func runCheck(g globals, args []string) error {
 	samples := fs.Int("samples", 40, "number of Quint traces to sample")
 	steps := fs.Int("steps", 60, "maximum steps per trace")
 	seed := fs.Int64("seed", 1, "Quint random seed")
-	mutations := fs.String("mutations", "", "MutationSuite document to list in the report")
+	mutations := fs.String("mutations", "", "MutationSuite document to run with the model and replay detectors")
 	steerWeight := fs.Int("steer-weight", 0, "weight of internal process steps and effect outcomes against other actions (0: uniform sampling)")
 	steerExcept := fs.String("steer-except", "", "comma-separated effect outcomes that keep weight 1 under --steer-weight, for example error")
 	verify := fs.Bool("verify", false, "model-check the temporal properties with quint verify (TLC, needs Java 21) under the declared fairness")
@@ -106,9 +106,18 @@ func runCheck(g globals, args []string) error {
 	if len(findings) == 0 {
 		v.Findings = check(g, ev, &v)
 	}
-	if suite != nil {
-		for _, m := range suite.Spec.Mutations {
-			v.Findings = append(v.Findings, report.Finding{Category: report.CategoryUnsupported, Message: fmt.Sprintf("mutation %s: no adapter; arch cannot replay a mutated controller", m.Name)})
+	if suite != nil && len(findings) == 0 {
+		_, adapterErr := os.Stat(filepath.Join(g.out, adapterDir, adapterMain))
+		matrix, detections, mutationFindings := runMutations(g, ev, *suite, opts, adapterErr == nil)
+		v.Mutations = map[string]map[string]bool(matrix)
+		v.Findings = append(v.Findings, mutationFindings...)
+		v.Scope += fmt.Sprintf("; mutation suite %s run with the model detector", suite.Name)
+		if adapterErr == nil {
+			v.Scope += " and the replay detector"
+		}
+		if matrix != nil {
+			fmt.Fprint(g.stdout, "mutations:\n"+indent(matrix.String()))
+			fmt.Fprint(g.stdout, "detections:\n"+indent(detections.String()))
 		}
 	}
 	if len(liveness.Temporal) > 0 {
@@ -365,4 +374,13 @@ func saveTrace(g globals, name string, t conformance.Trace, itf []byte) (string,
 		return "", err
 	}
 	return rel, nil
+}
+
+// indent prefixes every line of s with two spaces.
+func indent(s string) string {
+	var b strings.Builder
+	for _, line := range strings.Split(strings.TrimRight(s, "\n"), "\n") {
+		b.WriteString("  " + line + "\n")
+	}
+	return b.String()
 }

@@ -344,6 +344,12 @@ arch --project examples/configmirror/project.yaml --out /tmp/configmirror render
   replay passed (inventory mode): 40 traces, 2400 transitions, 0 findings
   ```
 
+- `arch check --mutations mutations.yaml` also runs a `MutationSuite`: each
+  mutation is applied as an overlay, the model is regenerated and sampled
+  from the mutant, and the generated adapter is rebuilt against it and
+  replays the run's traces. The report carries the detection matrix, and
+  a mutation that escapes its expected detectors fails the check.
+
 - `arch render` builds the LikeC4 site into `site/` under `--out`.
 
 `check` needs Quint and `render` needs LikeC4. The guide test runs

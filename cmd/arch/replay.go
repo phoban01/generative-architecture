@@ -104,52 +104,72 @@ type replayResult struct {
 	Step     int            `json:"step"`
 	Event    string         `json:"event"`
 	Message  string         `json:"message"`
+	Property string         `json:"property"`
+	Diverged []string       `json:"diverged"`
 }
 
 // replayImplementation builds the generated adapter in the project's
-// module, through a build overlay so the module's tree stays untouched,
-// and runs it over the traces. Each failed trace is a finding of the
-// adapter's category; a build or run failure is a tool finding.
+// module and runs it over the traces. Each failed trace is a finding of
+// the adapter's category; a build or run failure is a tool finding.
 func replayImplementation(g globals, ev evidence, paths []string) []report.Finding {
-	tool := func(err error) []report.Finding {
+	results, err := runAdapter(g, ev, paths, nil)
+	if err != nil {
 		return []report.Finding{{Category: report.CategoryTool, Message: "replay adapter: " + err.Error()}}
 	}
+	var findings []report.Finding
+	for _, r := range results {
+		if r.Category != "" {
+			findings = append(findings, report.Finding{Category: r.Category, Trace: r.Trace, Step: r.Step, Event: r.Event, Property: r.Property, Message: "implementation: " + r.Message})
+		}
+	}
+	return findings
+}
+
+// runAdapter builds the generated adapter in the project's module through
+// a build overlay, so the module's tree stays untouched, and runs it over
+// the traces. extra adds files to the overlay, keyed by the absolute path
+// they replace: a mutated source file builds the adapter against the
+// mutant. It returns one result per trace.
+func runAdapter(g globals, ev evidence, paths []string, extra map[string]string) ([]replayResult, error) {
 	dir := filepath.Join(g.out, adapterDir)
 	entries, err := filepath.Glob(filepath.Join(dir, "*.go"))
 	if err != nil {
-		return tool(err)
+		return nil, err
 	}
 	root, err := filepath.Abs(ev.project.Root)
 	if err != nil {
-		return tool(err)
+		return nil, err
 	}
 	outAbs, err := filepath.Abs(g.out)
 	if err != nil {
-		return tool(err)
+		return nil, err
 	}
 	virtual := filepath.Join("internal", fmt.Sprintf("archreplay_%x", sha256.Sum256([]byte(outAbs)))[:16])
 	replace := map[string]string{}
 	for _, e := range entries {
 		replace[filepath.Join(root, virtual, filepath.Base(e))] = e
 	}
+	for original, mutant := range extra {
+		replace[original] = mutant
+	}
 	overlay, err := json.Marshal(map[string]any{"Replace": replace})
 	if err != nil {
-		return tool(err)
+		return nil, err
 	}
 	tmp, err := os.MkdirTemp("", "arch-replay-")
 	if err != nil {
-		return tool(err)
+		return nil, err
 	}
 	defer os.RemoveAll(tmp)
 	overlayPath := filepath.Join(tmp, "overlay.json")
 	if err := os.WriteFile(overlayPath, overlay, 0o600); err != nil {
-		return tool(err)
+		return nil, err
 	}
-	args := append([]string{"run", "-overlay", overlayPath, "./" + filepath.ToSlash(virtual), "-model", filepath.Join(outAbs, specFile)}, nil...)
+	args := []string{"run", "-overlay", overlayPath, "./" + filepath.ToSlash(virtual), "-model", filepath.Join(outAbs, specFile)}
 	for _, p := range paths {
 		abs, err := filepath.Abs(p)
 		if err != nil {
-			return tool(err)
+			return nil, err
 		}
 		args = append(args, abs)
 	}
@@ -158,20 +178,18 @@ func replayImplementation(g globals, ev evidence, paths []string) []report.Findi
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if err := cmd.Run(); err != nil {
-		return tool(fmt.Errorf("go run in %s: %w\n%s", root, err, strings.TrimSpace(stderr.String())))
+		return nil, fmt.Errorf("go run in %s: %w\n%s", root, err, strings.TrimSpace(stderr.String()))
 	}
-	var findings []report.Finding
+	var results []replayResult
 	dec := json.NewDecoder(&stdout)
 	for {
 		var r replayResult
 		if err := dec.Decode(&r); err == io.EOF {
 			break
 		} else if err != nil {
-			return tool(fmt.Errorf("adapter output: %w", err))
+			return nil, fmt.Errorf("adapter output: %w", err)
 		}
-		if r.Category != "" {
-			findings = append(findings, report.Finding{Category: r.Category, Trace: r.Trace, Step: r.Step, Event: r.Event, Message: "implementation: " + r.Message})
-		}
+		results = append(results, r)
 	}
-	return findings
+	return results, nil
 }

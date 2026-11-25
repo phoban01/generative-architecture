@@ -123,7 +123,12 @@ func runGenerate(g globals, args []string) error {
 
 // generate loads the project and the extracted IR and derives the model,
 // its process and its effects.
-func generate(g globals) (generated, error) {
+func generate(g globals) (generated, error) { return generateWith(g, nil) }
+
+// generateWith is generate with source files replaced by overlay, keyed
+// by absolute path: a mutated controller rebuilds its model without being
+// written to disk.
+func generateWith(g globals, overlay map[string][]byte) (generated, error) {
 	var gen generated
 	p, err := project.Load(g.project)
 	if err != nil {
@@ -165,7 +170,7 @@ func generate(g globals) (generated, error) {
 		return gen, err
 	}
 	for _, c := range gen.doc.Controllers {
-		o, err := generateController(g.project, p, c, abs, cat)
+		o, err := generateController(g.project, p, c, abs, cat, overlay)
 		if err != nil {
 			return gen, err
 		}
@@ -197,12 +202,12 @@ func generate(g globals) (generated, error) {
 // generateController extracts one controller's Reconcile and builds its
 // model: its own process, runtime and cache state over the shared
 // abstraction state.
-func generateController(projectPath string, p project.Project, c ir.Controller, abs abstraction.Abstraction, cat *catalog.Catalog) (controllerOutput, error) {
+func generateController(projectPath string, p project.Project, c ir.Controller, abs abstraction.Abstraction, cat *catalog.Catalog, overlay map[string][]byte) (controllerOutput, error) {
 	decl, ok := p.Spec.Controller(c.Receiver)
 	if !ok {
 		return controllerOutput{}, fmt.Errorf("controller %s has no declaration; add one with receiver %s under spec.controllers of %s", c.ID, c.Receiver, projectPath)
 	}
-	l, err := goflow.Load(p.Root, goflow.Selector{Package: c.Package, Receiver: c.Receiver, Method: reconcileMethod})
+	l, err := goflow.LoadWith(p.Root, goflow.Selector{Package: c.Package, Receiver: c.Receiver, Method: reconcileMethod}, goflow.LoadOptions{Overlay: overlay})
 	if err != nil {
 		return controllerOutput{}, fmt.Errorf("controller %s: %w", c.ID, err)
 	}
