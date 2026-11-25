@@ -63,12 +63,15 @@ func TestMutationSuite(t *testing.T) {
 		t.Fatalf("mutations escaped their detectors: %v\n%s", escaped, matrix)
 	}
 	want := map[string][]string{
-		"contract-check":         {"model"},
-		"provisioning-check":     {"model"},
-		"wrong-endpoint":         {"model"},
-		"missing-instance-watch": {"replay"},
-		"wrong-mapping":          {"model"},
-		"generation-predicate":   {"model", "replay"},
+		"contract-check":                {"model"},
+		"provisioning-check":            {"model"},
+		"wrong-endpoint":                {"model"},
+		"missing-instance-watch":        {"replay"},
+		"wrong-mapping":                 {"model"},
+		"generation-predicate":          {"model", "replay"},
+		"repeated-create":               {"model"},
+		"missing-create":                {"model"},
+		"database-generation-predicate": {"model", "replay"},
 	}
 	if got := suite.CaughtBy(detections); !reflect.DeepEqual(got, want) {
 		t.Fatalf("caught by %v, want %v\n%s", got, want, detections)

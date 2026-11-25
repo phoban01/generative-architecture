@@ -55,3 +55,26 @@ spec:
         - find: handler "sigs.k8s.io/controller-runtime/pkg/handler"
           replace: "builder \"sigs.k8s.io/controller-runtime/pkg/builder\"\n\thandler \"sigs.k8s.io/controller-runtime/pkg/handler\"\n\tpredicate \"sigs.k8s.io/controller-runtime/pkg/predicate\""
       expect: [instanceProvisioningEnqueuesReconciler, queued_demo_db_1]
+    # The controller creates a second instance while the first has no
+    # endpoint yet.
+    - name: repeated-create
+      file: controller.go
+      find: if !instanceFound {
+      replace: if !instanceFound || endpoint == "" {
+      expect: [atMostOneInstance]
+    # The controller waits without creating the instance it waits for.
+    - name: missing-create
+      file: controller.go
+      find: store.CreateDatabaseInstance()
+      replace: ""
+      expect: [waitingHasAInstance]
+    # A generation filter on the Database drops the status update the
+    # controller publishes, so the Database event enqueues nothing.
+    - name: database-generation-predicate
+      file: wiring.go
+      find: For(database).
+      replace: For(database, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+      edits:
+        - find: handler "sigs.k8s.io/controller-runtime/pkg/handler"
+          replace: "builder \"sigs.k8s.io/controller-runtime/pkg/builder\"\n\thandler \"sigs.k8s.io/controller-runtime/pkg/handler\"\n\tpredicate \"sigs.k8s.io/controller-runtime/pkg/predicate\""
+      expect: [databaseWatchEnqueuesReconciler, queued_demo_db_1]
