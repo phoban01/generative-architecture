@@ -122,3 +122,46 @@ func TestObjectLocalsAndReturnedCalls(t *testing.T) {
 		t.Fatalf("unmapped field assignment accepted: %v", err)
 	}
 }
+
+// A map key that is not a path identifier, such as app.config/key, is a
+// path element for reads and writes; the abstraction maps it as a quoted
+// map key, and a report names it in brackets.
+func TestDottedMapKeys(t *testing.T) {
+	opts := copyOptions()
+	opts.Field = func(root string, path []string) (expr.Expression, bool) {
+		if strings.Join(path, "|") != "data|app.config/key" {
+			return "", false
+		}
+		switch root {
+		case "source":
+			return "sourceValue", true
+		case "target":
+			return "targetValue", true
+		}
+		return "", false
+	}
+	opts.MapKeys = func(root string, path []string) []string {
+		if strings.Join(path, ".") == "data" {
+			return []string{"app.config/key"}
+		}
+		return nil
+	}
+	p, err := ExtractTyped(loadFixture(t, "./pkg/goflow/testdata/typed", "Reconciler", "CopyKeyed"), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var assigned bool
+	for _, n := range p.Nodes {
+		if n.Kind == "assign" && n.Updates["targetValue"] == "sourceValue" {
+			assigned = true
+		}
+	}
+	if !assigned {
+		t.Fatalf("the keyed value was not copied: %+v", p.Nodes)
+	}
+	opts.MapKeys = nil
+	_, err = ExtractTyped(loadFixture(t, "./pkg/goflow/testdata/typed", "Reconciler", "CopyKeyed"), opts)
+	if d, ok := AsDiagnostic(err); !ok || !strings.Contains(d.Reason, "target.data[app.config/key]") {
+		t.Fatalf("report does not bracket the key: %v", err)
+	}
+}

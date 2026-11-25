@@ -39,11 +39,11 @@ func TestQuantityWrites(t *testing.T) {
 		},
 		{
 			name: "dotted key selected", method: "Quota", withMapKeys: true, mapKeys: []string{"requests.memory"},
-			diagnostic: `map literal key "requests.memory" cannot be a model path element`,
+			unmodelled: []string{"quota.spec.hard.cpu", "quota.spec.hard.pods", "quota.spec.hard[requests.memory]"},
 		},
 		{
 			name: "map keys unknown", method: "Quota",
-			diagnostic: `map literal key "requests.memory" cannot be a model path element`,
+			unmodelled: []string{"quota.spec.hard.cpu", "quota.spec.hard.pods", "quota.spec.hard[requests.memory]"},
 		},
 		{
 			name: "not a constant", method: "QuotaFrom", withMapKeys: true,

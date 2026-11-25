@@ -168,23 +168,41 @@ func (e *extractor) mapEntry(x *ast.IndexExpr) (expr.Expression, bool) {
 	return e.opts.Field(root, append(path, key))
 }
 
-// constantKey returns the value of a constant string expression.
+// constantKey returns the value of a constant string expression. Any
+// non-empty string is a map key; a key such as app.config/key that cannot
+// be read as a path element is still a path element, which the abstraction
+// writes as a quoted map key (see abstraction.Field).
 func (e *extractor) constantKey(x ast.Expr) (string, bool) {
 	tv, ok := e.info.Types[x]
 	if !ok || tv.Value == nil || tv.Value.Kind() != constant.String {
 		return "", false
 	}
 	key := constant.StringVal(tv.Value)
-	return key, identifierPath(key)
+	return key, key != ""
 }
 
-// identifierPath reports whether a map key can be a JSON path element of a
-// model variable name.
+// identifierPath reports whether a map key reads as a JSON path element
+// without quoting.
 func identifierPath(key string) bool {
 	if key == "" {
 		return false
 	}
 	return !strings.ContainsAny(key, ". /")
+}
+
+// fieldName names a field path for a report: elements that are not path
+// identifiers, such as map keys with dots, are written in brackets.
+func fieldName(root string, path []string) string {
+	var b strings.Builder
+	b.WriteString(root)
+	for _, p := range path {
+		if identifierPath(p) {
+			b.WriteString("." + p)
+		} else {
+			b.WriteString("[" + p + "]")
+		}
+	}
+	return b.String()
 }
 
 // stringMap reports whether x is a map with string keys.
@@ -243,7 +261,7 @@ func (e *extractor) fieldAssign(x *ast.AssignStmt, lhs *ast.SelectorExpr, next i
 	updates := map[string]expr.Expression{}
 	var unmodelled []string
 	set := func(at ast.Node, path []string, value ast.Expr) error {
-		field := root + "." + strings.Join(path, ".")
+		field := fieldName(root, path)
 		quantity, isQuantity, err := e.quantity(value)
 		if err != nil {
 			return err
@@ -286,21 +304,7 @@ func (e *extractor) fieldAssign(x *ast.AssignStmt, lhs *ast.SelectorExpr, next i
 			}
 			key, ok := e.constantKey(kv.Key)
 			if !ok {
-				// A key that cannot be a path element, such as
-				// requests.cpu, is a write without a model value unless
-				// MapKeys selects it.
-				raw, isConst := e.constantString(kv.Key)
-				if !isConst {
-					return 0, e.diagnose(kv.Key, "assign", "map literal key must be a constant string")
-				}
-				if e.opts.MapKeys == nil || slices.Contains(e.opts.MapKeys(root, path), raw) {
-					return 0, e.diagnose(kv.Key, "assign", "map literal key "+strconv.Quote(raw)+" cannot be a model path element")
-				}
-				if err := e.noCalls(kv.Value); err != nil {
-					return 0, err
-				}
-				unmodelled = append(unmodelled, root+"."+strings.Join(path, ".")+"["+raw+"]")
-				continue
+				return 0, e.diagnose(kv.Key, "assign", "map literal key must be a constant string")
 			}
 			listed[key] = true
 			keyPath := append(append([]string(nil), path...), key)
@@ -308,7 +312,7 @@ func (e *extractor) fieldAssign(x *ast.AssignStmt, lhs *ast.SelectorExpr, next i
 				// Without MapKeys the frontend cannot clear the selected
 				// keys the literal omits, so a replaced map would keep
 				// stale values. Fail closed instead.
-				return 0, e.diagnose(kv.Key, "assign", "map literal writes selected key "+root+"."+strings.Join(keyPath, ".")+" but Options.MapKeys is nil; the keys it omits cannot be cleared")
+				return 0, e.diagnose(kv.Key, "assign", "map literal writes selected key "+fieldName(root, keyPath)+" but Options.MapKeys is nil; the keys it omits cannot be cleared")
 			}
 			if err := set(kv, keyPath, kv.Value); err != nil {
 				return 0, err

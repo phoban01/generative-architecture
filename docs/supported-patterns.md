@@ -119,7 +119,7 @@ branches, assignments, `switch` and early returns, the frontend reads:
 | `resource.MustParse("10")` and `resource.NewQuantity` with constant arguments | an opaque quantity value |
 | `"db" + "-credentials"` with constant operands | a string constant |
 | A slice or struct literal assigned to a field that no abstraction selects, such as a Job's containers | a write without a model value |
-| A map literal with constant keys assigned to a field | one write per key; with an abstraction, its selected keys that the literal omits become absent |
+| A map literal with constant keys assigned to a field | one write per key, including keys with `.` or `/` that the abstraction quotes; with an abstraction, its selected keys that the literal omits become absent |
 
 Without an abstraction, the support report lists every object field that
 `Reconcile` reads or writes as `unresolved`, at its first use. With an

@@ -54,3 +54,15 @@ func (r *Reconciler) DeclaredPointer(ctx context.Context, from string) (Result, 
 	var source *ConfigMap
 	return Result{}, r.read(ctx, from, source)
 }
+
+// CopyKeyed copies a value under a key that is not a path identifier, which
+// the abstraction writes as a quoted map key.
+func (r *Reconciler) CopyKeyed(ctx context.Context, from string) (Result, error) {
+	source := &ConfigMap{}
+	if err := r.read(ctx, from, source); err != nil {
+		return Result{}, err
+	}
+	target := &ConfigMap{}
+	target.Data = map[string]string{"app.config/key": source.Data["app.config/key"]}
+	return Result{}, r.write(ctx, target)
+}
