@@ -3,8 +3,7 @@ package database
 import (
 	"fmt"
 	"go/ast"
-	"go/parser"
-	"go/token"
+	"go/types"
 	"os"
 	"path/filepath"
 	"slices"
@@ -98,7 +97,7 @@ type generation struct {
 // generate derives the TransitionModel of Reconcile in source from the
 // abstraction, the dynamic accesses and the Store's business summaries.
 // The watch summary is composed by the caller.
-func generate(abs abstraction.Abstraction, source []byte, accesses dynamicgen.Result, config process.Config) (generation, error) {
+func generate(root string, abs abstraction.Abstraction, source []byte, accesses dynamicgen.Result, config process.Config) (generation, error) {
 	effects, err := generateEffects(abs, accesses)
 	if err != nil {
 		return generation{}, err
@@ -112,7 +111,7 @@ func generate(abs abstraction.Abstraction, source []byte, accesses dynamicgen.Re
 	if err != nil {
 		return generation{}, err
 	}
-	program, goLocals, results, err := extract(source, state)
+	program, goLocals, results, err := extract(root, source, state)
 	if err != nil {
 		return generation{}, err
 	}
@@ -314,75 +313,102 @@ func (e Example) EnvironmentEvent(variable, value string) (EnvironmentAction, er
 	return EnvironmentAction{}, fmt.Errorf("no environment action sets %s to %s", variable, value)
 }
 
-// extract lowers Reconcile in source. A statement that consists of a call
+// extract lowers Reconcile with the typed frontend. The example's package
+// is type-checked with controller.go replaced by source, an overlay that
+// writes nothing to disk, so a mutated source rebuilds the program. A call
 // of a Store method on Reconcile's Store parameter becomes a node of the
-// method's effect; its arguments lower to the node's expression with the
+// method's effect; its argument lowers to the node's expression with the
 // model type of the parameter the Store interface declares. It returns the
-// program, the names of the Go locals Reconcile assigns and, per effect,
-// the locals its call's results are assigned to, in result order ("" for a
-// result left unassigned).
-func extract(source []byte, state map[string]model.Variable) (goflow.Program, []string, map[string][]string, error) {
-	params, store, err := storeSignature(source)
+// program, the names of the Go locals Reconcile assigns from Store results
+// and, per effect, those locals in result order ("" for a result left
+// unassigned).
+func extract(root string, source []byte, state map[string]model.Variable) (goflow.Program, []string, map[string][]string, error) {
+	absRoot, err := filepath.Abs(root)
 	if err != nil {
 		return goflow.Program{}, nil, nil, err
+	}
+	moduleRoot, err := moduleRootOf(absRoot)
+	if err != nil {
+		return goflow.Program{}, nil, nil, err
+	}
+	rel, err := filepath.Rel(moduleRoot, absRoot)
+	if err != nil {
+		return goflow.Program{}, nil, nil, err
+	}
+	selector := goflow.Selector{Package: "./" + filepath.ToSlash(rel), Method: "Reconcile"}
+	l, err := goflow.LoadWith(moduleRoot, selector, goflow.LoadOptions{Overlay: map[string][]byte{filepath.Join(absRoot, "controller.go"): source}})
+	if err != nil {
+		return goflow.Program{}, nil, nil, err
+	}
+	store, ok := l.Package.Types.Scope().Lookup("Store").(*types.TypeName)
+	if !ok {
+		return goflow.Program{}, nil, nil, fmt.Errorf("controller.go declares no Store interface")
+	}
+	methods := types.NewMethodSet(store.Type())
+	for method := range storeEffects {
+		if methods.Lookup(l.Package.Types, method) == nil {
+			return goflow.Program{}, nil, nil, fmt.Errorf("Store declares no method %s", method)
+		}
 	}
 	scope := map[string]expr.Symbol{}
 	for name, v := range state {
 		scope[name] = expr.Symbol{Type: v.Type, Quint: name}
 	}
-	locals := map[string]bool{}
-	results := map[string][]string{}
-	opts := goflow.Options{File: "controller.go", Method: "Reconcile", Scope: scope, Returns: []goflow.Return{{Type: abstraction.TypeString}}}
-	opts.Statement = func(s ast.Stmt, convert goflow.Convert) (goflow.Node, bool, error) {
-		var call *ast.CallExpr
-		var assigned []string
-		switch x := s.(type) {
-		case *ast.ExprStmt:
-			call, _ = x.X.(*ast.CallExpr)
-		case *ast.AssignStmt:
-			if len(x.Rhs) == 1 {
-				call, _ = x.Rhs[0].(*ast.CallExpr)
-			}
-			for _, lhs := range x.Lhs {
-				name := ""
-				if id, ok := lhs.(*ast.Ident); ok && id.Name != "_" {
-					locals[id.Name] = true
-					name = id.Name
-				}
-				assigned = append(assigned, name)
-			}
-		}
-		if call == nil {
+	opts := goflow.Options{Scope: scope, Returns: []goflow.Return{{Type: abstraction.TypeString}}}
+	opts.Call = func(c goflow.Callee, call *ast.CallExpr, convert goflow.Convert) (goflow.Node, bool, error) {
+		if c.Package != l.Package.PkgPath || c.Receiver != "Store" {
 			return goflow.Node{}, false, nil
 		}
-		sel, ok := call.Fun.(*ast.SelectorExpr)
+		kind, ok := storeEffects[c.Method]
 		if !ok {
-			return goflow.Node{}, false, nil
+			return goflow.Node{}, false, fmt.Errorf("Store method %s performs no declared effect", c.Method)
 		}
-		if recv, ok := sel.X.(*ast.Ident); !ok || recv.Name != store {
-			return goflow.Node{}, false, nil
-		}
-		kind, ok := storeEffects[sel.Sel.Name]
+		sig, ok := l.Package.TypesInfo.TypeOf(call.Fun).(*types.Signature)
 		if !ok {
-			return goflow.Node{}, false, fmt.Errorf("Store method %s performs no declared effect", sel.Sel.Name)
+			return goflow.Node{}, false, fmt.Errorf("Store method %s has no signature", c.Method)
 		}
-		if prev, seen := results[kind]; seen && !slices.Equal(prev, assigned) {
-			return goflow.Node{}, false, fmt.Errorf("Store method %s: its results are assigned to %v and to %v", sel.Sel.Name, prev, assigned)
-		}
-		results[kind] = assigned
-		types := params[sel.Sel.Name]
-		if len(call.Args) != len(types) || len(types) > 1 {
-			return goflow.Node{}, false, fmt.Errorf("Store method %s: %d arguments; at most one is supported", sel.Sel.Name, len(call.Args))
+		if sig.Params().Len() > 1 || len(call.Args) != sig.Params().Len() {
+			return goflow.Node{}, false, fmt.Errorf("Store method %s: %d arguments; at most one is supported", c.Method, len(call.Args))
 		}
 		n := goflow.Node{Kind: kind}
-		if len(types) == 1 {
-			n.Expression, err = convert(call.Args[0], types[0])
+		if sig.Params().Len() == 1 {
+			basic, ok := types.Unalias(sig.Params().At(0).Type()).(*types.Basic)
+			if !ok || !slices.Contains([]string{abstraction.TypeString, abstraction.TypeBool, abstraction.TypeInt}, basic.Name()) {
+				return goflow.Node{}, false, fmt.Errorf("Store.%s: parameter type %s has no model type", c.Method, sig.Params().At(0).Type())
+			}
+			var err error
+			n.Expression, err = convert(call.Args[0], basic.Name())
+			return n, true, err
 		}
-		return n, true, err
+		return n, true, nil
 	}
-	p, err := goflow.Extract(source, opts)
+	p, err := goflow.ExtractTyped(l, opts)
 	if err != nil {
 		return goflow.Program{}, nil, nil, err
+	}
+	effects := map[string]bool{}
+	for _, id := range storeEffects {
+		effects[id] = true
+	}
+	results := map[string][]string{}
+	locals := map[string]bool{}
+	for _, n := range p.Nodes {
+		if !effects[n.Kind] {
+			continue
+		}
+		assigned := make([]string, 0, len(n.Results))
+		for _, r := range n.Results {
+			assigned = append(assigned, string(r))
+		}
+		if prev, seen := results[n.Kind]; seen && !slices.Equal(prev, assigned) {
+			return goflow.Program{}, nil, nil, fmt.Errorf("effect %s: its results are assigned to %v and to %v", n.Kind, prev, assigned)
+		}
+		results[n.Kind] = assigned
+		for _, name := range assigned {
+			if name != "" {
+				locals[name] = true
+			}
+		}
 	}
 	names := make([]string, 0, len(locals))
 	for name := range locals {
@@ -392,66 +418,16 @@ func extract(source []byte, state map[string]model.Variable) (goflow.Program, []
 	return *p, names, results, nil
 }
 
-// storeSignature parses controller.go for the Store interface's method
-// parameter types, as model types, and the name of Reconcile's Store
-// parameter.
-func storeSignature(source []byte) (map[string][]string, string, error) {
-	f, err := parser.ParseFile(token.NewFileSet(), "controller.go", source, 0)
-	if err != nil {
-		return nil, "", err
-	}
-	params := map[string][]string{}
-	store := ""
-	for _, d := range f.Decls {
-		switch d := d.(type) {
-		case *ast.GenDecl:
-			for _, s := range d.Specs {
-				t, ok := s.(*ast.TypeSpec)
-				if !ok || t.Name.Name != "Store" {
-					continue
-				}
-				iface, ok := t.Type.(*ast.InterfaceType)
-				if !ok {
-					return nil, "", fmt.Errorf("Store is not an interface")
-				}
-				for _, m := range iface.Methods.List {
-					fn, ok := m.Type.(*ast.FuncType)
-					if !ok || len(m.Names) != 1 {
-						return nil, "", fmt.Errorf("Store embeds an interface")
-					}
-					var types []string
-					for _, p := range fn.Params.List {
-						id, ok := p.Type.(*ast.Ident)
-						if !ok || !slices.Contains([]string{abstraction.TypeString, abstraction.TypeBool, abstraction.TypeInt}, id.Name) {
-							return nil, "", fmt.Errorf("Store.%s: parameter type %s has no model type", m.Names[0].Name, goflow.Code(p.Type))
-						}
-						for range max(1, len(p.Names)) {
-							types = append(types, id.Name)
-						}
-					}
-					params[m.Names[0].Name] = types
-				}
-			}
-		case *ast.FuncDecl:
-			if d.Recv != nil || d.Name.Name != "Reconcile" {
-				continue
-			}
-			for _, p := range d.Type.Params.List {
-				if id, ok := p.Type.(*ast.Ident); ok && id.Name == "Store" && len(p.Names) == 1 {
-					store = p.Names[0].Name
-				}
-			}
+// moduleRootOf finds the directory of the go.mod that contains dir.
+func moduleRootOf(dir string) (string, error) {
+	for d := dir; ; d = filepath.Dir(d) {
+		if _, err := os.Stat(filepath.Join(d, "go.mod")); err == nil {
+			return d, nil
+		}
+		if filepath.Dir(d) == d {
+			return "", fmt.Errorf("no go.mod above %s", dir)
 		}
 	}
-	if store == "" || len(params) == 0 {
-		return nil, "", fmt.Errorf("controller.go declares no Store interface or Reconcile(store Store)")
-	}
-	for method := range storeEffects {
-		if _, ok := params[method]; !ok {
-			return nil, "", fmt.Errorf("Store declares no method %s", method)
-		}
-	}
-	return params, store, nil
 }
 
 // LoadSources generates the model from the example directory root, with
@@ -487,7 +463,7 @@ func LoadSources(root string, source, wiring []byte) (Example, error) {
 	if err != nil {
 		return Example{}, err
 	}
-	g, err := generate(abs, source, accesses, config)
+	g, err := generate(root, abs, source, accesses, config)
 	if err != nil {
 		return Example{}, err
 	}

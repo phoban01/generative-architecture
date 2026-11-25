@@ -53,6 +53,8 @@ status:
       go: databaseName := store.DatabaseName()
       line: 33
       next: 5
+      results:
+        - databaseName
     - id: 7
       kind: branch
       go: '!instanceFound'
@@ -65,6 +67,9 @@ status:
       go: instanceFound, endpoint := store.DatabaseInstance()
       line: 31
       next: 7
+      results:
+        - instanceFound
+        - endpoint
     - id: 9
       kind: return
       go: return "unsupported"
@@ -85,6 +90,8 @@ status:
       go: compatible := store.SatisfiesProvisioningContract()
       line: 27
       next: 10
+      results:
+        - compatible
     - id: 12
       kind: return
       go: return "absent"
@@ -105,5 +112,7 @@ status:
       go: found := store.DatabaseExists()
       line: 23
       next: 13
+      results:
+        - found
   sourceSha256: 1d4e783753fb1c7aabe902911e6b800e1281e87cbfb499ab122db776228fddf4
   methodSha256: 29314df3f4be05226824aa4dfe9ac6e3da80c02eefcfa341e435ec584ba5b3bf

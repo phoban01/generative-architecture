@@ -62,10 +62,11 @@ spec:
       find: if !instanceFound {
       replace: if !instanceFound || endpoint == "" {
       expect: [atMostOneInstance]
-    # The controller waits without creating the instance it waits for.
+    # The controller waits without creating the instance it waits for. The
+    # read of the name goes with the create, so the mutant still type-checks.
     - name: missing-create
       file: controller.go
-      find: store.CreateDatabaseInstance(databaseName)
+      find: "databaseName := store.DatabaseName()\n\t\tstore.CreateDatabaseInstance(databaseName)"
       replace: ""
       expect: [waitingHasAInstance]
     # A generation filter on the Database drops the status update the
@@ -81,6 +82,6 @@ spec:
     # The instance references a Database other than the one it serves.
     - name: wrong-database-name
       file: controller.go
-      find: store.CreateDatabaseInstance(databaseName)
+      find: "databaseName := store.DatabaseName()\n\t\tstore.CreateDatabaseInstance(databaseName)"
       replace: store.CreateDatabaseInstance("db-2")
       expect: [instanceReferencesItsDatabase]
