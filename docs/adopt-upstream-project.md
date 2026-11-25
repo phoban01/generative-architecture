@@ -307,12 +307,15 @@ spec:
   components:
     - name: flux
       boundary: boundaries/flux/kustomization.yaml
+      applies:
+        applied:
+          - {group: "", version: v1, kind: ConfigMap}
     - name: consumer
       model: consumer.yaml
       ports:
         manifests:
           state: manifests
-          contract: kustomize.toolkit.fluxcd.io/applied
+          contract: 'resource:/v1/ConfigMap'
           version: v1
           direction: in
         kustomization:
@@ -355,6 +358,13 @@ Load it from the directory that holds `system.yaml`, `consumer.yaml` and
 ```go
 loaded, err := composition.Load(".", "system.yaml")
 ```
+
+The Kustomization's `applied` port carries an authored contract, because
+the kinds it applies depend on the manifests. `applies` names them per
+system: each kind becomes an assumed server-side apply effect of the
+boundary and a resource out port on the same state, so the applied objects
+join by resource like any derived port. The consumer binds its `manifests`
+port to the ConfigMap resource contract.
 
 `autoLink: true` binds each input port to the one output with the same
 contract and version. A resource port's contract is

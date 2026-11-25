@@ -43,6 +43,13 @@ type ComponentRef struct {
 	Controller string          `yaml:"controller,omitempty"`
 	Cluster    ir.ClusterID    `yaml:"cluster,omitempty"`
 	Ports      map[string]Port `yaml:"ports,omitempty"`
+	// Applies names, per out port of a boundary with an authored contract,
+	// the kinds the upstream project applies in this system. The kinds of
+	// an applied manifest depend on its content, so the boundary cannot
+	// name them. Each kind becomes an assumed server-side apply effect of
+	// the component and a derived resource out port on the same state, so
+	// the applied objects join by resource.
+	Applies map[string][]ir.GVK `yaml:"applies,omitempty"`
 }
 type Document struct {
 	Name       string             `yaml:"name"`
@@ -134,6 +141,9 @@ func Load(root, path string) (Loaded, error) {
 		at := fmt.Sprintf("%s: spec.components[%d] (%s)", full, i, ref.Name)
 		if ref.Cluster != "" {
 			cluster[ref.Name] = ref.Cluster
+		}
+		if len(ref.Applies) > 0 && ref.Boundary == "" {
+			return out, fmt.Errorf("%s: applies: only a boundary component applies kinds", at)
 		}
 		if ref.Boundary != "" {
 			if ref.IR != "" {
@@ -304,7 +314,8 @@ func weakest(a, b ir.Evidence) ir.Evidence {
 // model is the boundary's TransitionModel fragment. A boundary never
 // contributes an extracted process. Its ports, watches and effects are
 // assumed. A resource port gets the resource contract of its GVK, so it joins
-// like a derived port. loadBoundary returns every file it read.
+// like a derived port. The kinds ref.Applies names become apply effects and
+// resource out ports. loadBoundary returns every file it read.
 func loadBoundary(dir string, ref ComponentRef) (Component, []string, error) {
 	if ref.Model != "" {
 		return Component{}, nil, fmt.Errorf("model and boundary are exclusive; the boundary names its model")
@@ -332,10 +343,49 @@ func loadBoundary(dir string, ref ComponentRef) (Component, []string, error) {
 		}
 		c.Ports[name] = port
 	}
+	if err := applyKinds(&c, b, ref.Applies); err != nil {
+		return Component{}, nil, err
+	}
 	files := make([]string, 0, len(b.Files))
 	for f := range b.Files {
 		files = append(files, f)
 	}
 	sort.Strings(files)
 	return c, files, nil
+}
+
+// applyKinds adds, for each kind applies names under an authored out port
+// of the boundary, an assumed server-side apply effect and a resource out
+// port on the same state, marked Creator so the ownership rule applies.
+func applyKinds(c *Component, b boundary.Boundary, applies map[string][]ir.GVK) error {
+	names := make([]string, 0, len(applies))
+	for name := range applies {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		p, ok := b.Spec.Ports[name]
+		if !ok {
+			return fmt.Errorf("applies.%s: the boundary has no port %s", name, name)
+		}
+		if p.Direction != "out" || p.Resource != nil {
+			return fmt.Errorf("applies.%s: applies names the kinds behind an out port with an authored contract; port %s is %s with contract %s", name, name, p.Direction, c.Ports[name].Contract)
+		}
+		for _, g := range applies[name] {
+			if g.Version == "" || g.Kind == "" {
+				return fmt.Errorf("applies.%s: a kind needs version and kind, got %+v", name, g)
+			}
+			portID := portName(g)
+			if _, taken := c.Ports[portID]; taken {
+				return fmt.Errorf("applies.%s: port %s exists", name, portID)
+			}
+			effect := ir.Effect{ID: name + g.Kind, Kind: ir.KindAPI, Actor: c.Name, Cluster: b.Spec.Cluster, Resource: g, Operation: ir.OpApply, Consistency: ir.ConsistencyDirect, Evidence: ir.Assumed, Provenance: b.Provenance()}
+			if err := effect.Validate(); err != nil {
+				return fmt.Errorf("applies.%s: %w", name, err)
+			}
+			c.Effects = append(c.Effects, effect)
+			c.Ports[portID] = Port{State: p.State, Contract: ResourceContract(g), Version: ResourceContractVersion, Direction: "out", Creator: true, Evidence: ir.Assumed, Provenance: []ir.Provenance{b.Provenance()}}
+		}
+	}
+	return nil
 }

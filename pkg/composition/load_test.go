@@ -353,3 +353,61 @@ func TestLoadDerivesPortsFromIR(t *testing.T) {
 		})
 	}
 }
+
+// A boundary whose out port carries an authored contract, because the
+// kinds it applies depend on the manifests, takes the kinds from the
+// system document: each becomes an assumed apply effect and a resource out
+// port on the port's state, so the applied objects join by resource.
+func TestLoadBoundaryApplies(t *testing.T) {
+	authored := strings.Replace(publisherBoundary, "      resource: {group: example.org, version: v1, kind: Output}\n", "      contract: example.org/published\n      version: v1\n", 1)
+	if authored == publisherBoundary {
+		t.Fatal("the publisher boundary did not change")
+	}
+	applied := strings.Replace(system, "    boundary: boundary.yaml\n", "    boundary: boundary.yaml\n    applies:\n      output:\n        - {group: example.org, version: v1, kind: Output}\n", 1)
+	for _, tc := range []struct {
+		name, system, boundary, err string
+	}{
+		{name: "the applied kind joins by resource", system: applied, boundary: authored},
+		{name: "a model component applies nothing", system: strings.Replace(system, "    model: consumer.yaml\n", "    model: consumer.yaml\n    applies: {outputs: [{group: example.org, version: v1, kind: Output}]}\n", 1), boundary: publisherBoundary, err: "(consumer): applies: only a boundary component applies kinds"},
+		{name: "the port must exist", system: strings.Replace(applied, "      output:\n", "      results:\n", 1), boundary: authored, err: "applies.results: the boundary has no port results"},
+		{name: "the port must carry an authored contract", system: applied, boundary: publisherBoundary, err: "applies.output: applies names the kinds behind an out port with an authored contract"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			for name, body := range map[string]string{"system.yaml": tc.system, "boundary.yaml": tc.boundary, "publisher-model.yaml": publisherModel, "consumer.yaml": consumerModel} {
+				if err := os.WriteFile(filepath.Join(root, name), []byte(body), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			loaded, err := composition.Load(root, "system.yaml")
+			if tc.err != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.err) {
+					t.Fatalf("got %v, want error containing %q", err, tc.err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			publisher := loaded.Components[0]
+			port, ok := publisher.Ports["output_v1_example_org"]
+			if !ok || port.State != "published" || port.Contract != "resource:example.org/v1/Output" || port.Direction != "out" || !port.Creator || port.Evidence != ir.Assumed {
+				t.Fatalf("derived port %+v (%v)", port, ok)
+			}
+			if len(publisher.Effects) != 2 {
+				t.Fatalf("effects %+v", publisher.Effects)
+			}
+			e := publisher.Effects[1]
+			if e.ID != "outputOutput" || e.Operation != ir.OpApply || e.Evidence != ir.Assumed || e.Actor != "publisher" || e.Resource.Kind != "Output" {
+				t.Fatalf("apply effect %+v", e)
+			}
+			if got := loaded.Result.StateNames["consumer.outputs"]; got != "publisher_published" {
+				t.Errorf("autoLink did not bind the applied kind: consumer.outputs -> %s", got)
+			}
+			links, diags, err := composition.JoinByResource(loaded.Components, nil, nil)
+			if err != nil || len(diags) != 0 || len(links) != 1 || links[0].From != "publisher.output_v1_example_org" || links[0].To != "consumer.outputs" {
+				t.Errorf("join by resource: %v %v %v", links, diags, err)
+			}
+		})
+	}
+}
