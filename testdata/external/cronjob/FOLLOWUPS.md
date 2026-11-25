@@ -36,7 +36,7 @@ Line numbers refer to `internal/controller/cronjob_controller.go` at the pin.
 Each draft names the construct, the location, the diagnostic and the
 smallest extension that would support it.
 
-### 1. Setup preamble: default value for a receiver field
+### 1. Setup preamble: default value for a receiver field (closed by #143)
 
 - Construct: `if r.Clock == nil { r.Clock = realClock{} }` before the
   builder chain.
@@ -50,8 +50,12 @@ smallest extension that would support it.
   summarized `setup` item ("receiver default; no watch effect"). Change the
   reason to "unsupported setup preamble statement; only unstructured object
   declarations are supported".
+- Resolution: since #143, `watchgen` summarizes `if r.F == nil { r.F = <literal> }`
+  as a `setup` item ("receiver default; no watch effect") and reports every
+  other preamble statement as "unsupported setup preamble statement; only
+  unstructured object declarations are supported".
 
-### 2. Setup preamble: field index registration
+### 2. Setup preamble: field index registration (closed by #154)
 
 - Construct:
   `if err := mgr.GetFieldIndexer().IndexField(context.Background(), &kbatch.Job{}, jobOwnerKey, func(...) []string {...}); err != nil { return err }`.
@@ -63,6 +67,9 @@ smallest extension that would support it.
 - Smallest extension: recognize this exact `IndexField` form with a
   `&T{}` object and a constant key. Record a summarized `index` item with
   the resource and the key. Keep the extractor function summarized.
+- Resolution: since #154, `watchgen` summarizes the `IndexField` call with an
+  empty object literal and a constant key as an `index` item that names the
+  resource and the key; the extractor function stays unmodelled.
 
 ### 3. Extraction stops at the first diagnostic (closed by #156)
 

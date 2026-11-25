@@ -9,7 +9,29 @@ status:
       location:
         file: internal/controller/cronjob_controller.go
         line: 49
-  summarized: []
+    - kind: watch
+      construct: tutorial.kubebuilder.io/project/internal/controller.CronJobReconciler watches batch.tutorial.kubebuilder.io/v1/CronJob
+      location:
+        file: internal/controller/cronjob_controller.go
+        line: 576
+    - kind: watch
+      construct: tutorial.kubebuilder.io/project/internal/controller.CronJobReconciler watches batch/v1/Job
+      location:
+        file: internal/controller/cronjob_controller.go
+        line: 577
+  summarized:
+    - kind: setup
+      construct: r.Clock default
+      reason: receiver default; no watch effect
+      location:
+        file: internal/controller/cronjob_controller.go
+        line: 553
+    - kind: index
+      construct: index k8s.io/api/batch/v1.Job by jobOwnerKey
+      reason: field index registration; the extractor function is not modelled
+      location:
+        file: internal/controller/cronjob_controller.go
+        line: 557
   unsupported:
     - kind: declaration
       construct: |-
@@ -309,34 +331,6 @@ status:
       location:
         file: internal/controller/cronjob_controller.go
         line: 504
-    - kind: preamble
-      construct: |-
-        if r.Clock == nil {
-        	r.Clock = realClock{}
-        }
-      reason: expected an unstructured object declaration
-      location:
-        file: internal/controller/cronjob_controller.go
-        line: 553
-    - kind: preamble
-      construct: |-
-        if err := mgr.GetFieldIndexer().IndexField(context.Background(), &kbatch.Job{}, jobOwnerKey, func(rawObj client.Object) []string {
-        	job := rawObj.(*kbatch.Job)
-        	owner := metav1.GetControllerOf(job)
-        	if owner == nil {
-        		return nil
-        	}
-        	if owner.APIVersion != apiGVStr || owner.Kind != "CronJob" {
-        		return nil
-        	}
-        	return []string{owner.Name}
-        }); err != nil {
-        	return err
-        }
-      reason: expected an unstructured object declaration
-      location:
-        file: internal/controller/cronjob_controller.go
-        line: 557
   unresolved:
     - kind: field
       construct: cronJob.spec.concurrencyPolicy

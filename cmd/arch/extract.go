@@ -129,7 +129,7 @@ func extractController(p project.Project, c ir.Controller, cat *catalog.Catalog,
 	} else if setup, ok := sibling(l, c.Receiver, "SetupWithManager"); !ok {
 		support.Unsupported = append(support.Unsupported, report.Item{Kind: "setup", Construct: c.ID, Reason: "SetupWithManager is not declared in the package of Reconcile", Location: loc})
 	} else {
-		watches, err := extractWatches(setup, c, cat)
+		watches, setupItems, err := extractWatches(setup, c, cat)
 		if ds, ok := goflow.AsDiagnostics(err); ok {
 			for _, d := range ds {
 				d.File = relative(p.Root, d.File)
@@ -137,6 +137,9 @@ func extractController(p project.Project, c ir.Controller, cat *catalog.Catalog,
 			}
 		} else if err != nil {
 			return err
+		}
+		for _, s := range setupItems {
+			support.Summarized = append(support.Summarized, report.Item{Kind: s.Kind, Construct: s.Construct, Reason: s.Reason, Location: report.Location{File: relative(p.Root, s.File), Line: s.Line}})
 		}
 		for _, w := range watches {
 			support.Included = append(support.Included, report.Item{Kind: "watch", Construct: c.ID + " watches " + w.Resource.String(), Location: report.Location{File: w.Provenance.Source.File, Line: w.Provenance.Source.Line}})
@@ -155,16 +158,16 @@ func extractController(p project.Project, c ir.Controller, cat *catalog.Catalog,
 
 // extractWatches converts the builder chain of a loaded SetupWithManager
 // into IR watches.
-func extractWatches(l goflow.Loaded, c ir.Controller, cat *catalog.Catalog) ([]ir.Watch, error) {
+func extractWatches(l goflow.Loaded, c ir.Controller, cat *catalog.Catalog) ([]ir.Watch, []watchgen.Summary, error) {
 	resources, err := watchedResources(l, cat)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	result, err := watchgen.ExtractLoaded(l, resources, nil)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return result.IR(c.ID, c.Setup.File), nil
+	return result.IR(c.ID, c.Setup.File), result.Setup, nil
 }
 
 // watchedResources maps each named type of a composite literal in the setup

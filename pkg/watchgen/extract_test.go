@@ -403,9 +403,10 @@ func TestNamedRecordsControllerName(t *testing.T) {
 }
 
 // TestPreambleReportsEveryUnsupportedStatement checks that the setup
-// preamble check goes on past an unsupported statement. A receiver default
-// before the object declaration and a field index after it give one
-// diagnostic each, and the declaration between them is still read.
+// preamble check goes on past an unsupported statement and summarizes the
+// statements it recognises. A receiver default before the object
+// declaration is summarized; a field index with a nil object after it is a
+// diagnostic; the declaration between them is still read.
 func TestPreambleReportsEveryUnsupportedStatement(t *testing.T) {
 	source, resources := fixture(t)
 	changed := strings.Replace(string(source), "\tdatabase := &unstructured.Unstructured{}",
@@ -414,12 +415,37 @@ func TestPreambleReportsEveryUnsupportedStatement(t *testing.T) {
 		"\tif err := mgr.GetFieldIndexer().IndexField(nil, nil, \"key\", nil); err != nil {\n\t\treturn err\n\t}\n\treturn ctrl.NewControllerManagedBy(mgr).", 1)
 	_, err := watchgen.Extract([]byte(changed), "DatabaseReconciler", "SetupWithManager", resources)
 	ds, ok := goflow.AsDiagnostics(err)
-	if !ok || len(ds) != 2 {
-		t.Fatalf("want two diagnostics, got %v", err)
+	if !ok || len(ds) != 1 {
+		t.Fatalf("want one diagnostic, got %v", err)
 	}
-	for i, want := range []int{27, 32} {
-		if ds[i].Construct != "preamble" || ds[i].Line != want {
-			t.Fatalf("diagnostic %d: %+v, want preamble at line %d", i, ds[i], want)
-		}
+	if ds[0].Construct != "preamble" || ds[0].Line != 32 || !strings.Contains(ds[0].Reason, "only unstructured object declarations are supported") {
+		t.Fatalf("diagnostic %+v, want the index with a nil object at line 32", ds[0])
+	}
+}
+
+// TestPreambleSummarizesSetupStatements checks that a receiver default and
+// a field index registration with an empty object literal and a constant
+// key are summarized, not unsupported, and that the watches still extract.
+func TestPreambleSummarizesSetupStatements(t *testing.T) {
+	source, resources := fixture(t)
+	changed := strings.Replace(string(source), "\tdatabase := &unstructured.Unstructured{}",
+		"\tif r.Clock == nil {\n\t\tr.Clock = realClock{}\n\t}\n\tdatabase := &unstructured.Unstructured{}", 1)
+	changed = strings.Replace(changed, "\treturn ctrl.NewControllerManagedBy(mgr).",
+		"\tif err := mgr.GetFieldIndexer().IndexField(context.Background(), &apiv1.DatabaseInstance{}, ownerKey, func(o client.Object) []string { return nil }); err != nil {\n\t\treturn err\n\t}\n\treturn ctrl.NewControllerManagedBy(mgr).", 1)
+	result, err := watchgen.Extract([]byte(changed), "DatabaseReconciler", "SetupWithManager", resources)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Rules) == 0 {
+		t.Fatal("the watches were not extracted past the summarized statements")
+	}
+	if len(result.Setup) != 2 {
+		t.Fatalf("setup summaries %+v, want two", result.Setup)
+	}
+	if s := result.Setup[0]; s.Kind != "setup" || s.Construct != "r.Clock default" || s.Line != 27 || !strings.Contains(s.Reason, "no watch effect") {
+		t.Fatalf("receiver default %+v", s)
+	}
+	if s := result.Setup[1]; s.Kind != "index" || s.Construct != "index github.com/phoban01/generative-architecture/examples/database/api/v1alpha1.DatabaseInstance by ownerKey" || s.Line != 32 {
+		t.Fatalf("field index %+v", s)
 	}
 }

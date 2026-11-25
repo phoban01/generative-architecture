@@ -42,6 +42,9 @@ type Result struct {
 	Options      map[string]string `yaml:"options,omitempty"`
 	SourceSHA256 string            `yaml:"sourceSha256"`
 	MethodSHA256 string            `yaml:"methodSha256"`
+	// Setup lists the preamble statements the frontend summarized: receiver
+	// defaults and field index registrations, which have no watch effect.
+	Setup []Summary `yaml:"setup,omitempty"`
 }
 
 // Extract reads a single fluent builder return and supported local field-reference
@@ -161,10 +164,11 @@ func extract(fs *token.FileSet, f *ast.File, fn *ast.FuncDecl, source []byte, re
 		id, ok := e.(*ast.Ident)
 		return ok && id.Name == name && name != "_"
 	}
-	objects, err := unstructuredObjects(fs, fn.Body.List[:len(fn.Body.List)-1], qualified, bindings)
+	objects, summaries, err := unstructuredObjects(fs, fn.Body.List[:len(fn.Body.List)-1], qualified, bindings, receiverName, managerName)
 	if err != nil {
 		return out, err
 	}
+	out.Setup = summaries
 	usedObjects := map[string]bool{}
 	resource := func(e ast.Expr) (string, effect.Resource, error) {
 		if id, ok := e.(*ast.Ident); ok {
