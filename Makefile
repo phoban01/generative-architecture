@@ -68,13 +68,18 @@ verify:
 	go test -p 2 ./...
 	$(MAKE) consumer-test
 
-# Build the sample controller's diagrams into site/. Requires LikeC4 1.59.x (LIKEC4_BIN).
-LIKEC4 ?= $(or $(LIKEC4_BIN),likec4)
+# Build the ConfigMirror sample's diagrams into site/ through arch: extract
+# and generate into ARCH_OUT, then render. Requires LikeC4 1.59.x
+# (LIKEC4_BIN). serve serves the built site on localhost.
+ARCH_OUT ?= /tmp/configmirror
+ARCH_PROJECT ?= examples/configmirror/project.yaml
 render:
-	$(LIKEC4) build examples/database/generated -o site --base ./ --output-single-file
+	go run ./cmd/arch --project $(ARCH_PROJECT) --out $(ARCH_OUT) extract
+	go run ./cmd/arch --project $(ARCH_PROJECT) --out $(ARCH_OUT) generate
+	go run ./cmd/arch --project $(ARCH_PROJECT) --out $(ARCH_OUT) render --site site
 
 serve:
-	$(LIKEC4) start examples/database/generated
+	go run ./cmd/arch --project $(ARCH_PROJECT) --out $(ARCH_OUT) serve --site site
 
 build:
 	go build -o bin/arch ./cmd/arch

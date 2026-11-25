@@ -131,8 +131,8 @@ The `architecture` job in `ci.yml` runs the workflow on ConfigMirror with tools 
 ## Diagrams and binaries
 
 ```sh
-make render           # builds site/ from examples/database/generated
-make serve            # likec4 start on the same directory
+make render           # arch extract, generate and render on ConfigMirror; builds site/
+make serve            # arch serve on the built site
 ```
 
 The generated LikeC4 sources cover the extracted reconcile flow, the watch routes into the queue, the resource dependencies and the dynamic-client accesses. `make build` creates the native executables under `bin/`. Binaries and the rendered `site/` are local build outputs, excluded by `.gitignore`.
