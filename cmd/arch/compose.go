@@ -169,7 +169,7 @@ func (c controllerModel) build() (model.Spec, []effect.Descriptor, error) {
 		reset[l.Name] = state[l.Name].Initial
 	}
 
-	spec, err := process.Expand(model.Spec{Name: c.name, State: state, Effects: effects}, c.program, process.Config{
+	spec, err := process.Expand(model.Spec{Name: c.name, State: state, Effects: effects, Domains: c.abs.Spec.Populations()}, c.program, process.Config{
 		PC: pcVariable, Finished: finishedVariable, Outcome: outcomeVariable, Results: []string{"", failedVariable}, Summaries: summaries.Builtin(),
 	})
 	if err != nil {

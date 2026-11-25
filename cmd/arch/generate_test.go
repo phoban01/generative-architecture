@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -237,5 +238,25 @@ func TestGenerateValidatesTemporal(t *testing.T) {
 	want := "bad-temporal-constraints.yaml: temporal reachesMissing: eventually: line 1, column 1: unknown CEL symbol missing"
 	if err == nil || !strings.Contains(err.Error(), want) {
 		t.Fatalf("got %v, want %q", err, want)
+	}
+}
+
+// The generated model declares one domain per resource with the IDs of its
+// declared objects, so a constraint can quantify over the population.
+func TestGenerateDeclaresPopulations(t *testing.T) {
+	out, err := generateTo(t, configMirror)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var spec model.Spec
+	if _, err := krm.Read(filepath.Join(out, specFile), "TransitionModel", &spec); err != nil {
+		t.Fatal(err)
+	}
+	if got := spec.Domains["ConfigMap_objects"]; !reflect.DeepEqual(got, []string{"source", "copy"}) {
+		t.Fatalf("ConfigMap_objects = %v, want the declared object IDs", got)
+	}
+	spec.Properties = append(spec.Properties, model.Property{Name: "namedObjects", Expression: `ConfigMap_objects.all(o, o != "")`})
+	if _, err := model.Compile(spec); err != nil {
+		t.Fatalf("a quantifier over the population does not compile: %v", err)
 	}
 }

@@ -4,6 +4,10 @@ metadata:
   name: config-mirror
 spec:
   name: ConfigMirror
+  domains:
+    ConfigMap_objects:
+      - source
+      - copy
   state:
     ConfigMap_copy_data_value:
       type: string

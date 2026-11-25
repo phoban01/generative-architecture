@@ -487,7 +487,7 @@ func compose(abs abstraction.Abstraction, program goflow.Program, constraints []
 		reset[l.Name] = state[l.Name].Initial
 	}
 
-	spec, err := process.Expand(model.Spec{Name: "ConfigMirror", State: state, Effects: effects}, program, process.Config{
+	spec, err := process.Expand(model.Spec{Name: "ConfigMirror", State: state, Effects: effects, Domains: abs.Spec.Populations()}, program, process.Config{
 		PC: pcVariable, Finished: finishedVariable, Outcome: outcomeVariable, Results: []string{"", failedVariable}, Summaries: summaries.Builtin(),
 	})
 	if err != nil {

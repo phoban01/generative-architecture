@@ -413,3 +413,24 @@ func (a Abstraction) SortedVariables() []string {
 	sort.Strings(names)
 	return names
 }
+
+// PopulationDomain names the model domain that holds the object IDs of the
+// resource of kind: the population a constraint quantifies over with all()
+// and exists().
+func PopulationDomain(kind string) string { return kind + "_objects" }
+
+// Populations returns one domain per resource, named by PopulationDomain,
+// whose values are the IDs of the declared objects in declaration order.
+// Generators declare them on the model so constraints can quantify over a
+// bounded population.
+func (s Spec) Populations() map[string][]string {
+	out := map[string][]string{}
+	for _, r := range s.Resources {
+		ids := make([]string, 0, len(r.Objects))
+		for _, o := range r.Objects {
+			ids = append(ids, o.ID)
+		}
+		out[PopulationDomain(r.GVK.Kind)] = ids
+	}
+	return out
+}

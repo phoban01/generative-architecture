@@ -1,5 +1,6 @@
 // Generated from a typed TransitionModel; declared semantics, not inferred intent.
 module ConfigMirror {
+ pure val ConfigMap_objects: Set[str] = Set("source", "copy")
  var ConfigMap_copy_data_value: str
  var ConfigMap_copy_exists: bool
  var ConfigMap_copy_metadata_resourceVersion: int

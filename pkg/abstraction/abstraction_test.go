@@ -1,6 +1,7 @@
 package abstraction
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
@@ -147,5 +148,17 @@ func TestAnnotationPredicateField(t *testing.T) {
 func TestLoadRejectsWrongKind(t *testing.T) {
 	if _, err := Load("../../examples/database/constraints.yaml"); err == nil {
 		t.Fatal("ModelConstraints accepted as Abstraction")
+	}
+}
+
+func TestPopulations(t *testing.T) {
+	s := Spec{Resources: []Resource{
+		{GVK: ir.GVK{Version: "v1", Kind: "ConfigMap"}, Objects: []Object{{ID: "source"}, {ID: "copy"}}},
+		{GVK: ir.GVK{Group: "demo", Version: "v1", Kind: "Database"}, Objects: []Object{{ID: "db1"}}},
+	}}
+	got := s.Populations()
+	want := map[string][]string{"ConfigMap_objects": {"source", "copy"}, "Database_objects": {"db1"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("Populations() = %v, want %v", got, want)
 	}
 }
