@@ -98,6 +98,9 @@ type extraction struct {
 	locals   map[string]abstraction.Resource // Go object local -> its resource
 	resource map[ir.GVK]abstraction.Resource
 	pkg      *packages.Package // the package of Reconcile, for group-version lookups
+	// goTypes records the Go type of each resource the reconciler holds in
+	// a local, for the replay adapter's scheme.
+	goTypes map[ir.GVK]goType
 }
 
 // localVariable is the model variable holding the selected field f of a Go
@@ -120,7 +123,7 @@ func extractOptions(l goflow.Loaded, abs abstraction.Abstraction, decl project.C
 	if err != nil {
 		return nil, goflow.Options{}, err
 	}
-	x := &extraction{decl: decl, effects: effects, keys: map[string]string{requestKey: decl.Key}, cat: cat, info: l.Package.TypesInfo, body: l.Func.Body, locals: map[string]abstraction.Resource{}, resource: map[ir.GVK]abstraction.Resource{}, pkg: l.Package}
+	x := &extraction{decl: decl, effects: effects, keys: map[string]string{requestKey: decl.Key}, cat: cat, info: l.Package.TypesInfo, body: l.Func.Body, locals: map[string]abstraction.Resource{}, resource: map[ir.GVK]abstraction.Resource{}, pkg: l.Package, goTypes: map[ir.GVK]goType{}}
 	for symbol, object := range decl.ObjectKeys {
 		x.keys[symbol] = object
 	}
@@ -155,6 +158,9 @@ func extractOptions(l goflow.Loaded, abs abstraction.Abstraction, decl project.C
 			return false
 		}
 		x.locals[id.Name] = r
+		if t, ok := namedType(obj.Type()); ok {
+			x.goTypes[gvk] = t
+		}
 		for _, f := range r.Fields {
 			v := x.localVariable(id.Name, f)
 			scope[v] = expr.Symbol{Type: f.Type, Quint: v}
@@ -572,4 +578,41 @@ func effectFor(declared []clientEffect, kind string) (clientEffect, bool) {
 		}
 	}
 	return any, found
+}
+
+// goType is a Go type by import path and name.
+type goType struct{ pkg, name string }
+
+// namedType returns the named type behind t, or the pointer to one.
+func namedType(t types.Type) (goType, bool) {
+	t = types.Unalias(t)
+	if p, ok := t.(*types.Pointer); ok {
+		t = types.Unalias(p.Elem())
+	}
+	n, ok := t.(*types.Named)
+	if !ok || n.Obj().Pkg() == nil {
+		return goType{}, false
+	}
+	return goType{pkg: n.Obj().Pkg().Path(), name: n.Obj().Name()}, true
+}
+
+// receiverFields lists the exported struct fields of the reconciler's
+// receiver type by name and fully qualified type, for the replay adapter.
+func receiverFields(l goflow.Loaded, receiver string) []ir.Field {
+	obj := l.Package.Types.Scope().Lookup(receiver)
+	if obj == nil {
+		return nil
+	}
+	st, ok := types.Unalias(obj.Type().Underlying()).(*types.Struct)
+	if !ok {
+		return nil
+	}
+	var out []ir.Field
+	for i := 0; i < st.NumFields(); i++ {
+		f := st.Field(i)
+		if f.Exported() {
+			out = append(out, ir.Field{Name: f.Name(), Type: types.TypeString(types.Unalias(f.Type()), nil)})
+		}
+	}
+	return out
 }

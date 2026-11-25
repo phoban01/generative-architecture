@@ -257,7 +257,7 @@ func TestOwnedProjectGuideWalk(t *testing.T) {
 	} else {
 		for _, c := range []struct{ command, want string }{
 			{"check", "check passed (inventory mode): 40 traces, 2400 transitions, 0 findings"},
-			{"replay", "replay incomplete (inventory mode): 40 traces, 2400 transitions, 1 findings, 1 unsupported"},
+			{"replay", "replay passed (inventory mode): 40 traces, 2400 transitions, 0 findings"},
 		} {
 			stdout, stderr, err := w.arch(cm + c.command)
 			if err != nil || !strings.Contains(stdout+stderr, c.want) {

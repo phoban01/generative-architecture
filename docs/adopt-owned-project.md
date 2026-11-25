@@ -335,12 +335,13 @@ arch --project examples/configmirror/project.yaml --out /tmp/configmirror render
   check passed (inventory mode): 40 traces, 2400 transitions, 0 findings
   ```
 
-- `arch replay` replays the traces against the model and writes
-  `replay.yaml`. arch has no replay adapter yet, so replay reports one
-  unsupported finding in every run:
+- `arch replay` replays the traces against the model and, through the
+  adapter `arch generate` wrote under `adapter/`, through the
+  implementation: it builds the adapter in your module with a build
+  overlay and runs it over the traces. It writes `replay.yaml`:
 
   ```text
-  replay incomplete (inventory mode): 40 traces, 2400 transitions, 1 findings, 1 unsupported
+  replay passed (inventory mode): 40 traces, 2400 transitions, 0 findings
   ```
 
 - `arch render` builds the LikeC4 site into `site/` under `--out`.

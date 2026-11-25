@@ -78,6 +78,12 @@ type controllerOutput struct {
 	profile    cr.GroupProfile
 	process    ir.Process
 	irEffects  []ir.Effect
+	// program, goTypes and fields feed the replay adapter: the extracted
+	// program with its bindings, the Go type of each resource and the
+	// receiver's exported fields.
+	program goflow.Program
+	goTypes map[ir.GVK]goType
+	fields  []ir.Field
 }
 
 // name is the controller's name in the runtime model and in the composed
@@ -102,8 +108,12 @@ func runGenerate(g globals, args []string) error {
 	if err != nil {
 		return fmt.Errorf("arch generate: %w", err)
 	}
-	if err := gen.write(g.out); err != nil {
+	reason, err := gen.write(g.out)
+	if err != nil {
 		return fmt.Errorf("arch generate: %w", err)
+	}
+	if reason != "" {
+		fmt.Fprintf(g.stdout, "no replay adapter: %s\n", reason)
 	}
 	if gen.spec == nil {
 		fmt.Fprintf(g.stdout, "no controllers in %s: wrote the workspace and receipt, no model\n", filepath.Join(g.out, irFile))
@@ -196,7 +206,7 @@ func generateController(projectPath string, p project.Project, c ir.Controller, 
 	if err != nil {
 		return controllerOutput{}, fmt.Errorf("controller %s: %w", c.ID, err)
 	}
-	_, opts, err := extractOptions(l, abs, decl, cat)
+	x, opts, err := extractOptions(l, abs, decl, cat)
 	if err != nil {
 		return controllerOutput{}, located(p.Root, err)
 	}
@@ -209,7 +219,7 @@ func generateController(projectPath string, p project.Project, c ir.Controller, 
 	if err != nil {
 		return controllerOutput{}, fmt.Errorf("controller %s: %w", c.ID, err)
 	}
-	out := controllerOutput{controller: c, decl: decl, spec: spec, effects: effects}
+	out := controllerOutput{controller: c, decl: decl, spec: spec, effects: effects, program: *program, goTypes: x.goTypes, fields: receiverFields(l, c.Receiver)}
 	if out.profile, err = cm.profile(); err != nil {
 		return controllerOutput{}, err
 	}
@@ -398,67 +408,78 @@ func (gen generated) processFileOf(o controllerOutput) string {
 
 // write stores the outputs under out. Without a model it removes stale
 // model files, so the directory matches the IR.
-func (gen generated) write(out string) error {
+func (gen generated) write(out string) (adapterReason string, err error) {
 	if gen.spec != nil {
 		m, err := model.Compile(*gen.spec)
 		if err != nil {
-			return err
+			return "", err
 		}
 		if err := krm.Write(filepath.Join(out, specFile), "TransitionModel", gen.project.Name, *gen.spec); err != nil {
-			return err
+			return "", err
 		}
 		// A process document of an earlier run is stale.
 		stale, _ := filepath.Glob(filepath.Join(out, "process*.yaml"))
 		for _, f := range stale {
 			if err := os.Remove(f); err != nil {
-				return err
+				return "", err
 			}
 		}
 		for _, o := range gen.controllers {
 			if err := krm.WriteResult(filepath.Join(out, gen.processFileOf(o)), processKind, gen.project.Name, o.process); err != nil {
-				return err
+				return "", err
 			}
 		}
 		if err := os.WriteFile(filepath.Join(out, modelFile), []byte(m.Quint()), 0o644); err != nil {
-			return err
+			return "", err
 		}
 	} else {
 		for _, f := range []string{specFile, modelFile, processFile} {
 			if err := os.Remove(filepath.Join(out, f)); err != nil && !errors.Is(err, os.ErrNotExist) {
-				return err
+				return "", err
 			}
 		}
 	}
 	w, err := gen.workspace()
 	if err != nil {
-		return err
+		return "", err
 	}
 	if gen.project.Spec.ViewHints != "" {
 		// Presentation hints change titles, groups and layouts only; a
 		// hint that names an unknown element or view fails generation.
 		hints, err := likec4.LoadHints(filepath.Join(gen.project.Dir, gen.project.Spec.ViewHints))
 		if err != nil {
-			return err
+			return "", err
 		}
 		if err := likec4.Apply(&w, hints); err != nil {
-			return err
+			return "", err
 		}
 	}
 	if err := w.Write(filepath.Join(out, likec4Dir)); err != nil {
-		return err
+		return "", err
+	}
+	adapterFiles, adapterReason, err := gen.writeAdapter(out)
+	if err != nil {
+		return "", err
 	}
 	composed, err := gen.writeComposition(out)
 	if err != nil {
-		return err
+		return "", err
 	}
 	r, err := gen.receipt()
 	if err != nil {
-		return err
+		return "", err
 	}
 	if composed != nil {
 		r.Generated = append(r.Generated, *composed)
 	}
-	return r.write(filepath.Join(out, receiptsFile), gen.project.Name)
+	for _, name := range adapterFiles {
+		b, err := os.ReadFile(filepath.Join(out, name))
+		if err != nil {
+			return "", err
+		}
+		r.Generated = append(r.Generated, receipt.File{Path: name, SHA256: fmt.Sprintf("%x", sha256.Sum256(b))})
+	}
+	return adapterReason, r.write(filepath.Join(out, receiptsFile), gen.project.Name)
 }
 
 // generationReceipt is the input closure of a generation: the module files

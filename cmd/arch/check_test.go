@@ -44,31 +44,25 @@ func TestReplaySavedConfigMirrorTraces(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	stderr, err := arch(t, configMirror, out, false, "replay", "--traces", savedTraces)
+	_, err = arch(t, configMirror, out, false, "replay", "--traces", savedTraces)
 	if err != nil {
 		t.Fatalf("inventory mode must pass: %v", err)
 	}
-	if !strings.Contains(stderr, "inventory mode") {
-		t.Fatalf("missing inventory note: %q", stderr)
-	}
 	v := readVerification(t, filepath.Join(out, replayReport))
-	if v.Result != report.Incomplete || v.Traces != 40 || v.Transitions == 0 || len(v.TraceHashes) != 40 {
-		t.Fatalf("report %s: %d traces, %d transitions", v.Result, v.Traces, v.Transitions)
+	if v.Result != report.Passed || v.Traces != 40 || v.Transitions == 0 || len(v.TraceHashes) != 40 {
+		t.Fatalf("report %s: %d traces, %d transitions, findings %+v", v.Result, v.Traces, v.Transitions, v.Findings)
 	}
-	if len(v.Findings) != 1 || v.Findings[0].Category != report.CategoryUnsupported || !strings.HasPrefix(v.Findings[0].Message, "no adapter") {
-		t.Fatalf("findings %+v", v.Findings)
+	if !strings.Contains(v.Scope, "through the implementation") || len(v.Findings) != 0 {
+		t.Fatalf("scope %q findings %+v", v.Scope, v.Findings)
 	}
-	if v.Receipt.Tools["go"] == "" || v.Receipt.Bounds["maxInvocations"] != 3 || len(v.Generated) != 1 {
-		t.Fatalf("report does not embed the receipt: %+v %+v", v.Receipt.Tools, v.Receipt.Bounds)
+	if v.Receipt.Tools["go"] == "" || v.Receipt.Bounds["maxInvocations"] != 3 || len(v.Generated) != 6 {
+		t.Fatalf("report does not embed the receipt and the adapter files: %+v %+v %+v", v.Receipt.Tools, v.Receipt.Bounds, v.Generated)
 	}
-	if v.Mode != report.ModeInventory || v.Failures[report.CategoryUnsupported] != 1 || v.Failures[report.CategorySafety] != 0 {
+	if v.Mode != report.ModeInventory || v.Failures[report.CategoryUnsupported] != 0 || v.Failures[report.CategorySafety] != 0 {
 		t.Fatalf("mode %q failures %v", v.Mode, v.Failures)
 	}
-	if _, err := arch(t, configMirror, out, true, "replay", "--traces", savedTraces); !errors.Is(err, errStrict) {
-		t.Fatalf("verification mode must refuse the missing adapter, got %v", err)
-	}
-	if v := readVerification(t, filepath.Join(out, replayReport)); v.Mode != report.ModeStrict || len(v.Blocking()) != 1 {
-		t.Fatalf("strict report mode %q blocking %v", v.Mode, v.Blocking())
+	if _, err := arch(t, configMirror, out, true, "replay", "--traces", savedTraces); err != nil {
+		t.Fatalf("verification mode must pass with the adapter: %v", err)
 	}
 }
 
@@ -297,5 +291,33 @@ func TestCheckReportsSafetyViolation(t *testing.T) {
 	model, err := os.ReadFile(filepath.Join(out, "counterexamples", "counterexample", likec4Dir, "model.c4"))
 	if err != nil || !strings.Contains(string(model), "controller.go:") {
 		t.Fatalf("execution view has no source links %v:\n%s", err, model)
+	}
+}
+
+// A model whose adapter arch generate cannot write replays against the
+// model only: inventory mode passes with the unsupported finding and
+// strict mode refuses it.
+func TestReplayWithoutAdapter(t *testing.T) {
+	const fields = "testdata/fields/project.yaml"
+	out, err := generateTo(t, fields)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(out, adapterDir)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("the fields fixture got an adapter: %v", err)
+	}
+	if _, err := arch(t, fields, out, false, "check", "--samples", "2", "--steps", "10"); err != nil {
+		t.Fatal(err)
+	}
+	stderr, err := arch(t, fields, out, false, "replay")
+	if err != nil || !strings.Contains(stderr, "inventory mode") {
+		t.Fatalf("inventory mode must pass without the adapter: %v %q", err, stderr)
+	}
+	v := readVerification(t, filepath.Join(out, replayReport))
+	if v.Result != report.Incomplete || len(v.Findings) != 1 || v.Findings[0].Category != report.CategoryUnsupported || !strings.HasPrefix(v.Findings[0].Message, "no adapter") {
+		t.Fatalf("findings without the adapter %+v", v.Findings)
+	}
+	if _, err := arch(t, fields, out, true, "replay"); !errors.Is(err, errStrict) {
+		t.Fatalf("verification mode must refuse the missing adapter, got %v", err)
 	}
 }

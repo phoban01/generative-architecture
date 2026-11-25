@@ -69,8 +69,8 @@ func TestGenerateConfigMirror(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(r.Generated) != 1 || r.Generated[0].Path != irFile || r.Generated[0].SHA256 != fmt.Sprintf("%x", sha256.Sum256(b)) {
-		t.Fatalf("receipt does not record ir.yaml: %+v", r.Generated)
+	if len(r.Generated) != 6 || r.Generated[0].Path != irFile || r.Generated[0].SHA256 != fmt.Sprintf("%x", sha256.Sum256(b)) || r.Generated[3].Path != "adapter/main_generated.go" {
+		t.Fatalf("receipt does not record ir.yaml and the adapter: %+v", r.Generated)
 	}
 	recorded := map[string]bool{}
 	for _, f := range r.Files {
@@ -103,7 +103,7 @@ func TestGenerateWithoutControllers(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(r.Generated) != 1 || r.Generated[0].Path != irFile {
-		t.Fatalf("receipt does not record ir.yaml: %+v", r.Generated)
+		t.Fatalf("receipt does not record ir.yaml and the adapter: %+v", r.Generated)
 	}
 	likec4Validate(t, filepath.Join(out, likec4Dir))
 }
