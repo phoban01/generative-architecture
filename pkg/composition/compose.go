@@ -18,6 +18,11 @@ type Port struct {
 	Version   string `yaml:"version"`
 	Direction string `yaml:"direction"`
 	Writable  bool   `yaml:"writable,omitempty"`
+	// Optional marks an in port that may stay unbound: the component then
+	// keeps its own initial value for the port's state, which says what
+	// it assumes when nothing provides it. A bound optional port takes the
+	// provider's value and initial.
+	Optional bool `yaml:"optional,omitempty"`
 	// Owner and Creator record why a derived resource port provides.
 	// Owner means the component's primary watch is the resource. Creator
 	// means the component creates or applies it. ResolveProviders uses
@@ -140,14 +145,14 @@ func ComposeWithProtocols(name string, components []Component, links []Link, pro
 		if err != nil {
 			return result, err
 		}
-		if !reflect.DeepEqual(fv, tv) {
+		if !reflect.DeepEqual(fv, tv) && !to.Optional {
 			return result, fmt.Errorf("inconsistent shared initialization: %s -> %s", l.From, l.To)
 		}
 		aliases[target] = source
 	}
 	for full, p := range ports {
 		component := strings.SplitN(full, ".", 2)[0]
-		if p.Direction == "in" && !targetStates[component+"."+p.State] {
+		if p.Direction == "in" && !p.Optional && !targetStates[component+"."+p.State] {
 			return result, fmt.Errorf("unbound input %s", full)
 		}
 	}

@@ -44,6 +44,13 @@ spec:
       contract: helm.toolkit.fluxcd.io/released
       version: v1
       direction: out
+    # The HelmChart the release installs from. Optional: a system without
+    # a chart boundary assumes the chart exists (chartRevision starts at 1).
+    chart:
+      state: chartRevision
+      resource: {group: source.toolkit.fluxcd.io, version: v1, kind: HelmChart}
+      direction: in
+      optional: true
     ready:
       state: ready
       resource: {group: helm.toolkit.fluxcd.io, version: v2, kind: HelmRelease}

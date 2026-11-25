@@ -77,6 +77,9 @@ func JoinByResource(components []Component, cluster map[string]ir.ClusterID, exp
 		candidates := providers[string(clusterOf(name))+"\x00"+p.Contract+"/"+p.Version]
 		switch len(candidates) {
 		case 0:
+			if p.Optional {
+				continue
+			}
 			diags = append(diags, Diagnostic{Code: DiagUnresolvedProvider, Port: name, Message: fmt.Sprintf("no component owns or creates %s/%s%s; add a BoundaryModel that provides it or an explicit link", p.Contract, p.Version, where)})
 		case 1:
 			links = append(links, Link{From: candidates[0], To: name})

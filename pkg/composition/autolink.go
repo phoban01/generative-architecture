@@ -15,7 +15,10 @@ func AutoLink(components []Component, explicit []Link) ([]Link, error) {
 		bound[link.To] = true
 	}
 	providers := map[string][]string{}
-	type input struct{ name, contract string }
+	type input struct {
+		name, contract string
+		optional       bool
+	}
 	var inputs []input
 	for _, c := range components {
 		for name, p := range c.Ports {
@@ -24,7 +27,7 @@ func AutoLink(components []Component, explicit []Link) ([]Link, error) {
 				providers[ref] = append(providers[ref], c.Name+"."+name)
 			}
 			if p.Direction == "in" {
-				inputs = append(inputs, input{c.Name + "." + name, ref})
+				inputs = append(inputs, input{c.Name + "." + name, ref, p.Optional})
 			}
 		}
 	}
@@ -35,6 +38,9 @@ func AutoLink(components []Component, explicit []Link) ([]Link, error) {
 		}
 		candidates := providers[p.contract]
 		sort.Strings(candidates)
+		if len(candidates) == 0 && p.optional {
+			continue
+		}
 		if len(candidates) != 1 {
 			return nil, fmt.Errorf("input %s requires one provider of %s; found %v; supply an explicit binding", p.name, p.contract, candidates)
 		}

@@ -35,6 +35,14 @@ spec:
       contract: kustomize.toolkit.fluxcd.io/applied
       version: v1
       direction: out
+    # The source artifact the Kustomization builds from. Optional: a system
+    # without a source boundary assumes the artifact exists (sourceRevision
+    # starts at 1); bound to a GitRepository, the apply waits for a fetch.
+    source:
+      state: sourceRevision
+      resource: {group: source.toolkit.fluxcd.io, version: v1, kind: GitRepository}
+      direction: in
+      optional: true
     ready:
       state: ready
       resource: {group: kustomize.toolkit.fluxcd.io, version: v1, kind: Kustomization}

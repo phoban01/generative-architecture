@@ -8,6 +8,7 @@ spec:
     now: {type: int, initial: '0'}
     due: {type: bool, initial: 'true'}
     dependsOnReady: {type: bool, initial: 'false'}
+    sourceRevision: {type: int, initial: '1'}
     applied: {type: bool, initial: 'false'}
     ready: {type: bool, initial: 'false'}
   actions:
@@ -21,7 +22,7 @@ spec:
     guard: '!dependsOnReady'
     updates: {dependsOnReady: 'true'}
   - name: apply
-    guard: due && dependsOnReady
+    guard: due && dependsOnReady && sourceRevision > 0
     updates: {applied: 'true', due: 'false', ready: 'false'}
   # ready is a state variable, so the action that sets it is markReady.
   - name: markReady
@@ -32,3 +33,5 @@ spec:
     expression: '!ready || applied'
   - name: applyWaitsForDependencies
     expression: '!applied || dependsOnReady'
+  - name: applyNeedsSource
+    expression: '!applied || sourceRevision > 0'

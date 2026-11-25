@@ -153,6 +153,9 @@ func TestFluxSystemComposes(t *testing.T) {
 			t.Errorf("%s evidence %q", c.Name, c.Evidence)
 		}
 	}
+	if got := loaded.Result.StateNames["kustomize.sourceRevision"]; got != "git_revision" {
+		t.Fatalf("the Kustomization source is not bound to the GitRepository: %s", got)
+	}
 	setup := func(more ...string) []string {
 		return append([]string{"git_fetch", "kustomize_dependenciesReady", "kustomize_apply", "helm_dependenciesReady", "helm_install"}, more...)
 	}
@@ -163,7 +166,8 @@ func TestFluxSystemComposes(t *testing.T) {
 		want   map[string]any
 	}{
 		{name: "consumer acts after source, apply and install", events: setup("consumer_reconcile"), want: map[string]any{"consumer_done": true, "git_revision": int64(1), "helm_releaseVersion": int64(1)}},
-		{name: "consumer waits for the source", events: []string{"kustomize_dependenciesReady", "kustomize_apply", "helm_dependenciesReady", "helm_install", "consumer_reconcile"}, err: "action consumer_reconcile disabled"},
+		{name: "apply waits for the source", events: []string{"kustomize_dependenciesReady", "kustomize_apply"}, err: "action kustomize_apply disabled"},
+		{name: "consumer waits for the apply", events: []string{"git_fetch", "kustomize_dependenciesReady", "helm_dependenciesReady", "helm_install", "consumer_reconcile"}, err: "action consumer_reconcile disabled"},
 		{name: "new commit advances the revision on the next interval", events: setup("git_commit", "git_tick", "git_fetch"), want: map[string]any{"git_revision": int64(2)}},
 		{name: "fetch waits for the interval", events: []string{"git_fetch", "git_commit", "git_fetch"}, err: "action git_fetch disabled"},
 		{name: "chart change upgrades the release", events: setup("helm_changeChart", "helm_tick", "helm_upgrade"), want: map[string]any{"helm_releaseVersion": int64(2), "helm_appliedChart": int64(2)}},

@@ -8,6 +8,7 @@ import (
 	"github.com/phoban01/generative-architecture/pkg/model"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -128,5 +129,48 @@ func TestAutomaticContractJoinsRejectAmbiguity(t *testing.T) {
 	}
 	if _, err := composition.AutoLink(c, links); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// An optional input may stay unbound: the component keeps its own initial
+// value for the port's state. Bound, it takes the provider's value even
+// when the initial values differ.
+func TestOptionalInput(t *testing.T) {
+	consumer := model.Spec{Name: "Consumer", State: map[string]model.Variable{"revision": {Type: "int", Initial: "1"}, "done": {Type: "bool", Initial: "false"}},
+		Actions: []model.Action{{Name: "act", Guard: "revision > 0 && !done", Updates: map[string]expr.Expression{"done": "true"}}}}
+	port := composition.Port{State: "revision", Contract: "resource:example.org/v1/Source", Version: "v1", Direction: "in", Optional: true}
+	c := composition.Component{Name: "consumer", Model: consumer, Ports: map[string]composition.Port{"source": port}}
+	alone, err := composition.Compose("Alone", []composition.Component{c}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if alone.Model.State["consumer_revision"].Initial != "1" {
+		t.Fatalf("unbound optional input lost its initial: %+v", alone.Model.State["consumer_revision"])
+	}
+	required := c
+	required.Ports = map[string]composition.Port{"source": {State: "revision", Contract: port.Contract, Version: "v1", Direction: "in"}}
+	if _, err := composition.Compose("Alone", []composition.Component{required}, nil, nil); err == nil || !strings.Contains(err.Error(), "unbound input consumer.source") {
+		t.Fatalf("a required input composed unbound: %v", err)
+	}
+	provider := composition.Component{Name: "git", Model: model.Spec{Name: "Git", State: map[string]model.Variable{"revision": {Type: "int", Initial: "0"}},
+		Actions: []model.Action{{Name: "fetch", Guard: "revision == 0", Updates: map[string]expr.Expression{"revision": "1"}}}},
+		Ports: map[string]composition.Port{"artifact": {State: "revision", Contract: port.Contract, Version: "v1", Direction: "out"}}}
+	links, err := composition.AutoLink([]composition.Component{provider, c}, nil)
+	if err != nil || len(links) != 1 || links[0].From != "git.artifact" || links[0].To != "consumer.source" {
+		t.Fatalf("auto-link %v %v", links, err)
+	}
+	if _, err := composition.AutoLink([]composition.Component{c}, nil); err != nil {
+		t.Fatalf("auto-link with an unbound optional input: %v", err)
+	}
+	bound, err := composition.Compose("Bound", []composition.Component{provider, c}, links, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bound.StateNames["consumer.revision"] != "git_revision" || bound.Model.State["git_revision"].Initial != "0" {
+		t.Fatalf("bound optional input: %v %+v", bound.StateNames, bound.Model.State["git_revision"])
+	}
+	joined, diags, err := composition.JoinByResource([]composition.Component{c}, nil, nil)
+	if err != nil || len(diags) != 0 || len(joined) != 0 {
+		t.Fatalf("join by resource reported an unbound optional input: %v %v %v", joined, diags, err)
 	}
 }

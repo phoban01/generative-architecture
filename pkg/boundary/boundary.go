@@ -87,6 +87,9 @@ type Port struct {
 	Version   string  `yaml:"version,omitempty"`
 	Direction string  `yaml:"direction"`
 	Writable  bool    `yaml:"writable,omitempty"`
+	// Optional marks an in port the system need not bind; the model's
+	// initial value for its state is what the boundary assumes then.
+	Optional bool `yaml:"optional,omitempty"`
 }
 
 // Spec is the payload of a BoundaryModel document. Upstream is the module

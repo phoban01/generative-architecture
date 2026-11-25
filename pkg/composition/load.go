@@ -337,7 +337,7 @@ func LoadBoundary(dir string, ref ComponentRef) (Component, []string, error) {
 	c := Component{Name: ref.Name, Model: *b.Model, Ports: map[string]Port{}, Evidence: ir.Assumed}
 	c.Watches, c.Effects = b.Facts(ref.Name)
 	for name, p := range b.Spec.Ports {
-		port := Port{State: p.State, Contract: p.Contract, Version: p.Version, Direction: p.Direction, Writable: p.Writable, Evidence: ir.Assumed, Provenance: []ir.Provenance{b.Provenance()}}
+		port := Port{State: p.State, Contract: p.Contract, Version: p.Version, Direction: p.Direction, Writable: p.Writable, Optional: p.Optional, Evidence: ir.Assumed, Provenance: []ir.Provenance{b.Provenance()}}
 		if p.Resource != nil {
 			port.Contract, port.Version = ResourceContract(*p.Resource), ResourceContractVersion
 		}

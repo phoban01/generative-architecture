@@ -8,6 +8,7 @@ spec:
     now: {type: int, initial: '0'}
     due: {type: bool, initial: 'true'}
     dependsOnReady: {type: bool, initial: 'false'}
+    chartRevision: {type: int, initial: '1'}
     chartVersion: {type: int, initial: '1'}
     appliedChart: {type: int, initial: '0'}
     releaseVersion: {type: int, initial: '0'}
@@ -27,10 +28,10 @@ spec:
     guard: chartVersion < 3
     updates: {chartVersion: chartVersion + 1}
   - name: install
-    guard: due && dependsOnReady && releaseVersion == 0
+    guard: due && dependsOnReady && chartRevision > 0 && releaseVersion == 0
     updates: {releaseVersion: '1', appliedChart: chartVersion, due: 'false', ready: 'false'}
   - name: upgrade
-    guard: due && dependsOnReady && releaseVersion > 0 && appliedChart != chartVersion
+    guard: due && dependsOnReady && chartRevision > 0 && releaseVersion > 0 && appliedChart != chartVersion
     updates: {releaseVersion: releaseVersion + 1, appliedChart: chartVersion, due: 'false', ready: 'false'}
   # unchanged is a reconcile that finds the release current and leaves it.
   - name: unchanged
@@ -47,3 +48,5 @@ spec:
     expression: releaseVersion == 0 || dependsOnReady
   - name: releaseTracksChart
     expression: appliedChart <= chartVersion
+  - name: installNeedsChart
+    expression: releaseVersion == 0 || chartRevision > 0

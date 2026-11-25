@@ -366,6 +366,13 @@ boundary and a resource out port on the same state, so the applied objects
 join by resource like any derived port. The consumer binds its `manifests`
 port to the ConfigMap resource contract.
 
+An input port marked `optional: true` may stay unbound; the component then
+keeps its own initial value for the port's state, which is what it
+assumes when nothing provides it. The Kustomization boundary's `source`
+port is optional: this system has no GitRepository, so the Kustomization
+assumes its artifact exists; with the GitRepository boundary in the system
+the apply waits for a fetch.
+
 `autoLink: true` binds each input port to the one output with the same
 contract and version. A resource port's contract is
 `resource:<group>/<version>/<kind>` with version `v1`. Two providers of one
