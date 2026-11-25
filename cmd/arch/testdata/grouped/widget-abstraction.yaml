@@ -1,0 +1,21 @@
+apiVersion: architecture.local/v1alpha1
+kind: Abstraction
+metadata:
+  name: widget
+spec:
+  resources:
+    - gvk: {group: widgets.example.test, version: v1beta1, kind: Widget}
+      objects:
+        - {id: w1, namespace: demo, name: w1}
+      fields:
+        - {path: [metadata, labels, tier], type: string}
+      valueDomains:
+        metadata.labels.tier: ['"gold"', '""']
+      identity:
+        - [metadata, name]
+  bounds:
+    maxObjectsPerResource: 1
+    maxInvocations: 3
+  excludes:
+    - delete
+    - list

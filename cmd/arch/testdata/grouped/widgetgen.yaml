@@ -1,0 +1,33 @@
+apiVersion: architecture.local/v1alpha1
+kind: Project
+metadata:
+  name: widgetgen
+spec:
+  # arch generate resolves the Widget type by the group and version its
+  # package declares.
+  module: github.com/phoban01/generative-architecture
+  packages:
+    - ./cmd/arch/testdata/grouped/widgetgen
+  catalog:
+    discovery:
+      - discovery.json
+  abstraction: widget-abstraction.yaml
+  runtime:
+    profile: controller-runtime
+    maxTicks: 20
+  bounds:
+    maxObjectsPerResource: 1
+    maxInvocations: 3
+  controllers:
+    - receiver: Reconciler
+      name: widgetgen
+      workers: 1
+      retryTicks: 2
+      key: w1
+      effects:
+        - call: sigs.k8s.io/controller-runtime/pkg/client.Client.Get
+          effect: readWidget
+        - call: sigs.k8s.io/controller-runtime/pkg/client.Client.Update
+          effect: writeWidget
+  initial:
+    w1: '""'

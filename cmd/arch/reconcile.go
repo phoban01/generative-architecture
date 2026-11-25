@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strings"
 
+	"golang.org/x/tools/go/packages"
+
 	"github.com/phoban01/generative-architecture/pkg/abstraction"
 	"github.com/phoban01/generative-architecture/pkg/adaptergen"
 	"github.com/phoban01/generative-architecture/pkg/catalog"
@@ -77,6 +79,7 @@ type extraction struct {
 	body     *ast.BlockStmt
 	locals   map[string]abstraction.Resource // Go object local -> its resource
 	resource map[ir.GVK]abstraction.Resource
+	pkg      *packages.Package // the package of Reconcile, for group-version lookups
 }
 
 // localVariable is the model variable holding the selected field f of a Go
@@ -99,7 +102,7 @@ func extractOptions(l goflow.Loaded, abs abstraction.Abstraction, decl project.C
 	if err != nil {
 		return nil, goflow.Options{}, err
 	}
-	x := &extraction{decl: decl, effects: effects, keys: map[string]string{requestKey: decl.Key}, cat: cat, info: l.Package.TypesInfo, body: l.Func.Body, locals: map[string]abstraction.Resource{}, resource: map[ir.GVK]abstraction.Resource{}}
+	x := &extraction{decl: decl, effects: effects, keys: map[string]string{requestKey: decl.Key}, cat: cat, info: l.Package.TypesInfo, body: l.Func.Body, locals: map[string]abstraction.Resource{}, resource: map[ir.GVK]abstraction.Resource{}, pkg: l.Package}
 	for symbol, object := range decl.ObjectKeys {
 		x.keys[symbol] = object
 	}
@@ -123,7 +126,11 @@ func extractOptions(l goflow.Loaded, abs abstraction.Abstraction, decl project.C
 		if !ok {
 			return true
 		}
-		gvk, ok := x.resourceOf(obj.Type())
+		gvk, ok, gvErr := x.resourceOf(obj.Type())
+		if gvErr != nil {
+			err = goflow.NewDiagnostic(l.Package.Fset, id, "group-version", gvErr.Error())
+			return false
+		}
 		if !ok {
 			return true
 		}
@@ -149,15 +156,17 @@ func extractOptions(l goflow.Loaded, abs abstraction.Abstraction, decl project.C
 
 // resourceOf maps a Go API type (or pointer to one) to its GVK: a type
 // declared in k8s.io/api/<group>/<version> by its path (the core group is
-// ""), any other type by the unique catalog entry of its name whose version
-// is the name of its package.
-func (x *extraction) resourceOf(t types.Type) (ir.GVK, bool) {
+// ""), any other type by the group and version its package declares (see
+// groupVersion) and the type's name, looked up in the catalog. A package
+// that declares neither a GroupVersion variable nor a +groupName marker is
+// an error, which the caller locates at the local.
+func (x *extraction) resourceOf(t types.Type) (ir.GVK, bool, error) {
 	if p, ok := types.Unalias(t).(*types.Pointer); ok {
 		t = p.Elem()
 	}
 	n, ok := types.Unalias(t).(*types.Named)
 	if !ok || n.Obj().Pkg() == nil {
-		return ir.GVK{}, false
+		return ir.GVK{}, false, nil
 	}
 	pkg := n.Obj().Pkg()
 	if rest, ok := strings.CutPrefix(pkg.Path(), "k8s.io/api/"); ok {
@@ -166,18 +175,32 @@ func (x *extraction) resourceOf(t types.Type) (ir.GVK, bool) {
 		if group == "core" {
 			group = ""
 		}
-		return ir.GVK{Group: group, Version: version, Kind: n.Obj().Name()}, true
+		return ir.GVK{Group: group, Version: version, Kind: n.Obj().Name()}, true, nil
 	}
-	var match []ir.GVK
+	if x.cat == nil {
+		return ir.GVK{}, false, nil
+	}
+	kinds := false
 	for _, e := range x.cat.Entries() {
-		if e.GVK.Kind == n.Obj().Name() && e.GVK.Version == pkg.Name() {
-			match = append(match, e.GVK)
+		if e.GVK.Kind == n.Obj().Name() {
+			kinds = true
 		}
 	}
-	if len(match) != 1 {
-		return ir.GVK{}, false
+	if !kinds {
+		return ir.GVK{}, false, nil
 	}
-	return match[0], true
+	if x.pkg == nil {
+		return ir.GVK{}, false, nil
+	}
+	group, version, ok := groupVersion(x.pkg, pkg.Path())
+	if !ok {
+		return ir.GVK{}, false, fmt.Errorf("package %s declares no GroupVersion variable and no +groupName marker", pkg.Path())
+	}
+	e, ok := x.cat.Lookup(ir.GVK{Group: group, Version: version, Kind: n.Obj().Name()})
+	if !ok {
+		return ir.GVK{}, false, nil
+	}
+	return e.GVK, true, nil
 }
 
 // field maps a selected field of a Go object local to its model variable.

@@ -10,6 +10,8 @@ import (
 	"sort"
 	"strings"
 
+	"golang.org/x/tools/go/packages"
+
 	"github.com/phoban01/generative-architecture/pkg/abstraction"
 	"github.com/phoban01/generative-architecture/pkg/catalog"
 	"github.com/phoban01/generative-architecture/pkg/expr"
@@ -49,6 +51,7 @@ type inventory struct {
 	// keys lists the map keys the body names under a map field.
 	keys map[string][]string
 	info *types.Info
+	pkg  *packages.Package
 	// first is the first appearance of each field symbol, and names its
 	// name as root.json.path.
 	first map[string]token.Pos
@@ -75,7 +78,7 @@ type inventory struct {
 // unresolved.
 func extractReconcile(root string, c ir.Controller, l goflow.Loaded, abs *abstraction.Abstraction, cat *catalog.Catalog) (*goflow.Program, []report.Item, []report.Item) {
 	inv := &inventory{
-		fset: l.Package.Fset, info: l.Package.TypesInfo, file: relative(root, l.Path),
+		fset: l.Package.Fset, info: l.Package.TypesInfo, pkg: l.Package, file: relative(root, l.Path),
 		scope: map[string]expr.Symbol{}, keys: map[string][]string{},
 		first: map[string]token.Pos{}, names: map[string]string{}, unresolved: map[string]bool{},
 	}
@@ -275,7 +278,7 @@ func (inv *inventory) selectFields(info *types.Info, body *ast.BlockStmt, abs ab
 	for _, r := range abs.Spec.Resources {
 		resources[r.GVK] = r
 	}
-	x := &extraction{cat: cat}
+	x := &extraction{cat: cat, pkg: inv.pkg}
 	ast.Inspect(body, func(n ast.Node) bool {
 		id, ok := n.(*ast.Ident)
 		if !ok {
@@ -285,7 +288,7 @@ func (inv *inventory) selectFields(info *types.Info, body *ast.BlockStmt, abs ab
 		if !ok {
 			return true
 		}
-		gvk, ok := x.resourceOf(v.Type())
+		gvk, ok, _ := x.resourceOf(v.Type())
 		if !ok {
 			return true
 		}

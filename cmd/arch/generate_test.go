@@ -294,3 +294,25 @@ func TestGenerateQuotedMapKey(t *testing.T) {
 		t.Fatalf("the keyed value is not copied between the locals: %+v", spec.Actions)
 	}
 }
+
+// arch generate resolves a Go API type by the group and version its package
+// declares, as arch extract does, and fails closed on a package that
+// declares neither.
+func TestGenerateResolvesGroupVersion(t *testing.T) {
+	out, err := generateTo(t, "testdata/grouped/widgetgen.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var spec model.Spec
+	if _, err := krm.Read(filepath.Join(out, specFile), "TransitionModel", &spec); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := spec.State["Widget_w1_metadata_labels_tier"]; !ok {
+		t.Fatalf("model lacks the Widget field: %v", slices.Sorted(maps.Keys(spec.State)))
+	}
+	_, err = generateTo(t, "testdata/grouped/gadgetgen.yaml")
+	want := "cmd/arch/testdata/grouped/gadgetgen/controller.go:19: package github.com/phoban01/generative-architecture/cmd/arch/testdata/grouped/api/v1beta1 declares no GroupVersion variable and no +groupName marker"
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("got %v, want %q", err, want)
+	}
+}
