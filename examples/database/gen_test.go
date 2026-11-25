@@ -16,6 +16,8 @@ import (
 	"github.com/phoban01/generative-architecture/pkg/adaptergen"
 	"github.com/phoban01/generative-architecture/pkg/effect"
 	"github.com/phoban01/generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/krm"
+	"github.com/phoban01/generative-architecture/pkg/process"
 	"github.com/phoban01/generative-architecture/pkg/project"
 )
 
@@ -140,6 +142,7 @@ func TestAdapterGeneratedFilesUpToDate(t *testing.T) {
 		"generated/references_generated.go":  adapterReferences,
 		"generated/environment_generated.go": adapterEnvironment,
 		"generated/gating_generated.go":      adapterGating,
+		"generated/invocation_generated.go":  adapterInvocation,
 		"store_proxy_generated.go":           storeProxy,
 	} {
 		t.Run(file, func(t *testing.T) {
@@ -196,4 +199,37 @@ func TestAbstractionMatchesCatalogAndProject(t *testing.T) {
 	if !reflect.DeepEqual(p.Spec.Packages, []string{"./examples/database"}) || !reflect.DeepEqual(p.Spec.Constraints, []string{"constraints.yaml"}) {
 		t.Fatalf("project %+v", p.Spec)
 	}
+}
+
+// adapterInvocation generates the invocation bookkeeping: the reconcile
+// and idle events, the invocation counter, the process's result, the Go
+// locals each Store call's results assign and the counters the summaries
+// keep across invocations (an update of the form x: x + 1 of an
+// abstraction local).
+func adapterInvocation() ([]byte, error) {
+	e, err := Load(".")
+	if err != nil {
+		return nil, err
+	}
+	var config process.Config
+	if _, err := krm.Read("process.yaml", "ProcessSemantics", &config); err != nil {
+		return nil, err
+	}
+	if len(config.Results) != 1 {
+		return nil, fmt.Errorf("the process reports %d results; one outcome expected", len(config.Results))
+	}
+	counters := map[string]string{}
+	for op, variants := range config.Operations {
+		for _, v := range variants {
+			for target, value := range v.Updates {
+				if e.Locals[target] == abstraction.TypeInt && string(value) == target+" + 1" {
+					counters[op] = target
+				}
+			}
+		}
+	}
+	return adaptergen.GenerateInvocation("generated", adaptergen.InvocationBinding{
+		Reconcile: "reconcile", Idle: "idle", Counter: invocationCounter, Outcome: config.Results[0],
+		Locals: e.Results, Types: e.Locals, Counters: counters,
+	})
 }
