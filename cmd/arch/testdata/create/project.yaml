@@ -1,0 +1,33 @@
+apiVersion: architecture.local/v1alpha1
+kind: Project
+metadata:
+  name: create
+spec:
+  # A reconciler that creates its object: the object starts absent.
+  module: github.com/phoban01/generative-architecture
+  packages:
+    - ./cmd/arch/testdata/create
+  catalog:
+    discovery:
+      - discovery.json
+  abstraction: abstraction.yaml
+  runtime:
+    profile: controller-runtime
+    maxTicks: 20
+  bounds:
+    maxObjectsPerResource: 1
+    maxInvocations: 3
+  controllers:
+    - receiver: Reconciler
+      name: create
+      workers: 1
+      retryTicks: 2
+      key: copy
+      effects:
+        - call: sigs.k8s.io/controller-runtime/pkg/client.Client.Get
+          effect: readCopy
+        - call: sigs.k8s.io/controller-runtime/pkg/client.Client.Create
+          effect: createCopy
+  initial:
+    copy: '""'
+    copy.exists: 'false'

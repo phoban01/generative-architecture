@@ -40,7 +40,7 @@ type clientEffect struct {
 // operations maps a client method name to its operation key in the summary
 // library. Only operations with summary bindings are listed; other methods
 // are unsupported and fail with the callee named.
-var operations = map[string]string{"Get": ir.OpGet, "Update": ir.OpUpdate}
+var operations = map[string]string{"Get": ir.OpGet, "Update": ir.OpUpdate, "Create": ir.OpCreate, "Delete": ir.OpDelete}
 
 // clientEffects resolves the declared client effects. The consistency
 // follows the controller-runtime injection pattern unless declared: a read
@@ -55,7 +55,7 @@ func clientEffects(decl project.Controller) (map[goflow.Callee]clientEffect, err
 		}
 		op, ok := operations[method]
 		if !ok {
-			return nil, fmt.Errorf("controller %s: %s: method %s is not supported; supported methods are Get and Update", decl.Name, e.Call, method)
+			return nil, fmt.Errorf("controller %s: %s: method %s is not supported; supported methods are Get, Update, Create and Delete", decl.Name, e.Call, method)
 		}
 		consistency := e.Consistency
 		if consistency == "" {
@@ -273,9 +273,11 @@ func (x *extraction) call(c goflow.Callee, call *ast.CallExpr, _ goflow.Convert)
 	case e.Operation == ir.OpGet:
 		b["$resourceVersion"] = version
 		vectors["$object"], vectors["$snapshot"] = values, snapshots
-	case e.Operation == ir.OpUpdate:
+	case e.Operation == ir.OpUpdate, e.Operation == ir.OpCreate:
 		b["$resourceVersion"] = version
 		vectors["$object"], vectors["$value"] = values, snapshots
+	case e.Operation == ir.OpDelete:
+		// delete reads and clears the existence flag only.
 	default:
 		return goflow.Node{}, false, fmt.Errorf("%s: no bindings for operation %s", c, e.Operation)
 	}

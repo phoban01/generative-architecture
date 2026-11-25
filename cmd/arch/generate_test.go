@@ -453,3 +453,29 @@ func TestCheckReportsBindings(t *testing.T) {
 		t.Fatalf("protocols %+v", v.Protocols)
 	}
 }
+
+// A Create effect generates from the built-in create summary: the object
+// starts absent when spec.initial says so, and the created outcome sets
+// its existence and value.
+func TestGenerateCreatesObject(t *testing.T) {
+	out, err := generateTo(t, "testdata/create/project.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var spec model.Spec
+	if _, err := krm.Read(filepath.Join(out, specFile), "TransitionModel", &spec); err != nil {
+		t.Fatal(err)
+	}
+	if spec.State["ConfigMap_copy_exists"].Initial != "false" {
+		t.Fatalf("the created object does not start absent: %+v", spec.State["ConfigMap_copy_exists"])
+	}
+	var created *model.Action
+	for i := range spec.Actions {
+		if spec.Actions[i].Name == "createCopy_created" {
+			created = &spec.Actions[i]
+		}
+	}
+	if created == nil || created.Updates["ConfigMap_copy_exists"] != "true" || created.Updates["ConfigMap_copy_data_value"] != "cm_data_value" {
+		t.Fatalf("created outcome %+v", created)
+	}
+}

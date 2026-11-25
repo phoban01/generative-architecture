@@ -69,7 +69,7 @@ type Settings struct {
 }
 
 // clientOperations maps a client method to its summary operation.
-var clientOperations = map[string]string{"Get": ir.OpGet, "Update": ir.OpUpdate}
+var clientOperations = map[string]string{"Get": ir.OpGet, "Update": ir.OpUpdate, "Create": ir.OpCreate, "Delete": ir.OpDelete}
 
 // NewSettings reads the settings of the sample's one controller from its
 // project document. The consistency of an effect follows the injection
@@ -89,7 +89,7 @@ func NewSettings(p project.Project) (Settings, error) {
 		}
 		op, ok := clientOperations[method]
 		if !ok {
-			return Settings{}, fmt.Errorf("%s: method %s is not supported; supported methods are Get and Update", e.Call, method)
+			return Settings{}, fmt.Errorf("%s: method %s is not supported; supported methods are Get, Update, Create and Delete", e.Call, method)
 		}
 		consistency := e.Consistency
 		if consistency == "" {
@@ -277,9 +277,11 @@ func (x *extraction) call(c goflow.Callee, call *ast.CallExpr, _ goflow.Convert)
 	case e.Operation == ir.OpGet:
 		b["$resourceVersion"] = version
 		vectors["$object"], vectors["$snapshot"] = values, snapshots
-	case e.Operation == ir.OpUpdate:
+	case e.Operation == ir.OpUpdate, e.Operation == ir.OpCreate:
 		b["$resourceVersion"] = version
 		vectors["$object"], vectors["$value"] = values, snapshots
+	case e.Operation == ir.OpDelete:
+		// delete reads and clears the existence flag only.
 	default:
 		return goflow.Node{}, false, fmt.Errorf("%s: no bindings for operation %s", c, e.Operation)
 	}
@@ -448,7 +450,7 @@ func GenerateOverlay(root string, overlay map[string][]byte) (model.Spec, error)
 	if _, err = krm.Read(filepath.Join(root, "constraints.yaml"), "ModelConstraints", &constraints); err != nil {
 		return model.Spec{}, err
 	}
-	return compose(s, abs, *program, constraints.Properties)
+	return compose(s, abs, *program, program.Symbols, constraints.Properties)
 }
 
 // objectInfo is an abstracted object and its model variables.
@@ -474,7 +476,7 @@ func objectsOf(abs abstraction.Abstraction) map[string]objectInfo {
 	return out
 }
 
-func compose(s Settings, abs abstraction.Abstraction, program goflow.Program, constraints []model.Property) (model.Spec, error) {
+func compose(s Settings, abs abstraction.Abstraction, program goflow.Program, scope map[string]expr.Symbol, constraints []model.Property) (model.Spec, error) {
 	objects := objectsOf(abs)
 	state := abs.StateVariables()
 	for _, o := range objects {
@@ -488,7 +490,11 @@ func compose(s Settings, abs abstraction.Abstraction, program goflow.Program, co
 			}
 			state[o.values[i]] = model.Variable{Type: f.Type, Initial: expr.Expression(initial)}
 		}
-		state[o.exists] = model.Variable{Type: abstraction.TypeBool, Initial: "true"}
+		exists, err := existsInitial(s.Initial, o.object.ID)
+		if err != nil {
+			return model.Spec{}, err
+		}
+		state[o.exists] = model.Variable{Type: abstraction.TypeBool, Initial: expr.Expression(exists)}
 		state[o.version] = model.Variable{Type: abstraction.TypeInt, Initial: "0"}
 	}
 	// Process locals are the variables summaries and assignments bind Go
@@ -504,6 +510,11 @@ func compose(s Settings, abs abstraction.Abstraction, program goflow.Program, co
 	seenEffects := map[string]bool{}
 	for _, n := range program.Nodes {
 		if n.Error != "" {
+			for _, class := range []string{summaries.ErrorNotFound, summaries.ErrorAlreadyExists, summaries.ErrorConflict, summaries.ErrorTransient} {
+				if sym, ok := scope[string(n.Error)+"_"+class]; ok && sym.Type == abstraction.TypeBool {
+					locals[string(n.Error)+"_"+class] = model.Variable{Type: abstraction.TypeBool, Initial: "false"}
+				}
+			}
 			locals[string(n.Error)] = model.Variable{Type: abstraction.TypeBool, Initial: "false"}
 		}
 		// A constant error result (nil or a literal) binds no local.
@@ -826,4 +837,18 @@ func changeValueEvent(r abstraction.Resource, id string, f abstraction.Field, li
 		return adaptergen.ChangeValueEvent(id, literal, index)
 	}
 	return adaptergen.ChangeValueEvent(id+"_"+strings.ReplaceAll(f.Key(), ".", "_"), literal, index)
+}
+
+// existsInitial reads whether object id exists before the controller runs:
+// spec.initial may set <object>.exists to false for an object the
+// controller creates; the default is true.
+func existsInitial(initial map[string]string, id string) (string, error) {
+	v, ok := initial[id+".exists"]
+	if !ok {
+		return "true", nil
+	}
+	if v != "true" && v != "false" {
+		return "", fmt.Errorf("object %s: initial existence %q must be true or false", id, v)
+	}
+	return v, nil
 }

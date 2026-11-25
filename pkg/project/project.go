@@ -61,7 +61,8 @@ type Spec struct {
 	Controllers []Controller `yaml:"controllers,omitempty"`
 	// Initial is the initial value of each selected field, as a model
 	// literal: by object ID when the resource selects one field, else by
-	// <object>.<field key>.
+	// <object>.<field key>. <object>.exists, true or false, says whether the
+	// object exists before the controller runs; the default is true.
 	Initial map[string]string `yaml:"initial,omitempty"`
 }
 

@@ -261,7 +261,7 @@ ran `arch generate` on it. Each finding below was removed in a scratch copy
 of `project.yaml` or `abstraction.yaml` to find the next one. The committed
 documents keep what an adopter would write.
 
-### 16. arch generate supports Get and Update only
+### 16. arch generate supports Get and Update only (partly closed by #150)
 
 - Construct: the declared effects for `client.Reader.List`,
   `client.Writer.Delete` and `client.Writer.Create`.
@@ -270,6 +270,12 @@ documents keep what an adopter would write.
 - Smallest extension: built-in summaries and model bindings for `Create`
   and `Delete` on a declared object, and for `List` bounded by
   `maxObjectsPerResource`. Gap 15 applies to `List`.
+- Resolution: since #150, `arch generate` accepts `Create` and `Delete` on
+  an object the reconciler read first, through the built-in create and
+  delete summaries, and `spec.initial` may set `<object>.exists: false` so
+  a created object starts absent.
+- Remaining: `List` binds a filtered catalog list and `Status().Update`
+  needs record semantics; both stay unsupported by generate.
 
 ### 17. arch generate takes one field per resource (closed by #151)
 

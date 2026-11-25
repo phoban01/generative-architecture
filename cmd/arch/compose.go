@@ -59,6 +59,9 @@ type controllerModel struct {
 	// properties are the authored constraints, written against the
 	// generated names.
 	properties []model.Property
+	// scope is the symbol table extraction built: the outcome symbols of
+	// summarized errors, such as err_notFound, become process locals.
+	scope map[string]expr.Symbol
 }
 
 // objectInfo is an abstracted object and its model variables.
@@ -105,7 +108,11 @@ func (c controllerModel) build() (model.Spec, []effect.Descriptor, error) {
 			}
 			state[o.values[i]] = model.Variable{Type: f.Type, Initial: expr.Expression(initial)}
 		}
-		state[o.exists] = model.Variable{Type: abstraction.TypeBool, Initial: "true"}
+		exists, err := existsInitial(c.initial, o.object.ID)
+		if err != nil {
+			return model.Spec{}, nil, err
+		}
+		state[o.exists] = model.Variable{Type: abstraction.TypeBool, Initial: expr.Expression(exists)}
 		state[o.version] = model.Variable{Type: abstraction.TypeInt, Initial: "0"}
 	}
 	// Process locals are the variables summaries and assignments bind Go
@@ -121,6 +128,11 @@ func (c controllerModel) build() (model.Spec, []effect.Descriptor, error) {
 	seenEffects := map[string]effect.Descriptor{}
 	for _, n := range c.program.Nodes {
 		if n.Error != "" {
+			for _, class := range []string{summaries.ErrorNotFound, summaries.ErrorAlreadyExists, summaries.ErrorConflict, summaries.ErrorTransient} {
+				if s, ok := c.scope[string(n.Error)+"_"+class]; ok && s.Type == abstraction.TypeBool {
+					locals[string(n.Error)+"_"+class] = model.Variable{Type: abstraction.TypeBool, Initial: "false"}
+				}
+			}
 			locals[string(n.Error)] = model.Variable{Type: abstraction.TypeBool, Initial: "false"}
 		}
 		// A constant error result (nil or a literal) binds no local.
@@ -560,4 +572,18 @@ func privateAction(a model.Action, renames map[string]expr.Expression) bool {
 		}
 	}
 	return false
+}
+
+// existsInitial reads whether object id exists before the controller runs:
+// spec.initial may set <object>.exists to false for an object the
+// controller creates; the default is true.
+func existsInitial(initial map[string]string, id string) (string, error) {
+	v, ok := initial[id+".exists"]
+	if !ok {
+		return "true", nil
+	}
+	if v != "true" && v != "false" {
+		return "", fmt.Errorf("object %s: initial existence %q must be true or false", id, v)
+	}
+	return v, nil
 }

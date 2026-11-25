@@ -10,7 +10,7 @@ The reference system in [`examples/refsystem`](examples/refsystem/README.md) has
 go run ./cmd/arch --strict --project examples/refsystem/project.yaml --out examples/refsystem/generated extract
 ```
 
-arch finds the three controllers and their seven watches with no marker. It reads each `Reconcile` with no unsupported construct. The abstraction document `examples/refsystem/abstraction.yaml` selects every field the controllers read or write, so strict mode passes and writes the IR and the support report. `arch generate` does not run on the reference system yet: its controllers have no declarations, and they create objects, which generate does not model yet (#150).
+arch finds the three controllers and their seven watches with no marker. It reads each `Reconcile` with no unsupported construct. The abstraction document `examples/refsystem/abstraction.yaml` selects every field the controllers read or write, so strict mode passes and writes the IR and the support report. `arch generate` does not run on the reference system yet: its controllers have no declarations, and they list objects and update status, which generate does not model yet (#150).
 
 To adopt arch, follow one of the two guides. Every command in them runs in `go test`.
 

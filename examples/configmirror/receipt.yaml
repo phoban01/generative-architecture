@@ -41,7 +41,7 @@ status:
     - path: examples/configmirror/evidence.go
       sha256: caa5a9a803ffb54b3b61f32b75083cb6ad41055f7dcaae7452209f1e0191f631
     - path: examples/configmirror/generate.go
-      sha256: 7d19eba5a65529ed0f121be0949cbfbb12d55f31050cec81eff067df2aa5b84f
+      sha256: b063ed39693ecfcb0f609884bb6882c61299b4f0c4a168e5b3219cf0267d0b7e
     - path: examples/configmirror/generated/environment_generated.go
       sha256: 89c807e758ae5c150fbf7351455ce4ffe06c8f008ad31bb2540d34e17ab6519f
     - path: examples/configmirror/generated/gating_generated.go
@@ -151,7 +151,7 @@ status:
     - path: pkg/goflow/external.go
       sha256: cc720b09df02824b8e2937dffa0314e802b180673a117026487b62aacea4526c
     - path: pkg/goflow/extract.go
-      sha256: 4be4f59b117087038e90b6ce7db9a631c0413d75ab29cbc84d9f102aba665560
+      sha256: 42ff2c7661dbc68230a7b4150014f2ce4ec84dfa94f16322da06e4451d78f49f
     - path: pkg/goflow/idioms.go
       sha256: ff6b2d8a354533d7764c907c163b76d20fdf51dc7ef950eafd6a3982d78ac23d
     - path: pkg/goflow/logging.go
@@ -227,7 +227,7 @@ status:
     - path: pkg/project/model.go
       sha256: 91fb0446337c6b90c219148402772ceadf25b5259880d082912633b10676f54d
     - path: pkg/project/project.go
-      sha256: 81bf9dc4279c067ce488baa4e7f0ea19fff555c245c323dcc4804b435a2ba051
+      sha256: 8d3eaa8ec9b95152654e7717add45472bba9f18466d3284110ef22677a11383a
     - path: pkg/protocol/protocol.go
       sha256: b9dbe583dd9beaaa5a224d399772f49e62b58ab375650c2a3d83db4d3b303f7e
     - path: pkg/quint/differential.go

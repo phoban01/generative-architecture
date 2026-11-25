@@ -124,6 +124,8 @@ func TestExtractReconcileWithTypedFrontend(t *testing.T) {
 	if err := krm.ReadResult(path, "ExtractedProcess", &committed); err != nil {
 		t.Fatalf("%v; run with %s=1 to write it", err, regenerate)
 	}
+	// The symbol table is not part of the document.
+	program.Symbols = nil
 	if !reflect.DeepEqual(&committed, program) {
 		t.Fatalf("%s is stale; run with %s=1 to regenerate:\ncommitted %+v\nextracted %+v", path, regenerate, committed, *program)
 	}

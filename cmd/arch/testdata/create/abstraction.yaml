@@ -1,0 +1,21 @@
+apiVersion: architecture.local/v1alpha1
+kind: Abstraction
+metadata:
+  name: create
+spec:
+  resources:
+    - gvk: {group: "", version: v1, kind: ConfigMap}
+      objects:
+        - {id: copy, namespace: demo, name: copy}
+      fields:
+        - {path: [data, value], type: string}
+      valueDomains:
+        data.value: ['"a"', '""']
+      identity:
+        - [metadata, name]
+  bounds:
+    maxObjectsPerResource: 1
+    maxInvocations: 3
+  excludes:
+    - delete
+    - list

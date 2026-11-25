@@ -197,7 +197,7 @@ func generateController(projectPath string, p project.Project, c ir.Controller, 
 	if err != nil {
 		return controllerOutput{}, located(p.Root, err)
 	}
-	cm := controllerModel{name: modelName(p.Name), abs: abs, decl: decl, initial: p.Spec.Initial, maxTicks: p.Spec.Runtime.MaxTicks, program: *program}
+	cm := controllerModel{name: modelName(p.Name), abs: abs, decl: decl, initial: p.Spec.Initial, maxTicks: p.Spec.Runtime.MaxTicks, program: *program, scope: program.Symbols}
 	spec, effects, err := cm.build()
 	if err != nil {
 		return controllerOutput{}, fmt.Errorf("controller %s: %w", c.ID, err)

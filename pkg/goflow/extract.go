@@ -68,6 +68,11 @@ type Program struct {
 	Nodes        []Node `yaml:"nodes"`
 	SourceSHA256 string `yaml:"sourceSha256"`
 	MethodSHA256 string `yaml:"methodSha256"`
+	// Symbols is the symbol table extraction ended with: the scope the
+	// caller gave plus the outcome symbols of summarized errors, such as
+	// err_notFound, that the error idioms declared. A generator declares a
+	// process local for each of those.
+	Symbols map[string]expr.Symbol `yaml:"-"`
 }
 
 // Return describes one result of the extracted method. Error marks the
@@ -467,6 +472,7 @@ func (e *extractor) run(source []byte, method *ast.FuncDecl) (*Program, error) {
 	if err := diagnosticsError(e.diagnostics); err != nil {
 		return nil, err
 	}
+	e.program.Symbols = e.opts.Scope
 	return &e.program, nil
 }
 
