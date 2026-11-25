@@ -1,0 +1,15 @@
+apiVersion: architecture.local/v1alpha1
+kind: ModelConstraints
+metadata:
+  name: config-mirror-violated-temporal
+spec:
+  # A temporal property no run satisfies: TLC reports a counterexample
+  # under the fairness below, and arch check keeps it as a trace.
+  properties:
+    - name: boundedRetries
+      expression: 'retries >= 0 && retries <= 3'
+  temporal:
+    - name: neverHappens
+      eventually: 'false'
+  fairness:
+    weak: [begin, finish]

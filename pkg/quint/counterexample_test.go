@@ -39,3 +39,22 @@ func TestCounterexample(t *testing.T) {
 		t.Fatal(got)
 	}
 }
+
+func TestParseTLCTrace(t *testing.T) {
+	got, err := parseTLCTrace(tlcViolation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != "violation" || len(got.States) != 2 {
+		t.Fatalf("trace %+v", got)
+	}
+	if got.States[0].Event != "init" || got.States[0].Values["count"] != int64(0) || got.States[1].Event != "increment" || got.States[1].Values["count"] != int64(1) {
+		t.Fatalf("states %+v", got.States)
+	}
+	if _, err := parseTLCTrace("State 1: <x>\n/\\ count = {1, 2}\n/\\ event = \"init\"\n"); err == nil {
+		t.Fatal("a set value parsed")
+	}
+	if _, err := parseTLCTrace("no states\n"); err == nil {
+		t.Fatal("empty output parsed")
+	}
+}

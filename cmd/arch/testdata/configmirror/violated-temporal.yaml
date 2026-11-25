@@ -1,0 +1,41 @@
+apiVersion: architecture.local/v1alpha1
+kind: Project
+metadata:
+  name: config-mirror-violated-temporal
+spec:
+  # ConfigMirror with a temporal property that no fair run satisfies.
+  module: github.com/phoban01/generative-architecture
+  packages:
+    - ./examples/configmirror
+  catalog:
+    discovery:
+      - discovery.json
+  constraints:
+    - violated-temporal-constraints.yaml
+  abstraction: abstraction.yaml
+  runtime:
+    profile: controller-runtime
+    maxTicks: 20
+  bounds:
+    maxObjectsPerResource: 2
+    maxInvocations: 3
+  controllers:
+    - receiver: Reconciler
+      name: mirror
+      workers: 1
+      retryTicks: 2
+      key: source
+      effects:
+        - call: sigs.k8s.io/controller-runtime/pkg/client.Client.Get
+          effect: readSource
+        - call: sigs.k8s.io/controller-runtime/pkg/client.Reader.Get
+          effect: readTarget
+        - call: sigs.k8s.io/controller-runtime/pkg/client.Client.Update
+          effect: writeTarget
+      objectKeys:
+        github.com/phoban01/generative-architecture/examples/configmirror.Reconciler.Target: copy
+      locals:
+        source.data.value: snapshot
+  initial:
+    source: '"a"'
+    copy: '""'

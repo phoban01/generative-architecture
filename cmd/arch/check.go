@@ -116,7 +116,7 @@ func runCheck(g globals, args []string) error {
 			reason = "not model-checked: the generated model is stale; run arch generate again"
 		}
 		var temporal []report.Finding
-		v.Temporal, temporal = checkTemporal(ev, liveness, reason, quint.Options{})
+		v.Temporal, temporal = checkTemporal(g, ev, liveness, reason, quint.Options{})
 		v.Findings = append(v.Findings, temporal...)
 		v.Scope += "; temporal properties are listed with their own status, never checked by sampling"
 	}
@@ -167,7 +167,7 @@ func loadTemporal(p project.Project, m *model.Compiled) (model.Constraints, erro
 // and any other result leaves it unchecked with the checker's error. A
 // violation is a safety finding and an unchecked property an unsupported
 // finding, so the report never passes with an unchecked property.
-func checkTemporal(ev evidence, c model.Constraints, reason string, opts quint.Options) ([]report.TemporalResult, []report.Finding) {
+func checkTemporal(g globals, ev evidence, c model.Constraints, reason string, opts quint.Options) ([]report.TemporalResult, []report.Finding) {
 	if reason == "" && c.Fairness.Empty() {
 		reason = model.ErrNoFairness.Error()
 	}
@@ -187,7 +187,20 @@ func checkTemporal(ev evidence, c model.Constraints, reason string, opts quint.O
 				r.Status = report.TemporalVerified
 				if verdict.Outcome == quint.Violated {
 					r.Status = report.TemporalViolated
-					findings = append(findings, report.Finding{Category: report.CategorySafety, Property: t.Name, Message: fmt.Sprintf("temporal property %s violated under fairness %s: %s", t.Name, c.Fairness, verdict.Detail)})
+					f := report.Finding{Category: report.CategorySafety, Property: t.Name, Message: fmt.Sprintf("temporal property %s violated under fairness %s: %s", t.Name, c.Fairness, verdict.Detail)}
+					if states := verdict.Counterexample.States; len(states) > 0 {
+						// The full TLC trace is kept like a safety
+						// counterexample; the finding points at its last state.
+						if itf, err := conformance.WriteITF(verdict.Counterexample); err != nil {
+							findings = append(findings, report.Finding{Category: report.CategoryTool, Property: t.Name, Message: "counterexample: " + err.Error()})
+						} else if saved, err := saveTrace(g, "counterexample-"+t.Name, verdict.Counterexample, itf); err != nil {
+							findings = append(findings, report.Finding{Category: report.CategoryTool, Property: t.Name, Message: "counterexample: " + err.Error()})
+						} else {
+							f.Trace, f.Step, f.Event = saved, len(states)-1, states[len(states)-1].Event
+							f.Message += "; counterexample saved as " + saved
+						}
+					}
+					findings = append(findings, f)
 				}
 			}
 		}
@@ -220,7 +233,7 @@ func sample(g globals, ev evidence, opts quint.Options) (string, []report.Findin
 		}
 		f := report.Finding{Category: category, Message: fmt.Sprintf("quint: %s", firstLines(err.Error(), 6))}
 		if result.CounterexampleITF != nil {
-			saved, err := saveCounterexample(g, result)
+			saved, err := saveTrace(g, "counterexample", result.Counterexample, result.CounterexampleITF)
 			if err != nil {
 				return result.Version, []report.Finding{f, {Category: report.CategoryTool, Message: "counterexample: " + err.Error()}}
 			}
@@ -315,37 +328,36 @@ func firstLines(s string, n int) string {
 	return strings.Join(lines, " | ")
 }
 
-// saveCounterexample keeps the violating trace under <out>/counterexamples
-// and draws it as an execution view in a LikeC4 workspace beside it. The
-// steps link to their source through the process arch generate wrote;
-// without that document the view carries no sources. It returns the path
-// of the trace relative to --out.
-func saveCounterexample(g globals, result quint.Result) (string, error) {
+// saveTrace keeps a violating trace under <out>/counterexamples as
+// <name>.itf.json and draws it as an execution view in a LikeC4 workspace
+// beside it, under <name>/likec4. The steps link to their source through
+// the process arch generate wrote; without that document the view carries
+// no sources. It returns the path of the trace relative to --out.
+func saveTrace(g globals, name string, t conformance.Trace, itf []byte) (string, error) {
 	dir := filepath.Join(g.out, counterexamplesDir)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
-	name := "counterexample"
 	rel := filepath.ToSlash(filepath.Join(counterexamplesDir, name+".itf.json"))
-	if err := os.WriteFile(filepath.Join(g.out, rel), result.CounterexampleITF, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(g.out, rel), itf, 0o644); err != nil {
 		return "", err
 	}
 	var links []ir.Source
 	var process ir.Process
 	if err := krm.ReadResult(filepath.Join(g.out, processFile), processKind, &process); err == nil {
-		links = conformance.SourceLinks(result.Counterexample, process)
+		links = conformance.SourceLinks(t, process)
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return "", err
 	}
 	var w likec4.Workspace
-	elements, relations, view, err := likec4.ExecutionView(name, result.Counterexample, links)
+	elements, relations, view, err := likec4.ExecutionView(name, t, links)
 	if err != nil {
 		return "", err
 	}
 	if err := w.Add(elements, relations, view); err != nil {
 		return "", err
 	}
-	if err := w.Write(filepath.Join(dir, likec4Dir)); err != nil {
+	if err := w.Write(filepath.Join(dir, name, likec4Dir)); err != nil {
 		return "", err
 	}
 	return rel, nil

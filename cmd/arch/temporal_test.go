@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/phoban01/generative-architecture/pkg/conformance"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -51,7 +52,7 @@ func TestTemporalUnchecked(t *testing.T) {
 		"without fairness": {model.Constraints{Temporal: []model.Temporal{reachesThree}}, "", "no fairness assumption declared"},
 		"checker fails":    {model.Constraints{Temporal: []model.Temporal{reachesThree}, Fairness: fairIncrement}, "", "java: not found"},
 	} {
-		results, findings := checkTemporal(ev, tc.constraints, tc.reason, quint.Options{Executable: fake})
+		results, findings := checkTemporal(globals{out: t.TempDir()}, ev, tc.constraints, tc.reason, quint.Options{Executable: fake})
 		if len(results) != 1 || results[0].Status != report.TemporalUnchecked || !strings.Contains(results[0].Reason, tc.want) {
 			t.Errorf("%s: %+v", name, results)
 		}
@@ -71,7 +72,7 @@ func TestTemporalVerified(t *testing.T) {
 	if _, err := exec.LookPath("java"); err != nil {
 		t.Skip("java not on PATH: quint verify with TLC needs a Java 21 runtime")
 	}
-	results, findings := checkTemporal(counterEvidence(t), model.Constraints{Temporal: []model.Temporal{reachesThree, oneLeadsToZero}, Fairness: fairIncrement}, "", quint.Options{Executable: exe})
+	results, findings := checkTemporal(globals{out: t.TempDir()}, counterEvidence(t), model.Constraints{Temporal: []model.Temporal{reachesThree, oneLeadsToZero}, Fairness: fairIncrement}, "", quint.Options{Executable: exe})
 	if len(results) != 2 || results[0].Status != report.TemporalVerified || results[1].Status != report.TemporalViolated {
 		t.Fatalf("%+v", results)
 	}
@@ -140,5 +141,43 @@ func TestCheckReportsTemporalUnchecked(t *testing.T) {
 	}
 	if unchecked != 2 {
 		t.Fatalf("findings %+v", v.Findings)
+	}
+}
+
+// TestCheckSavesTemporalCounterexample runs arch check --verify on a
+// temporal property no run satisfies. TLC reports a counterexample, and
+// check keeps it as a trace with an execution view. It needs Quint and a
+// Java runtime.
+func TestCheckSavesTemporalCounterexample(t *testing.T) {
+	if os.Getenv("QUINT_BIN") == "" {
+		t.Skip("QUINT_BIN not set")
+	}
+	if _, err := exec.LookPath("java"); err != nil {
+		t.Skip("java not on PATH")
+	}
+	const project = "testdata/configmirror/violated-temporal.yaml"
+	out, err := generateTo(t, project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := arch(t, project, out, false, "check", "--verify", "--samples", "2", "--steps", "10"); err == nil || !strings.Contains(err.Error(), "safety finding") {
+		t.Fatalf("expected a safety finding, got %v", err)
+	}
+	v := readVerification(t, filepath.Join(out, checkReport))
+	var f *report.Finding
+	for i := range v.Findings {
+		if v.Findings[i].Property == "neverHappens" && v.Findings[i].Category == report.CategorySafety {
+			f = &v.Findings[i]
+		}
+	}
+	if f == nil || f.Trace != "counterexamples/counterexample-neverHappens.itf.json" || f.Event == "" || !strings.Contains(f.Message, "counterexample saved as") {
+		t.Fatalf("temporal finding %+v in %+v", f, v.Findings)
+	}
+	trace, err := conformance.ReadITF(filepath.Join(out, f.Trace))
+	if err != nil || trace.Status != "violation" || len(trace.States) != f.Step+1 || trace.States[0].Event != "init" {
+		t.Fatalf("saved counterexample %v %+v", err, trace)
+	}
+	if _, err := os.Stat(filepath.Join(out, "counterexamples", "counterexample-neverHappens", likec4Dir, "model.c4")); err != nil {
+		t.Fatalf("execution view: %v", err)
 	}
 }

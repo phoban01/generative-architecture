@@ -7,9 +7,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/phoban01/generative-architecture/pkg/conformance"
 	"github.com/phoban01/generative-architecture/pkg/model"
 )
 
@@ -46,6 +48,10 @@ type Verdict struct {
 	Property string
 	Outcome  string
 	Fairness model.Fairness
+	// Counterexample is the trace TLC reported for a violation, parsed from
+	// its output: the stuttering state is left out, and the status is
+	// "violation". It is empty when the output could not be parsed.
+	Counterexample conformance.Trace
 	// Detail is the start of the counterexample of a violation.
 	Detail string
 }
@@ -106,6 +112,9 @@ func Verify(ctx context.Context, m *model.Compiled, t model.Temporal, fair model
 	case errors.As(err, &exit) && strings.Contains(out, "[violation]"):
 		v.Outcome = Violated
 		v.Detail = counterexample(out)
+		if t, err := parseTLCTrace(out); err == nil {
+			v.Counterexample = t
+		}
 		return v, nil
 	case err == nil:
 		return v, fmt.Errorf("quint verify gave no verdict:\n%s", tail(out, 6))
@@ -167,4 +176,69 @@ func tail(out string, n int) string {
 		lines = lines[len(lines)-n:]
 	}
 	return strings.Join(lines, "\n")
+}
+
+// parseTLCTrace reads the states of TLC's counterexample into a trace. Each
+// "State N:" block lists one "/\ name = value" line per variable; a string
+// is quoted, a boolean is TRUE or FALSE and an integer is plain. The
+// stuttering state has no variables and is left out. The event variable
+// names the state's event. A value of any other shape is an error.
+func parseTLCTrace(out string) (conformance.Trace, error) {
+	t := conformance.Trace{Status: "violation"}
+	lines := strings.Split(out, "\n")
+	for i, line := range lines {
+		if !strings.HasPrefix(line, "State ") || strings.Contains(line, "Stuttering") {
+			continue
+		}
+		s := conformance.State{Values: map[string]any{}}
+		for _, next := range lines[i+1:] {
+			next = strings.TrimSpace(next)
+			if next == "" || strings.HasPrefix(next, "State ") {
+				break
+			}
+			next = strings.TrimSpace(strings.TrimPrefix(next, "/\\"))
+			name, raw, ok := strings.Cut(next, " = ")
+			if !ok {
+				return conformance.Trace{}, fmt.Errorf("tlc state line %q", next)
+			}
+			v, err := tlcValue(strings.TrimSpace(raw))
+			if err != nil {
+				return conformance.Trace{}, fmt.Errorf("tlc variable %s: %w", name, err)
+			}
+			if name == "event" {
+				event, ok := v.(string)
+				if !ok {
+					return conformance.Trace{}, fmt.Errorf("tlc event %q is not a string", raw)
+				}
+				s.Event = event
+				continue
+			}
+			s.Values[name] = v
+		}
+		if s.Event == "" {
+			return conformance.Trace{}, fmt.Errorf("tlc state %d has no event", len(t.States))
+		}
+		t.States = append(t.States, s)
+	}
+	if len(t.States) == 0 {
+		return conformance.Trace{}, fmt.Errorf("no states in the tlc output")
+	}
+	return t, nil
+}
+
+// tlcValue reads one TLC value: a quoted string, TRUE or FALSE, or an integer.
+func tlcValue(raw string) (any, error) {
+	switch {
+	case raw == "TRUE":
+		return true, nil
+	case raw == "FALSE":
+		return false, nil
+	case strings.HasPrefix(raw, `"`):
+		return strconv.Unquote(raw)
+	}
+	n, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("unsupported value %q", raw)
+	}
+	return n, nil
 }

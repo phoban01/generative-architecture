@@ -290,11 +290,11 @@ func TestCheckReportsSafetyViolation(t *testing.T) {
 	if err != nil || trace.Status != "violation" || len(trace.States) <= f.Step {
 		t.Fatalf("saved counterexample %v %+v", err, trace)
 	}
-	views, err := os.ReadFile(filepath.Join(out, "counterexamples", likec4Dir, "views", "counterexample.c4"))
+	views, err := os.ReadFile(filepath.Join(out, "counterexamples", "counterexample", likec4Dir, "views", "counterexample.c4"))
 	if err != nil || !strings.Contains(string(views), "dynamic view counterexample") {
 		t.Fatalf("execution view %v:\n%s", err, views)
 	}
-	model, err := os.ReadFile(filepath.Join(out, "counterexamples", likec4Dir, "model.c4"))
+	model, err := os.ReadFile(filepath.Join(out, "counterexamples", "counterexample", likec4Dir, "model.c4"))
 	if err != nil || !strings.Contains(string(model), "controller.go:") {
 		t.Fatalf("execution view has no source links %v:\n%s", err, model)
 	}
