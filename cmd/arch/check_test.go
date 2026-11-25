@@ -307,6 +307,9 @@ func TestCheckReportsSafetyViolation(t *testing.T) {
 // model only: inventory mode passes with the unsupported finding and
 // strict mode refuses it.
 func TestReplayWithoutAdapter(t *testing.T) {
+	if os.Getenv("QUINT_BIN") == "" {
+		t.Skip("QUINT_BIN not set")
+	}
 	const fields = "testdata/fields/project.yaml"
 	out, err := generateTo(t, fields)
 	if err != nil {
