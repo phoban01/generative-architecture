@@ -1,0 +1,10 @@
+[
+  {
+    "kind": "APIResourceList",
+    "groupVersion": "v1",
+    "resources": [
+      {"name": "namespaces", "singularName": "namespace", "namespaced": false, "kind": "Namespace", "verbs": ["get", "list", "watch"]},
+      {"name": "namespaces/status", "singularName": "", "namespaced": false, "kind": "Namespace", "verbs": ["get", "patch", "update"]}
+    ]
+  }
+]

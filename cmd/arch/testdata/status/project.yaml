@@ -1,0 +1,32 @@
+apiVersion: architecture.local/v1alpha1
+kind: Project
+metadata:
+  name: status
+spec:
+  # A reconciler that updates the status subresource.
+  module: github.com/phoban01/generative-architecture
+  packages:
+    - ./cmd/arch/testdata/status
+  catalog:
+    discovery:
+      - discovery.json
+  abstraction: abstraction.yaml
+  runtime:
+    profile: controller-runtime
+    maxTicks: 20
+  bounds:
+    maxObjectsPerResource: 1
+    maxInvocations: 3
+  controllers:
+    - receiver: Reconciler
+      name: status
+      workers: 1
+      retryTicks: 2
+      key: demo
+      effects:
+        - call: sigs.k8s.io/controller-runtime/pkg/client.Client.Get
+          effect: readNamespace
+        - call: sigs.k8s.io/controller-runtime/pkg/client.SubResourceWriter.Update
+          effect: writeStatus
+  initial:
+    demo: '""'

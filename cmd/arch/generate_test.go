@@ -479,3 +479,36 @@ func TestGenerateCreatesObject(t *testing.T) {
 		t.Fatalf("created outcome %+v", created)
 	}
 }
+
+// A Status().Update effect generates from the status.update summary: the
+// ok outcome replaces the selected status field with the local's value
+// and a stale copy conflicts.
+func TestGenerateStatusUpdate(t *testing.T) {
+	out, err := generateTo(t, "testdata/status/project.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var spec model.Spec
+	if _, err := krm.Read(filepath.Join(out, specFile), "TransitionModel", &spec); err != nil {
+		t.Fatal(err)
+	}
+	actions := map[string]model.Action{}
+	for _, a := range spec.Actions {
+		actions[a.Name] = a
+	}
+	ok := actions["writeStatus_ok"]
+	if ok.Updates["Namespace_demo_status_phase"] != "ns_status_phase" || !strings.Contains(string(ok.Guard), "Namespace_demo_metadata_resourceVersion == ns_metadata_resourceVersion") {
+		t.Fatalf("status update %+v", ok)
+	}
+	if _, conflict := actions["writeStatus_conflict"]; !conflict {
+		t.Fatalf("no conflict outcome: %v", slices.Sorted(maps.Keys(actions)))
+	}
+	// The effect is an update of the status subresource in the resource view.
+	c4, err := os.ReadFile(filepath.Join(out, likec4Dir, "model.c4"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(c4), "writeStatus: status.update (direct)") {
+		t.Fatalf("the resource view does not record the status subresource:\n%s", c4)
+	}
+}

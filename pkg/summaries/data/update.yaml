@@ -25,16 +25,17 @@ spec:
         - name: error
           guard: 'true'
           error: transient
-    # The status subresource replaces only the status fields; the rest of
+    # The status subresource replaces only the status fields ($status) with
+    # the status fields the caller passes ($statusValue); the rest of
     # the passed value is ignored by the API server.
     - operation: status.update
       consistency: direct
-      bindings: [$exists, $status, $resourceVersion, $value, $snapshotVersion]
+      bindings: [$exists, $status, $resourceVersion, $statusValue, $snapshotVersion]
       outcomes:
         - name: ok
           guard: $exists && $resourceVersion == $snapshotVersion
           updates:
-            $status: $value.status
+            $status: $statusValue
             $resourceVersion: $resourceVersion + 1
             $snapshotVersion: $resourceVersion + 1
         - name: conflict

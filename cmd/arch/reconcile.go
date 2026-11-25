@@ -17,6 +17,7 @@ import (
 	"github.com/phoban01/generative-architecture/pkg/goflow"
 	"github.com/phoban01/generative-architecture/pkg/ir"
 	"github.com/phoban01/generative-architecture/pkg/project"
+	"github.com/phoban01/generative-architecture/pkg/summaries"
 )
 
 // This file lowers a reconciler's Reconcile method with the typed frontend.
@@ -42,10 +43,14 @@ type clientEffect struct {
 // are unsupported and fail with the callee named.
 var operations = map[string]string{"Get": ir.OpGet, "Update": ir.OpUpdate, "Create": ir.OpCreate, "Delete": ir.OpDelete}
 
+// statusWriters are the receivers of a call through Client.Status().
+var statusWriters = map[string]bool{"SubResourceWriter": true, "StatusWriter": true}
+
 // clientEffects resolves the declared client effects. The consistency
 // follows the controller-runtime injection pattern unless declared: a read
 // through the manager's client (receiver Client) is served by the informer
-// cache, any other call goes to the API server.
+// cache, any other call goes to the API server. A call through
+// Client.Status() is the status subresource operation, status.update.
 func clientEffects(decl project.Controller) (map[goflow.Callee]clientEffect, error) {
 	out := map[goflow.Callee]clientEffect{}
 	for _, e := range decl.Effects {
@@ -55,7 +60,13 @@ func clientEffects(decl project.Controller) (map[goflow.Callee]clientEffect, err
 		}
 		op, ok := operations[method]
 		if !ok {
-			return nil, fmt.Errorf("controller %s: %s: method %s is not supported; supported methods are Get, Update, Create and Delete", decl.Name, e.Call, method)
+			return nil, fmt.Errorf("controller %s: %s: method %s is not supported; supported methods are Get, Update, Create, Delete and Status().Update", decl.Name, e.Call, method)
+		}
+		if statusWriters[receiver] {
+			if op != ir.OpUpdate {
+				return nil, fmt.Errorf("controller %s: %s: status %s is not supported; only Status().Update is", decl.Name, e.Call, method)
+			}
+			op = summaries.OperationKey(op, "status")
 		}
 		consistency := e.Consistency
 		if consistency == "" {
@@ -276,6 +287,15 @@ func (x *extraction) call(c goflow.Callee, call *ast.CallExpr, _ goflow.Convert)
 	case e.Operation == ir.OpUpdate, e.Operation == ir.OpCreate:
 		b["$resourceVersion"] = version
 		vectors["$object"], vectors["$value"] = values, snapshots
+	case e.Operation == summaries.OperationKey(ir.OpUpdate, "status"):
+		// A status update replaces the selected status fields with the
+		// local's status fields and leaves the other fields alone.
+		b["$resourceVersion"] = version
+		status, statusValues := statusFields(r, object, local, x)
+		if len(status) == 0 {
+			return goflow.Node{}, false, fmt.Errorf("%s: the abstraction selects no status field of %s", c, r.GVK.Kind)
+		}
+		vectors["$status"], vectors["$statusValue"] = status, statusValues
 	case e.Operation == ir.OpDelete:
 		// delete reads and clears the existence flag only.
 	default:
@@ -397,4 +417,17 @@ func (x *extraction) mapKeys(root string, jsonPath []string) []string {
 		}
 	}
 	return keys
+}
+
+// statusFields names the object variables of the selected status fields
+// of object and the local variables they are written from.
+func statusFields(r abstraction.Resource, object, local string, x *extraction) ([]string, []string) {
+	var status, values []string
+	for _, f := range r.Fields {
+		if p := abstraction.JSONPath(f.Path); len(p) > 0 && p[0] == "status" {
+			status = append(status, abstraction.FieldVariable(r.GVK.Kind, object, f))
+			values = append(values, x.localVariable(local, f))
+		}
+	}
+	return status, values
 }

@@ -25,6 +25,7 @@ textual, so a binding is any CEL expression.
 | `$cacheVersion` | The version of the cached copy |
 | `$status` | The status subresource of the stored object (or the selected status fields) |
 | `$value` | The object the caller passes in, as extracted from the Go call |
+| `$statusValue` | The status fields of the object the caller passes in (or the selected status fields) |
 | `$snapshot` | The caller's local copy of the object, written by reads |
 | `$snapshotVersion` | The version the caller's copy was read at; writes compare it with `$resourceVersion` |
 | `$options` | The call's options as a map: `resourceVersion` (a version precondition), `fieldManager`, `force`, `namespace`, `labelSelector`; absent keys are tested with `has()` |
@@ -63,7 +64,7 @@ Writes increment `$resourceVersion`. `update` and `status.update` succeed
 only when `$snapshotVersion` equals `$resourceVersion`, that is, when the
 caller's copy was read at the stored version; otherwise they report
 `conflict`. `update` replaces `$object` (the non-status fields) with
-`$value`; `status.update` replaces `$status` with `$value.status` and
+`$value`; `status.update` replaces `$status` with `$statusValue` and
 ignores the rest of the passed value, as the API server does. Both write
 the new version back into `$snapshotVersion`, as the client writes the
 response into the passed object.

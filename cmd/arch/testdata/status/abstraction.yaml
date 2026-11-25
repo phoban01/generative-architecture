@@ -1,0 +1,21 @@
+apiVersion: architecture.local/v1alpha1
+kind: Abstraction
+metadata:
+  name: status
+spec:
+  resources:
+    - gvk: {group: "", version: v1, kind: Namespace}
+      objects:
+        - {id: demo, name: demo}
+      fields:
+        - {path: [status, phase], type: string}
+      valueDomains:
+        status.phase: ['"Active"', '""']
+      identity:
+        - [metadata, name]
+  bounds:
+    maxObjectsPerResource: 1
+    maxInvocations: 3
+  excludes:
+    - delete
+    - list

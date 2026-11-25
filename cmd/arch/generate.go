@@ -304,7 +304,7 @@ func irEffects(c ir.Controller, effects []effect.Descriptor) []ir.Effect {
 		out = append(out, ir.Effect{
 			ID: d.ID, Kind: ir.KindAPI, Actor: c.ID,
 			Resource:  ir.GVK{Group: d.Resource.Group, Version: d.Resource.Version, Kind: d.Resource.Kind},
-			Operation: d.Operation, Consistency: d.Consistency,
+			Operation: operationOf(d.Operation), Subresource: subresourceOf(d.Operation), Consistency: d.Consistency,
 			Evidence: ir.Extracted, Provenance: c.Provenance,
 		})
 	}
@@ -556,4 +556,20 @@ func (gen generated) writeComposition(out string) (*receipt.File, error) {
 		return nil, err
 	}
 	return &receipt.File{Path: compositionFile, SHA256: fmt.Sprintf("%x", sha256.Sum256(b))}, nil
+}
+
+// operationOf and subresourceOf split a summary operation key such as
+// status.update into the IR's operation and subresource.
+func operationOf(key string) string {
+	if sub, op, ok := strings.Cut(key, "."); ok && sub != "" {
+		return op
+	}
+	return key
+}
+
+func subresourceOf(key string) string {
+	if sub, _, ok := strings.Cut(key, "."); ok {
+		return sub
+	}
+	return ""
 }

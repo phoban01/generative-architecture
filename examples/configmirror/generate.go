@@ -89,7 +89,13 @@ func NewSettings(p project.Project) (Settings, error) {
 		}
 		op, ok := clientOperations[method]
 		if !ok {
-			return Settings{}, fmt.Errorf("%s: method %s is not supported; supported methods are Get, Update, Create and Delete", e.Call, method)
+			return Settings{}, fmt.Errorf("%s: method %s is not supported; supported methods are Get, Update, Create, Delete and Status().Update", e.Call, method)
+		}
+		if receiver == "SubResourceWriter" || receiver == "StatusWriter" {
+			if op != ir.OpUpdate {
+				return Settings{}, fmt.Errorf("%s: status %s is not supported; only Status().Update is", e.Call, method)
+			}
+			op = summaries.OperationKey(op, "status")
 		}
 		consistency := e.Consistency
 		if consistency == "" {
@@ -280,6 +286,15 @@ func (x *extraction) call(c goflow.Callee, call *ast.CallExpr, _ goflow.Convert)
 	case e.Operation == ir.OpUpdate, e.Operation == ir.OpCreate:
 		b["$resourceVersion"] = version
 		vectors["$object"], vectors["$value"] = values, snapshots
+	case e.Operation == summaries.OperationKey(ir.OpUpdate, "status"):
+		// A status update replaces the selected status fields with the
+		// local's status fields and leaves the other fields alone.
+		b["$resourceVersion"] = version
+		status, statusValues := statusFields(r, object, local, x)
+		if len(status) == 0 {
+			return goflow.Node{}, false, fmt.Errorf("%s: the abstraction selects no status field of %s", c, r.GVK.Kind)
+		}
+		vectors["$status"], vectors["$statusValue"] = status, statusValues
 	case e.Operation == ir.OpDelete:
 		// delete reads and clears the existence flag only.
 	default:
@@ -541,15 +556,26 @@ func compose(s Settings, abs abstraction.Abstraction, program goflow.Program, sc
 			}
 		}
 		for placeholder, names := range n.Vectors {
-			if len(names) != len(o.resource.Fields) {
-				return model.Spec{}, fmt.Errorf("effect %s binds %s to %d variables for %d fields", n.Effect, placeholder, len(names), len(o.resource.Fields))
-			}
 			for i, name := range names {
-				f := o.resource.Fields[i]
 				switch placeholder {
 				case "$snapshot", "$value":
+					if len(names) != len(o.resource.Fields) {
+						return model.Spec{}, fmt.Errorf("effect %s binds %s to %d variables for %d fields", n.Effect, placeholder, len(names), len(o.resource.Fields))
+					}
 					if _, declared := state[name]; !declared {
+						f := o.resource.Fields[i]
 						locals[name] = model.Variable{Type: f.Type, Initial: expr.Expression(abstraction.Initial(f.Type))}
+					}
+				case "$statusValue":
+					// The status local takes the type of the status field
+					// it is written to.
+					status, ok := n.Vectors["$status"]
+					if !ok || len(status) != len(names) {
+						return model.Spec{}, fmt.Errorf("effect %s binds %s without a matching $status", n.Effect, placeholder)
+					}
+					if _, declared := state[name]; !declared {
+						v := state[status[i]]
+						locals[name] = model.Variable{Type: v.Type, Initial: expr.Expression(abstraction.Initial(v.Type))}
 					}
 				case "$cache":
 					state[name] = state[o.values[i]]
@@ -851,4 +877,17 @@ func existsInitial(initial map[string]string, id string) (string, error) {
 		return "", fmt.Errorf("object %s: initial existence %q must be true or false", id, v)
 	}
 	return v, nil
+}
+
+// statusFields names the object variables of the selected status fields
+// of object and the local variables they are written from.
+func statusFields(r abstraction.Resource, object, local string, x *extraction) ([]string, []string) {
+	var status, values []string
+	for _, f := range r.Fields {
+		if p := abstraction.JSONPath(f.Path); len(p) > 0 && p[0] == "status" {
+			status = append(status, abstraction.FieldVariable(r.GVK.Kind, object, f))
+			values = append(values, x.localVariable(local, f))
+		}
+	}
+	return status, values
 }

@@ -162,15 +162,26 @@ func (c controllerModel) build() (model.Spec, []effect.Descriptor, error) {
 			}
 		}
 		for placeholder, names := range n.Vectors {
-			if len(names) != len(o.resource.Fields) {
-				return model.Spec{}, nil, fmt.Errorf("effect %s binds %s to %d variables for %d fields", n.Effect, placeholder, len(names), len(o.resource.Fields))
-			}
 			for i, name := range names {
-				f := o.resource.Fields[i]
 				switch placeholder {
 				case "$snapshot", "$value":
+					if len(names) != len(o.resource.Fields) {
+						return model.Spec{}, nil, fmt.Errorf("effect %s binds %s to %d variables for %d fields", n.Effect, placeholder, len(names), len(o.resource.Fields))
+					}
 					if _, declared := state[name]; !declared {
+						f := o.resource.Fields[i]
 						locals[name] = model.Variable{Type: f.Type, Initial: expr.Expression(abstraction.Initial(f.Type))}
+					}
+				case "$statusValue":
+					// The status local takes the type of the status field
+					// it is written to.
+					status, ok := n.Vectors["$status"]
+					if !ok || len(status) != len(names) {
+						return model.Spec{}, nil, fmt.Errorf("effect %s binds %s without a matching $status", n.Effect, placeholder)
+					}
+					if _, declared := state[name]; !declared {
+						v := state[status[i]]
+						locals[name] = model.Variable{Type: v.Type, Initial: expr.Expression(abstraction.Initial(v.Type))}
 					}
 				case "$cache":
 					state[name] = state[o.values[i]]

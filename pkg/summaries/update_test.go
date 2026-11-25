@@ -12,7 +12,7 @@ func TestBuiltinUpdate(t *testing.T) {
 		operation, target, value string
 	}{
 		{ir.OpUpdate, "$object", "$value"},
-		{OperationKey(ir.OpUpdate, "status"), "$status", "$value.status"},
+		{OperationKey(ir.OpUpdate, "status"), "$status", "$statusValue"},
 	} {
 		t.Run(tc.operation, func(t *testing.T) {
 			s, err := r.Lookup(tc.operation, ir.ConsistencyDirect)
@@ -32,7 +32,7 @@ func TestBuiltinUpdate(t *testing.T) {
 			if notFound.Guard != "!$exists" || notFound.Error != ErrorNotFound || s.Outcomes[3].Error != ErrorTransient {
 				t.Fatalf("notFound %+v error %+v", notFound, s.Outcomes[3])
 			}
-			current := map[string]any{"exists": true, "object": "", "status": "", "resourceVersion": int64(4), "snapshotVersion": int64(4), "value": map[string]any{"status": "ready"}}
+			current := map[string]any{"exists": true, "object": "", "status": "", "resourceVersion": int64(4), "snapshotVersion": int64(4), "value": "", "statusValue": "ready"}
 			guardsParse(t, s, current)
 			b := bareBindings(s)
 			if evalTemplate(t, ok.Guard, b, current) != true || evalTemplate(t, conflict.Guard, b, current) != false {

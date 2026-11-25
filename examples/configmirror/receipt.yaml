@@ -41,7 +41,7 @@ status:
     - path: examples/configmirror/evidence.go
       sha256: caa5a9a803ffb54b3b61f32b75083cb6ad41055f7dcaae7452209f1e0191f631
     - path: examples/configmirror/generate.go
-      sha256: b063ed39693ecfcb0f609884bb6882c61299b4f0c4a168e5b3219cf0267d0b7e
+      sha256: bfd02dd3d1ca227fdc2876398d5844ab11b181e7f820c0cad0b79a5f1afd9f57
     - path: examples/configmirror/generated/environment_generated.go
       sha256: 89c807e758ae5c150fbf7351455ce4ffe06c8f008ad31bb2540d34e17ab6519f
     - path: examples/configmirror/generated/gating_generated.go
@@ -259,7 +259,7 @@ status:
     - path: pkg/sourcegen/types.go
       sha256: e4cff4356044356acc183a7952658c00eda6ce762c34b7de763e9d421b7910cd
     - path: pkg/summaries/data/README.md
-      sha256: fc57e5bad24314a54f7a79eb19fb1c650953072510e2fb1883f1b17270c74d18
+      sha256: d0254e34f84020b4ffda98851377b953444f848c490a27d62bc519c589996373
     - path: pkg/summaries/data/create.yaml
       sha256: dc575d00ce4a10e8687f5e38f58bb071a1b3415dfe85f186f49cf7c1ffd940fc
     - path: pkg/summaries/data/delete.yaml
@@ -271,7 +271,7 @@ status:
     - path: pkg/summaries/data/patch.yaml
       sha256: 654340736a4678d3c07e7bb217ce02c9ae2046efaf674c2f605514399d7a2e34
     - path: pkg/summaries/data/update.yaml
-      sha256: 3a56f847db322c69511939aac2d830a8c05bc48f33b33ceb30af1d85ec347ddc
+      sha256: 8f804da1d4a84daa5799e1605ebc9011aeb309d1a658998270ad449f69814732
     - path: pkg/summaries/object.go
       sha256: 0fcd3da2e993653e6479f7dd01f9a95761773a5f36a611440e643a38910722c6
     - path: pkg/summaries/registry.go

@@ -274,8 +274,10 @@ documents keep what an adopter would write.
   an object the reconciler read first, through the built-in create and
   delete summaries, and `spec.initial` may set `<object>.exists: false` so
   a created object starts absent.
-- Remaining: `List` binds a filtered catalog list and `Status().Update`
-  needs record semantics; both stay unsupported by generate.
+- Remaining: `List` binds a filtered catalog list and `Status().Patch`
+  binds patch options; both stay unsupported by generate. `Status().Update`
+  generates through the status.update summary over the selected status
+  fields.
 
 ### 17. arch generate takes one field per resource (closed by #151)
 
