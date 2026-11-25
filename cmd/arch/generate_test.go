@@ -316,3 +316,42 @@ func TestGenerateResolvesGroupVersion(t *testing.T) {
 		t.Fatalf("got %v, want %q", err, want)
 	}
 }
+
+// A resource with several selected fields generates one variable per
+// field: a read fills every field's local, a write updates every field's
+// variable, and the environment changes each field under its own event.
+func TestGenerateSeveralFields(t *testing.T) {
+	out, err := generateTo(t, "testdata/fields/project.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var spec model.Spec
+	if _, err := krm.Read(filepath.Join(out, specFile), "TransitionModel", &spec); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"ConfigMap_source_data_value", "ConfigMap_source_data_mode", "ConfigMap_copy_data_value", "ConfigMap_copy_data_mode", "source_data_value", "source_data_mode", "target_data_value", "target_data_mode"} {
+		if _, ok := spec.State[name]; !ok {
+			t.Errorf("model lacks %s: %v", name, slices.Sorted(maps.Keys(spec.State)))
+		}
+	}
+	if spec.State["ConfigMap_source_data_value"].Initial != `"a"` || spec.State["ConfigMap_copy_data_mode"].Initial != `""` {
+		t.Errorf("initial values not taken per field: %+v", spec.State)
+	}
+	actions := map[string]model.Action{}
+	for _, a := range spec.Actions {
+		actions[a.Name] = a
+	}
+	write := actions["writeTarget_ok"]
+	if write.Updates["ConfigMap_copy_data_value"] != "target_data_value" || write.Updates["ConfigMap_copy_data_mode"] != "target_data_mode" {
+		t.Errorf("the update does not write both fields: %+v", write)
+	}
+	read := actions["readSource_found"]
+	if read.Updates["source_data_value"] != "cached_ConfigMap_source_data_value" || read.Updates["source_data_mode"] != "cached_ConfigMap_source_data_mode" {
+		t.Errorf("the read does not fill both locals: %+v", read)
+	}
+	for _, name := range []string{"changeSource_data_value_a", "changeSource_data_mode_fast"} {
+		if _, ok := actions[name]; !ok {
+			t.Errorf("no environment action %s: %v", name, slices.Sorted(maps.Keys(actions)))
+		}
+	}
+}

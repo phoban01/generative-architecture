@@ -123,7 +123,7 @@ status:
       - path: examples/configmirror/evidence.go
         sha256: caa5a9a803ffb54b3b61f32b75083cb6ad41055f7dcaae7452209f1e0191f631
       - path: examples/configmirror/generate.go
-        sha256: 2e2f329546d88517b9fdfd64d1cd120c5f421d3881774557e6bb7d7555bdded7
+        sha256: 7d19eba5a65529ed0f121be0949cbfbb12d55f31050cec81eff067df2aa5b84f
       - path: examples/configmirror/generated/environment_generated.go
         sha256: 89c807e758ae5c150fbf7351455ce4ffe06c8f008ad31bb2540d34e17ab6519f
       - path: examples/configmirror/generated/gating_generated.go
@@ -141,7 +141,7 @@ status:
       - path: go.sum
         sha256: ed5af2f8d19b41f7406479adef9ab0a7ee5430f55509febeba1c7d3c877d7348
       - path: pkg/abstraction/abstraction.go
-        sha256: 53e3883ea42906e2b9bfa6bff919b24834b1f6bec1859deffb8ba1604ff52fba
+        sha256: 2fd703c2dd4b3d7751478239d95e70365d6794d4fb971365726f18222e076853
       - path: pkg/adaptergen/abstraction.go
         sha256: d4ac2ec54b307bbb84fcca0255803b6cadcd8284ca4a81607fcd2a2479267557
       - path: pkg/adaptergen/environment.go
@@ -155,7 +155,7 @@ status:
       - path: pkg/adaptergen/proxy.go
         sha256: 80d06f4552a8c3fec10a0a10cf80df6f136d98de6f57bafa9ca73a33eea29642
       - path: pkg/adaptergen/references.go
-        sha256: 85bed5eb6f6c940589c1175ec6a0889bc71e67029493f37be2bda01cff4579c4
+        sha256: 48a15572b9bd7ffb46bc0bc51b91b5a38a4ddcd6a40be836dadc63a910b3cf30
       - path: pkg/adaptergen/runtime.go
         sha256: aae8d13729fa31ac41bc6a7145a82384a9e3c57616cf4c94d45e9872ed149747
       - path: pkg/boundary/boundary.go
@@ -233,7 +233,7 @@ status:
       - path: pkg/goflow/external.go
         sha256: cc720b09df02824b8e2937dffa0314e802b180673a117026487b62aacea4526c
       - path: pkg/goflow/extract.go
-        sha256: f45246a872ddc1c1688912489f83b11762c4da3951729c7d5cf4dfdc6259bf2e
+        sha256: 4be4f59b117087038e90b6ce7db9a631c0413d75ab29cbc84d9f102aba665560
       - path: pkg/goflow/idioms.go
         sha256: ff6b2d8a354533d7764c907c163b76d20fdf51dc7ef950eafd6a3982d78ac23d
       - path: pkg/goflow/logging.go
@@ -305,7 +305,7 @@ status:
       - path: pkg/process/model.go
         sha256: f1daf8837b787080d1e92b1312675c831575631d3ee7d85ee760b2c8f4acc30c
       - path: pkg/process/summaries.go
-        sha256: f98174f2590824a01e60dc10a0ebf6a35119eb74366f9ab59f9b755ebac5be9d
+        sha256: 1b441a02d6228bdd4a62bc572ffc67373f4f219ec7b334a8e26bcf2bc5a381cf
       - path: pkg/project/model.go
         sha256: 91fb0446337c6b90c219148402772ceadf25b5259880d082912633b10676f54d
       - path: pkg/project/project.go

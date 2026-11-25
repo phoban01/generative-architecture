@@ -37,7 +37,7 @@ func TestVariantsForInstantiatesEveryOutcome(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	variants, err := process.VariantsFor(s, getBindings)
+	variants, err := process.VariantsFor(s, getBindings, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +50,7 @@ func TestVariantsForInstantiatesEveryOutcome(t *testing.T) {
 		t.Fatalf("unexpected variants:\n%+v\n%+v", variants, want)
 	}
 	// A placeholder without a binding is an error, not a silent name.
-	if _, err := process.VariantsFor(s, map[string]string{"$exists": "exists"}); err == nil || !strings.Contains(err.Error(), "unbound placeholder") {
+	if _, err := process.VariantsFor(s, map[string]string{"$exists": "exists"}, nil); err == nil || !strings.Contains(err.Error(), "unbound placeholder") {
 		t.Fatalf("unbound placeholder accepted: %v", err)
 	}
 }
@@ -167,5 +167,37 @@ func TestExpandDeclaredExternalEffect(t *testing.T) {
 	}
 	if _, err := process.Expand(base(), p, process.Config{PC: "pc", Finished: "done"}); err == nil || !strings.Contains(err.Error(), "provision") {
 		t.Fatalf("undeclared external effect accepted: %v", err)
+	}
+}
+
+// A vector placeholder instantiates an update once per field: a direct get
+// of an object with two selected fields copies both into their locals and
+// the version once.
+func TestVariantsForVectors(t *testing.T) {
+	s := summaries.Summary{Operation: "get", Consistency: "direct", Outcomes: []summaries.Outcome{
+		{Name: "found", Guard: "$exists", Updates: map[string]string{"$snapshot": "$object", "$snapshotVersion": "$resourceVersion"}},
+		{Name: "notFound", Guard: "!$exists", Error: "notFound"},
+	}}
+	bindings := map[string]string{"$exists": "cm_exists", "$resourceVersion": "cm_version", "$snapshotVersion": "local_version"}
+	vectors := map[string][]string{"$object": {"cm_a", "cm_b"}, "$snapshot": {"local_a", "local_b"}}
+	variants, err := process.VariantsFor(s, bindings, vectors)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]expr.Expression{"local_a": "cm_a", "local_b": "cm_b", "local_version": "cm_version"}
+	if len(variants) != 2 || variants[0].Guard != "cm_exists" || !reflect.DeepEqual(variants[0].Updates, want) || variants[1].Updates != nil {
+		t.Fatalf("variants %+v", variants)
+	}
+	for name, bad := range map[string]map[string][]string{
+		"uneven vectors": {"$object": {"cm_a", "cm_b"}, "$snapshot": {"local_a"}},
+		"empty vector":   {"$object": {}, "$snapshot": {}},
+	} {
+		if _, err := process.VariantsFor(s, bindings, bad); err == nil {
+			t.Errorf("%s accepted", name)
+		}
+	}
+	guarded := summaries.Summary{Operation: "x", Consistency: "direct", Outcomes: []summaries.Outcome{{Name: "o", Guard: `$object == "a"`}}}
+	if _, err := process.VariantsFor(guarded, bindings, vectors); err == nil || !strings.Contains(err.Error(), "guard names the per-field placeholder $object") {
+		t.Fatalf("vector in a guard accepted: %v", err)
 	}
 }

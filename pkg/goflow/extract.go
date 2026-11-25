@@ -30,6 +30,11 @@ type Node struct {
 	Effect      string            `yaml:"effect,omitempty"`
 	Consistency string            `yaml:"consistency,omitempty"`
 	Bindings    map[string]string `yaml:"bindings,omitempty"`
+	// Vectors bind a placeholder to one model variable per selected field
+	// of the addressed object, in field order; every vector of a node has
+	// the same length. A summary update that names a vector placeholder is
+	// instantiated once per field (see process.VariantsFor).
+	Vectors map[string][]string `yaml:"vectors,omitempty"`
 	// Options records the call options a summary keeps, such as the
 	// namespace and field selector of a List.
 	Options     map[string]string          `yaml:"options,omitempty"`

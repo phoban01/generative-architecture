@@ -12,25 +12,83 @@ import (
 // VariantsFor instantiates every outcome of a summary with the bindings and
 // returns them as variants in declared order. Bindings map each $placeholder
 // the summary uses to a model expression, or for an update target to a model
-// variable. An unbound placeholder is an error so that no outcome is dropped
-// silently; the receiving model compiler checks the substituted CEL.
-func VariantsFor(s summaries.Summary, bindings map[string]string) ([]Variant, error) {
+// variable. Vectors map a placeholder to one variable per selected field of
+// the addressed object: an update that names a vector placeholder is
+// instantiated once per field, with the field's variable in place of every
+// vector placeholder, so an object with several fields is read and written
+// field by field. A guard may not name a vector placeholder. An unbound
+// placeholder is an error so that no outcome is dropped silently; the
+// receiving model compiler checks the substituted CEL.
+func VariantsFor(s summaries.Summary, bindings map[string]string, vectors map[string][]string) ([]Variant, error) {
+	width := 0
+	for p, vars := range vectors {
+		if width == 0 {
+			width = len(vars)
+		}
+		if len(vars) == 0 || len(vars) != width {
+			return nil, fmt.Errorf("vector %s binds %d variables; every vector of a node binds the same positive number", p, len(vars))
+		}
+	}
 	out := make([]Variant, 0, len(s.Outcomes))
 	for _, o := range s.Outcomes {
-		bound, err := o.Instantiate(bindings)
+		for _, p := range summaries.Placeholders(o.Guard) {
+			if _, ok := vectors[p]; ok {
+				return nil, fmt.Errorf("outcome %s: guard names the per-field placeholder %s", o.Name, p)
+			}
+		}
+		v := Variant{Name: o.Name}
+		guard, err := summaries.Substitute(o.Guard, bindings)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("outcome %s: %w", o.Name, err)
 		}
-		v := Variant{Name: bound.Name, Guard: expr.Expression(bound.Guard)}
-		if len(bound.Updates) > 0 {
-			v.Updates = make(map[string]expr.Expression, len(bound.Updates))
+		v.Guard = expr.Expression(guard)
+		if len(o.Updates) > 0 {
+			v.Updates = map[string]expr.Expression{}
 		}
-		for target, value := range bound.Updates {
-			v.Updates[target] = expr.Expression(value)
+		for target, value := range o.Updates {
+			instances := 1
+			if vectorial(vectors, target, value) {
+				instances = width
+			}
+			for i := 0; i < instances; i++ {
+				b := bindings
+				if instances > 1 || vectorial(vectors, target, value) {
+					b = make(map[string]string, len(bindings)+len(vectors))
+					for k, val := range bindings {
+						b[k] = val
+					}
+					for k, vars := range vectors {
+						b[k] = vars[i]
+					}
+				}
+				t, err := summaries.Substitute(target, b)
+				if err != nil {
+					return nil, fmt.Errorf("outcome %s: %w", o.Name, err)
+				}
+				if _, dup := v.Updates[t]; dup {
+					return nil, fmt.Errorf("outcome %s: targets alias %s", o.Name, t)
+				}
+				val, err := summaries.Substitute(value, b)
+				if err != nil {
+					return nil, fmt.Errorf("outcome %s: %w", o.Name, err)
+				}
+				v.Updates[t] = expr.Expression(val)
+			}
 		}
 		out = append(out, v)
 	}
 	return out, nil
+}
+
+// vectorial reports whether an update's target or value names a vector
+// placeholder.
+func vectorial(vectors map[string][]string, target, value string) bool {
+	for _, p := range summaries.Placeholders(target, value) {
+		if _, ok := vectors[p]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 // ExternalSummary presents the declared outcomes of an external effect as a
@@ -91,7 +149,7 @@ func (c Config) summarize(n goflow.Node) ([]Variant, error) {
 			return nil, err
 		}
 	}
-	variants, err := VariantsFor(s, n.Bindings)
+	variants, err := VariantsFor(s, n.Bindings, n.Vectors)
 	if err != nil {
 		return nil, fmt.Errorf("summary %s/%s: %w", s.Operation, s.Consistency, err)
 	}

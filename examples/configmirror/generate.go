@@ -120,13 +120,17 @@ type extraction struct {
 	settings Settings
 }
 
-// localVariable is the model variable holding a selected field of a Go
-// object local.
-func (x *extraction) localVariable(local string, fieldPath []string) string {
-	if v, ok := x.settings.Locals[local+"."+abstraction.PathKey(fieldPath)]; ok {
+// localVariable is the model variable holding the selected field f of a Go
+// object local: the local the project declares for it, else
+// <local>_<name> for a named field and <local>_<path elements> otherwise.
+func (x *extraction) localVariable(local string, f abstraction.Field) string {
+	if v, ok := x.settings.Locals[local+"."+abstraction.PathKey(f.Path)]; ok {
 		return v
 	}
-	return local + "_" + strings.Join(fieldPath, "_")
+	if f.Name != "" {
+		return local + "_" + f.Name
+	}
+	return local + "_" + strings.Join(abstraction.JSONPath(f.Path), "_")
 }
 
 // cacheVariable is the informer cache's copy of an object variable, named
@@ -140,9 +144,6 @@ func cacheVariable(v string) string { return adaptergen.CachedVariable(v) }
 func ExtractOptions(l goflow.Loaded, abs abstraction.Abstraction, s Settings) (goflow.Options, error) {
 	x := &extraction{abs: abs, info: l.Package.TypesInfo, body: l.Func.Body, locals: map[string]abstraction.Resource{}, resource: map[ir.GVK]abstraction.Resource{}, settings: s}
 	for _, r := range abs.Spec.Resources {
-		if len(r.Fields) != 1 {
-			return goflow.Options{}, fmt.Errorf("resource %s: generation supports exactly one selected field, got %d", r.GVK, len(r.Fields))
-		}
 		x.resource[r.GVK] = r
 	}
 	scope := map[string]expr.Symbol{}
@@ -170,8 +171,10 @@ func ExtractOptions(l goflow.Loaded, abs abstraction.Abstraction, s Settings) (g
 			return false
 		}
 		x.locals[id.Name] = r
-		f := r.Fields[0]
-		scope[x.localVariable(id.Name, f.Path)] = expr.Symbol{Type: f.Type, Quint: x.localVariable(id.Name, f.Path)}
+		for _, f := range r.Fields {
+			v := x.localVariable(id.Name, f)
+			scope[v] = expr.Symbol{Type: f.Type, Quint: v}
+		}
 		return true
 	})
 	if err != nil {
@@ -209,10 +212,15 @@ func resourceOf(t types.Type) (ir.GVK, bool) {
 // field maps a selected field of a Go object local to its model variable.
 func (x *extraction) field(root string, fieldPath []string) (expr.Expression, bool) {
 	r, ok := x.locals[root]
-	if !ok || abstraction.PathKey(fieldPath) != abstraction.PathKey(r.Fields[0].Path) {
+	if !ok {
 		return "", false
 	}
-	return expr.Expression(x.localVariable(root, fieldPath)), true
+	for _, f := range r.Fields {
+		if abstraction.PathKey(fieldPath) == abstraction.PathKey(abstraction.JSONPath(f.Path)) {
+			return expr.Expression(x.localVariable(root, f)), true
+		}
+	}
+	return "", false
 }
 
 // call summarizes a client call: its effect, operation, consistency and
@@ -243,26 +251,39 @@ func (x *extraction) call(c goflow.Callee, call *ast.CallExpr, _ goflow.Convert)
 			return goflow.Node{}, false, err
 		}
 	}
-	f := r.Fields[0]
-	value := abstraction.FieldVariable(r.GVK.Kind, object, f)
+	// The summary placeholders that stand for the object's content bind one
+	// variable per selected field, in field order (see goflow.Node.Vectors).
+	values := make([]string, 0, len(r.Fields))
+	snapshots := make([]string, 0, len(r.Fields))
+	cachedValues := make([]string, 0, len(r.Fields))
+	for _, f := range r.Fields {
+		value := abstraction.FieldVariable(r.GVK.Kind, object, f)
+		values = append(values, value)
+		snapshots = append(snapshots, x.localVariable(local, f))
+		cachedValues = append(cachedValues, cacheVariable(value))
+	}
 	version := abstraction.VariableName(r.GVK.Kind, object, versionPath)
 	b := map[string]string{
 		"$exists":          abstraction.ExistsVariable(r.GVK.Kind, object),
-		"$snapshotVersion": x.localVariable(local, versionPath),
+		"$snapshotVersion": x.localVariable(local, abstraction.Field{Path: versionPath}),
 	}
+	vectors := map[string][]string{}
 	switch {
 	case e.Operation == ir.OpGet && e.Consistency == ir.ConsistencyCached:
 		// Objects are neither created nor deleted while the model runs, so
 		// the cache's view of existence is the API server's.
-		b["$cache"], b["$cacheVersion"], b["$snapshot"] = cacheVariable(value), cacheVariable(version), x.localVariable(local, f.Path)
+		b["$cacheVersion"] = cacheVariable(version)
+		vectors["$cache"], vectors["$snapshot"] = cachedValues, snapshots
 	case e.Operation == ir.OpGet:
-		b["$object"], b["$resourceVersion"], b["$snapshot"] = value, version, x.localVariable(local, f.Path)
+		b["$resourceVersion"] = version
+		vectors["$object"], vectors["$snapshot"] = values, snapshots
 	case e.Operation == ir.OpUpdate:
-		b["$object"], b["$resourceVersion"], b["$value"] = value, version, x.localVariable(local, f.Path)
+		b["$resourceVersion"] = version
+		vectors["$object"], vectors["$value"] = values, snapshots
 	default:
 		return goflow.Node{}, false, fmt.Errorf("%s: no bindings for operation %s", c, e.Operation)
 	}
-	return goflow.Node{Kind: e.Operation, Effect: e.Effect, Consistency: e.Consistency, Bindings: b}, true, nil
+	return goflow.Node{Kind: e.Operation, Effect: e.Effect, Consistency: e.Consistency, Bindings: b, Vectors: vectors}, true, nil
 }
 
 // local resolves the object argument of a client call to a Go object local.
@@ -432,9 +453,11 @@ func GenerateOverlay(root string, overlay map[string][]byte) (model.Spec, error)
 
 // objectInfo is an abstracted object and its model variables.
 type objectInfo struct {
-	resource               abstraction.Resource
-	object                 abstraction.Object
-	value, exists, version string
+	resource        abstraction.Resource
+	object          abstraction.Object
+	exists, version string
+	// values are the variables of the selected fields, in field order.
+	values []string
 }
 
 // objectsOf keys every abstracted object by its exists variable.
@@ -443,7 +466,7 @@ func objectsOf(abs abstraction.Abstraction) map[string]objectInfo {
 	for _, r := range abs.Spec.Resources {
 		for _, o := range r.Objects {
 			out[abstraction.ExistsVariable(r.GVK.Kind, o.ID)] = objectInfo{resource: r, object: o,
-				value:   abstraction.FieldVariable(r.GVK.Kind, o.ID, r.Fields[0]),
+				values:  fieldVariables(r, o),
 				exists:  abstraction.ExistsVariable(r.GVK.Kind, o.ID),
 				version: abstraction.VariableName(r.GVK.Kind, o.ID, versionPath)}
 		}
@@ -455,12 +478,17 @@ func compose(s Settings, abs abstraction.Abstraction, program goflow.Program, co
 	objects := objectsOf(abs)
 	state := abs.StateVariables()
 	for _, o := range objects {
-		initial, ok := s.Initial[o.object.ID]
-		if !ok || !slices.Contains(o.resource.ValueDomains[o.resource.Fields[0].Key()], initial) {
-			return model.Spec{}, fmt.Errorf("object %s: initial value %q is not in its value domain", o.object.ID, initial)
+		for i, f := range o.resource.Fields {
+			initial, ok := initialValue(s.Initial, o.resource, o.object.ID, f)
+			if !ok {
+				return model.Spec{}, fmt.Errorf("object %s has no initial value for field %s; declare it under spec.initial as %s", o.object.ID, f.Key(), o.object.ID+"."+f.Key())
+			}
+			if !slices.Contains(o.resource.ValueDomains[f.Key()], initial) {
+				return model.Spec{}, fmt.Errorf("object %s: initial value %q of field %s is not in its value domain", o.object.ID, initial, f.Key())
+			}
+			state[o.values[i]] = model.Variable{Type: f.Type, Initial: expr.Expression(initial)}
 		}
 		state[o.exists] = model.Variable{Type: abstraction.TypeBool, Initial: "true"}
-		state[o.value] = model.Variable{Type: o.resource.Fields[0].Type, Initial: expr.Expression(initial)}
 		state[o.version] = model.Variable{Type: abstraction.TypeInt, Initial: "0"}
 	}
 	// Process locals are the variables summaries and assignments bind Go
@@ -493,19 +521,28 @@ func compose(s Settings, abs abstraction.Abstraction, program goflow.Program, co
 			seenEffects[n.Effect] = true
 			effects = append(effects, effect.Descriptor{ID: n.Effect, Resource: effect.Resource{Group: o.resource.GVK.Group, Version: o.resource.GVK.Version, Kind: o.resource.GVK.Kind}, Operation: n.Kind, Consistency: n.Consistency})
 		}
-		field := model.Variable{Type: o.resource.Fields[0].Type, Initial: expr.Expression(abstraction.Initial(o.resource.Fields[0].Type))}
 		for placeholder, name := range n.Bindings {
 			switch placeholder {
-			case "$snapshot", "$value":
-				if _, declared := state[name]; !declared {
-					locals[name] = field
-				}
 			case "$snapshotVersion":
 				locals[name] = model.Variable{Type: abstraction.TypeInt, Initial: "0"}
-			case "$cache":
-				state[name] = state[o.value]
 			case "$cacheVersion":
 				state[name] = model.Variable{Type: abstraction.TypeInt, Initial: "0"}
+			}
+		}
+		for placeholder, names := range n.Vectors {
+			if len(names) != len(o.resource.Fields) {
+				return model.Spec{}, fmt.Errorf("effect %s binds %s to %d variables for %d fields", n.Effect, placeholder, len(names), len(o.resource.Fields))
+			}
+			for i, name := range names {
+				f := o.resource.Fields[i]
+				switch placeholder {
+				case "$snapshot", "$value":
+					if _, declared := state[name]; !declared {
+						locals[name] = model.Variable{Type: f.Type, Initial: expr.Expression(abstraction.Initial(f.Type))}
+					}
+				case "$cache":
+					state[name] = state[o.values[i]]
+				}
 			}
 		}
 		switch {
@@ -694,12 +731,14 @@ func environmentActions(reads, writes, cached map[string]objectInfo) []model.Act
 		if _, written := writes[exists]; written {
 			continue
 		}
-		for i, v := range o.resource.ValueDomains[o.resource.Fields[0].Key()] {
-			out = append(out, model.Action{
-				Name:    adaptergen.ChangeValueEvent(o.object.ID, v, i),
-				Guard:   expr.Expression(fmt.Sprintf("%s != %s", o.value, v)),
-				Updates: map[string]expr.Expression{o.value: expr.Expression(v), o.version: expr.Expression(o.version + " + 1")},
-			})
+		for i, f := range o.resource.Fields {
+			for j, v := range o.resource.ValueDomains[f.Key()] {
+				out = append(out, model.Action{
+					Name:    changeValueEvent(o.resource, o.object.ID, f, v, j),
+					Guard:   expr.Expression(fmt.Sprintf("%s != %s", o.values[i], v)),
+					Updates: map[string]expr.Expression{o.values[i]: expr.Expression(v), o.version: expr.Expression(o.version + " + 1")},
+				})
+			}
 		}
 	}
 	for _, exists := range sortedObjects(cached) {
@@ -708,7 +747,11 @@ func environmentActions(reads, writes, cached map[string]objectInfo) []model.Act
 		if len(cached) > 1 {
 			name += "_" + o.object.ID
 		}
-		out = append(out, model.Action{Name: name, Guard: "true", Updates: map[string]expr.Expression{cacheVariable(o.value): expr.Expression(o.value), cacheVariable(o.version): expr.Expression(o.version)}})
+		updates := map[string]expr.Expression{cacheVariable(o.version): expr.Expression(o.version)}
+		for _, v := range o.values {
+			updates[cacheVariable(v)] = expr.Expression(v)
+		}
+		out = append(out, model.Action{Name: name, Guard: "true", Updates: updates})
 	}
 	return out
 }
@@ -749,4 +792,38 @@ func (x *extraction) mapKeys(root string, jsonPath []string) []string {
 		}
 	}
 	return keys
+}
+
+// fieldVariables names the model variables of the selected fields of o, in
+// field order.
+func fieldVariables(r abstraction.Resource, o abstraction.Object) []string {
+	out := make([]string, 0, len(r.Fields))
+	for _, f := range r.Fields {
+		out = append(out, abstraction.FieldVariable(r.GVK.Kind, o.ID, f))
+	}
+	return out
+}
+
+// initialValue finds the declared initial value of field f of object id:
+// spec.initial names it by the object ID alone when the resource selects
+// one field, or by <object>.<field key>.
+func initialValue(initial map[string]string, r abstraction.Resource, id string, f abstraction.Field) (string, bool) {
+	if v, ok := initial[id+"."+f.Key()]; ok {
+		return v, true
+	}
+	if len(r.Fields) == 1 {
+		v, ok := initial[id]
+		return v, ok
+	}
+	return "", false
+}
+
+// changeValueEvent names the environment event that sets field f of object
+// id to the index-th value of its domain: the per-object name when the
+// resource selects one field, else the object and the field key.
+func changeValueEvent(r abstraction.Resource, id string, f abstraction.Field, literal string, index int) string {
+	if len(r.Fields) == 1 {
+		return adaptergen.ChangeValueEvent(id, literal, index)
+	}
+	return adaptergen.ChangeValueEvent(id+"_"+strings.ReplaceAll(f.Key(), ".", "_"), literal, index)
 }

@@ -61,9 +61,11 @@ type controllerModel struct {
 
 // objectInfo is an abstracted object and its model variables.
 type objectInfo struct {
-	resource               abstraction.Resource
-	object                 abstraction.Object
-	value, exists, version string
+	resource        abstraction.Resource
+	object          abstraction.Object
+	exists, version string
+	// values are the variables of the selected fields, in field order.
+	values []string
 }
 
 // objectsOf keys every abstracted object by its exists variable.
@@ -72,7 +74,7 @@ func objectsOf(abs abstraction.Abstraction) map[string]objectInfo {
 	for _, r := range abs.Spec.Resources {
 		for _, o := range r.Objects {
 			out[abstraction.ExistsVariable(r.GVK.Kind, o.ID)] = objectInfo{resource: r, object: o,
-				value:   abstraction.FieldVariable(r.GVK.Kind, o.ID, r.Fields[0]),
+				values:  fieldVariables(r, o),
 				exists:  abstraction.ExistsVariable(r.GVK.Kind, o.ID),
 				version: abstraction.VariableName(r.GVK.Kind, o.ID, versionPath)}
 		}
@@ -91,15 +93,17 @@ func (c controllerModel) build() (model.Spec, []effect.Descriptor, error) {
 	state := c.abs.StateVariables()
 	for _, exists := range sortedObjects(objects) {
 		o := objects[exists]
-		initial, ok := c.initial[o.object.ID]
-		if !ok {
-			return model.Spec{}, nil, fmt.Errorf("object %s has no initial value; declare it under spec.initial", o.object.ID)
-		}
-		if !slices.Contains(o.resource.ValueDomains[o.resource.Fields[0].Key()], initial) {
-			return model.Spec{}, nil, fmt.Errorf("object %s: initial value %s is not in its value domain", o.object.ID, initial)
+		for i, f := range o.resource.Fields {
+			initial, ok := initialValue(c.initial, o.resource, o.object.ID, f)
+			if !ok {
+				return model.Spec{}, nil, fmt.Errorf("object %s has no initial value for field %s; declare it under spec.initial as %s", o.object.ID, f.Key(), o.object.ID+"."+f.Key())
+			}
+			if !slices.Contains(o.resource.ValueDomains[f.Key()], initial) {
+				return model.Spec{}, nil, fmt.Errorf("object %s: initial value %s of field %s is not in its value domain", o.object.ID, initial, f.Key())
+			}
+			state[o.values[i]] = model.Variable{Type: f.Type, Initial: expr.Expression(initial)}
 		}
 		state[o.exists] = model.Variable{Type: abstraction.TypeBool, Initial: "true"}
-		state[o.value] = model.Variable{Type: o.resource.Fields[0].Type, Initial: expr.Expression(initial)}
 		state[o.version] = model.Variable{Type: abstraction.TypeInt, Initial: "0"}
 	}
 	// Process locals are the variables summaries and assignments bind Go
@@ -135,19 +139,28 @@ func (c controllerModel) build() (model.Spec, []effect.Descriptor, error) {
 		} else if prior != d {
 			return model.Spec{}, nil, fmt.Errorf("effect %s is used for %s and %s; declare one effect per resource and operation", n.Effect, prior.Resource.Kind, d.Resource.Kind)
 		}
-		field := model.Variable{Type: o.resource.Fields[0].Type, Initial: expr.Expression(abstraction.Initial(o.resource.Fields[0].Type))}
 		for placeholder, name := range n.Bindings {
 			switch placeholder {
-			case "$snapshot", "$value":
-				if _, declared := state[name]; !declared {
-					locals[name] = field
-				}
 			case "$snapshotVersion":
 				locals[name] = model.Variable{Type: abstraction.TypeInt, Initial: "0"}
-			case "$cache":
-				state[name] = state[o.value]
 			case "$cacheVersion":
 				state[name] = model.Variable{Type: abstraction.TypeInt, Initial: "0"}
+			}
+		}
+		for placeholder, names := range n.Vectors {
+			if len(names) != len(o.resource.Fields) {
+				return model.Spec{}, nil, fmt.Errorf("effect %s binds %s to %d variables for %d fields", n.Effect, placeholder, len(names), len(o.resource.Fields))
+			}
+			for i, name := range names {
+				f := o.resource.Fields[i]
+				switch placeholder {
+				case "$snapshot", "$value":
+					if _, declared := state[name]; !declared {
+						locals[name] = model.Variable{Type: f.Type, Initial: expr.Expression(abstraction.Initial(f.Type))}
+					}
+				case "$cache":
+					state[name] = state[o.values[i]]
+				}
 			}
 		}
 		switch {
@@ -328,12 +341,14 @@ func environmentActions(reads, writes, cached map[string]objectInfo) []model.Act
 		if _, written := writes[exists]; written {
 			continue
 		}
-		for i, v := range o.resource.ValueDomains[o.resource.Fields[0].Key()] {
-			out = append(out, model.Action{
-				Name:    adaptergen.ChangeValueEvent(o.object.ID, v, i),
-				Guard:   expr.Expression(fmt.Sprintf("%s != %s", o.value, v)),
-				Updates: map[string]expr.Expression{o.value: expr.Expression(v), o.version: expr.Expression(o.version + " + 1")},
-			})
+		for i, f := range o.resource.Fields {
+			for j, v := range o.resource.ValueDomains[f.Key()] {
+				out = append(out, model.Action{
+					Name:    changeValueEvent(o.resource, o.object.ID, f, v, j),
+					Guard:   expr.Expression(fmt.Sprintf("%s != %s", o.values[i], v)),
+					Updates: map[string]expr.Expression{o.values[i]: expr.Expression(v), o.version: expr.Expression(o.version + " + 1")},
+				})
+			}
 		}
 	}
 	for _, exists := range sortedObjects(cached) {
@@ -342,7 +357,11 @@ func environmentActions(reads, writes, cached map[string]objectInfo) []model.Act
 		if len(cached) > 1 {
 			name += "_" + o.object.ID
 		}
-		out = append(out, model.Action{Name: name, Guard: "true", Updates: map[string]expr.Expression{adaptergen.CachedVariable(o.value): expr.Expression(o.value), adaptergen.CachedVariable(o.version): expr.Expression(o.version)}})
+		updates := map[string]expr.Expression{adaptergen.CachedVariable(o.version): expr.Expression(o.version)}
+		for _, v := range o.values {
+			updates[adaptergen.CachedVariable(v)] = expr.Expression(v)
+		}
+		out = append(out, model.Action{Name: name, Guard: "true", Updates: updates})
 	}
 	return out
 }
@@ -364,4 +383,38 @@ var finishOutcomes = map[string]string{
 	eventFinishRequeue:    process.OutcomeRequeue,
 	eventFinishAfter:      process.OutcomeAfter,
 	eventFinishErrorAfter: process.OutcomeErrorAfter,
+}
+
+// fieldVariables names the model variables of the selected fields of o, in
+// field order.
+func fieldVariables(r abstraction.Resource, o abstraction.Object) []string {
+	out := make([]string, 0, len(r.Fields))
+	for _, f := range r.Fields {
+		out = append(out, abstraction.FieldVariable(r.GVK.Kind, o.ID, f))
+	}
+	return out
+}
+
+// initialValue finds the declared initial value of field f of object id:
+// spec.initial names it by the object ID alone when the resource selects
+// one field, or by <object>.<field key>.
+func initialValue(initial map[string]string, r abstraction.Resource, id string, f abstraction.Field) (string, bool) {
+	if v, ok := initial[id+"."+f.Key()]; ok {
+		return v, true
+	}
+	if len(r.Fields) == 1 {
+		v, ok := initial[id]
+		return v, ok
+	}
+	return "", false
+}
+
+// changeValueEvent names the environment event that sets field f of object
+// id to the index-th value of its domain: the per-object name when the
+// resource selects one field, else the object and the field key.
+func changeValueEvent(r abstraction.Resource, id string, f abstraction.Field, literal string, index int) string {
+	if len(r.Fields) == 1 {
+		return adaptergen.ChangeValueEvent(id, literal, index)
+	}
+	return adaptergen.ChangeValueEvent(id+"_"+strings.ReplaceAll(f.Key(), ".", "_"), literal, index)
 }

@@ -1,0 +1,40 @@
+apiVersion: architecture.local/v1alpha1
+kind: Project
+metadata:
+  name: fields
+spec:
+  # A reconciler whose resource selects two fields; initial values are
+  # declared per field as <object>.<field key>.
+  module: github.com/phoban01/generative-architecture
+  packages:
+    - ./cmd/arch/testdata/fields
+  catalog:
+    discovery:
+      - discovery.json
+  abstraction: abstraction.yaml
+  runtime:
+    profile: controller-runtime
+    maxTicks: 20
+  bounds:
+    maxObjectsPerResource: 2
+    maxInvocations: 3
+  controllers:
+    - receiver: Reconciler
+      name: fields
+      workers: 1
+      retryTicks: 2
+      key: source
+      effects:
+        - call: sigs.k8s.io/controller-runtime/pkg/client.Client.Get
+          effect: readSource
+        - call: sigs.k8s.io/controller-runtime/pkg/client.Reader.Get
+          effect: readTarget
+        - call: sigs.k8s.io/controller-runtime/pkg/client.Client.Update
+          effect: writeTarget
+      objectKeys:
+        github.com/phoban01/generative-architecture/cmd/arch/testdata/fields.Reconciler.Target: copy
+  initial:
+    source.data.value: '"a"'
+    source.data.mode: '""'
+    copy.data.value: '""'
+    copy.data.mode: '""'

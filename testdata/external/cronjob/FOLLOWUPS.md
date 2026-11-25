@@ -271,7 +271,7 @@ documents keep what an adopter would write.
   and `Delete` on a declared object, and for `List` bounded by
   `maxObjectsPerResource`. Gap 15 applies to `List`.
 
-### 17. arch generate takes one field per resource
+### 17. arch generate takes one field per resource (closed by #151)
 
 - Construct: three fields of `CronJob` and two of `Job`.
 - Location: `abstraction.yaml`.
@@ -280,6 +280,11 @@ documents keep what an adopter would write.
   rejects it, after extraction.
 - Smallest extension: one model variable per selected field in the
   generated state, and field-local bindings for each.
+- Resolution: since #151, `arch generate` declares one model variable per
+  selected field, binds the summary placeholders that stand for the
+  object content to one variable per field (`goflow.Node.Vectors`), and
+  takes the initial values as `<object>.<field key>`. The next gap on the
+  CronJob controller is 16, the client operations generate supports.
 
 ### 18. No list, pointer or time types in the abstraction
 

@@ -20,10 +20,13 @@ status:
       consistency: direct
       bindings:
         $exists: ConfigMap_copy_exists
-        $object: ConfigMap_copy_data_value
         $resourceVersion: ConfigMap_copy_metadata_resourceVersion
         $snapshotVersion: target_metadata_resourceVersion
-        $value: target_data_value
+      vectors:
+        $object:
+          - ConfigMap_copy_data_value
+        $value:
+          - target_data_value
       go: r.Client.Update(ctx, target)
       line: 30
       next: 0
@@ -59,10 +62,13 @@ status:
       consistency: direct
       bindings:
         $exists: ConfigMap_copy_exists
-        $object: ConfigMap_copy_data_value
         $resourceVersion: ConfigMap_copy_metadata_resourceVersion
-        $snapshot: target_data_value
         $snapshotVersion: target_metadata_resourceVersion
+      vectors:
+        $object:
+          - ConfigMap_copy_data_value
+        $snapshot:
+          - target_data_value
       go: err := r.APIReader.Get(ctx, r.Target, target)
       line: 26
       next: 4
@@ -90,11 +96,14 @@ status:
       effect: readSource
       consistency: cached
       bindings:
-        $cache: cached_ConfigMap_source_data_value
         $cacheVersion: cached_ConfigMap_source_metadata_resourceVersion
         $exists: ConfigMap_source_exists
-        $snapshot: snapshot
         $snapshotVersion: source_metadata_resourceVersion
+      vectors:
+        $cache:
+          - cached_ConfigMap_source_data_value
+        $snapshot:
+          - snapshot
       go: err := r.Client.Get(ctx, req.NamespacedName, source)
       line: 22
       next: 7

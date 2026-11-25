@@ -107,9 +107,6 @@ func extractOptions(l goflow.Loaded, abs abstraction.Abstraction, decl project.C
 		x.keys[symbol] = object
 	}
 	for _, r := range abs.Spec.Resources {
-		if len(r.Fields) != 1 {
-			return nil, goflow.Options{}, fmt.Errorf("resource %s: generation supports exactly one selected field, got %d", r.GVK, len(r.Fields))
-		}
 		x.resource[r.GVK] = r
 	}
 	scope := map[string]expr.Symbol{}
@@ -140,8 +137,10 @@ func extractOptions(l goflow.Loaded, abs abstraction.Abstraction, decl project.C
 			return false
 		}
 		x.locals[id.Name] = r
-		v := x.localVariable(id.Name, r.Fields[0])
-		scope[v] = expr.Symbol{Type: r.Fields[0].Type, Quint: v}
+		for _, f := range r.Fields {
+			v := x.localVariable(id.Name, f)
+			scope[v] = expr.Symbol{Type: f.Type, Quint: v}
+		}
 		return true
 	})
 	if err != nil {
@@ -206,10 +205,15 @@ func (x *extraction) resourceOf(t types.Type) (ir.GVK, bool, error) {
 // field maps a selected field of a Go object local to its model variable.
 func (x *extraction) field(root string, fieldPath []string) (expr.Expression, bool) {
 	r, ok := x.locals[root]
-	if !ok || abstraction.PathKey(fieldPath) != abstraction.PathKey(abstraction.JSONPath(r.Fields[0].Path)) {
+	if !ok {
 		return "", false
 	}
-	return expr.Expression(x.localVariable(root, r.Fields[0])), true
+	for _, f := range r.Fields {
+		if abstraction.PathKey(fieldPath) == abstraction.PathKey(abstraction.JSONPath(f.Path)) {
+			return expr.Expression(x.localVariable(root, f)), true
+		}
+	}
+	return "", false
 }
 
 // call summarizes a client call: its effect, operation, consistency and
@@ -243,26 +247,39 @@ func (x *extraction) call(c goflow.Callee, call *ast.CallExpr, _ goflow.Convert)
 	if !hasObject(r, object) {
 		return goflow.Node{}, false, fmt.Errorf("%s: object %s is not an abstracted %s object", c, object, r.GVK.Kind)
 	}
-	f := r.Fields[0]
-	value := abstraction.FieldVariable(r.GVK.Kind, object, f)
+	// The summary placeholders that stand for the object's content bind one
+	// variable per selected field, in field order (see goflow.Node.Vectors).
+	values := make([]string, 0, len(r.Fields))
+	snapshots := make([]string, 0, len(r.Fields))
+	cachedValues := make([]string, 0, len(r.Fields))
+	for _, f := range r.Fields {
+		value := abstraction.FieldVariable(r.GVK.Kind, object, f)
+		values = append(values, value)
+		snapshots = append(snapshots, x.localVariable(local, f))
+		cachedValues = append(cachedValues, adaptergen.CachedVariable(value))
+	}
 	version := abstraction.VariableName(r.GVK.Kind, object, versionPath)
 	b := map[string]string{
 		"$exists":          abstraction.ExistsVariable(r.GVK.Kind, object),
 		"$snapshotVersion": x.localVariable(local, abstraction.Field{Path: versionPath}),
 	}
+	vectors := map[string][]string{}
 	switch {
 	case e.Operation == ir.OpGet && e.Consistency == ir.ConsistencyCached:
 		// Objects are neither created nor deleted while the model runs, so
 		// the cache's view of existence is the API server's.
-		b["$cache"], b["$cacheVersion"], b["$snapshot"] = adaptergen.CachedVariable(value), adaptergen.CachedVariable(version), x.localVariable(local, f)
+		b["$cacheVersion"] = adaptergen.CachedVariable(version)
+		vectors["$cache"], vectors["$snapshot"] = cachedValues, snapshots
 	case e.Operation == ir.OpGet:
-		b["$object"], b["$resourceVersion"], b["$snapshot"] = value, version, x.localVariable(local, f)
+		b["$resourceVersion"] = version
+		vectors["$object"], vectors["$snapshot"] = values, snapshots
 	case e.Operation == ir.OpUpdate:
-		b["$object"], b["$resourceVersion"], b["$value"] = value, version, x.localVariable(local, f)
+		b["$resourceVersion"] = version
+		vectors["$object"], vectors["$value"] = values, snapshots
 	default:
 		return goflow.Node{}, false, fmt.Errorf("%s: no bindings for operation %s", c, e.Operation)
 	}
-	return goflow.Node{Kind: e.Operation, Effect: e.Effect, Consistency: e.Consistency, Bindings: b}, true, nil
+	return goflow.Node{Kind: e.Operation, Effect: e.Effect, Consistency: e.Consistency, Bindings: b, Vectors: vectors}, true, nil
 }
 
 func hasObject(r abstraction.Resource, id string) bool {

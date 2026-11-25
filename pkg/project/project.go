@@ -59,8 +59,9 @@ type Spec struct {
 	// Controllers declares the model facts of each reconciler that the
 	// source and the abstraction do not carry.
 	Controllers []Controller `yaml:"controllers,omitempty"`
-	// Initial is the initial value of each abstracted object's selected
-	// field, by object ID, as a model literal.
+	// Initial is the initial value of each selected field, as a model
+	// literal: by object ID when the resource selects one field, else by
+	// <object>.<field key>.
 	Initial map[string]string `yaml:"initial,omitempty"`
 }
 
