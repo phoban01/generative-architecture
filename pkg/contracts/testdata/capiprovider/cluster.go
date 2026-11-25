@@ -86,3 +86,18 @@ type HostOnlyCluster struct {
 	} `json:"spec"`
 	Status InfraClusterStatus `json:"status"`
 }
+
+// BootstrapConfigV1Beta2 follows the BootstrapConfig contract v1beta2.
+type BootstrapConfigV1Beta2 struct {
+	Spec   BootstrapConfigSpec          `json:"spec,omitempty"`
+	Status BootstrapConfigStatusV1Beta2 `json:"status,omitempty"`
+}
+
+type BootstrapConfigStatusV1Beta2 struct {
+	Initialization *BootstrapInitialization `json:"initialization,omitempty"`
+	DataSecretName *string                  `json:"dataSecretName,omitempty"`
+}
+
+type BootstrapInitialization struct {
+	DataSecretCreated *bool `json:"dataSecretCreated,omitempty"`
+}

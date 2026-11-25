@@ -424,8 +424,8 @@ func TestUpstreamProjectGuideBoundary(t *testing.T) {
 	// Section 8: the contract library table and the external selector.
 	const capiDir = "../../pkg/contracts/library/clusterapi"
 	rows = regexp.MustCompile("(?m)^\\| `([a-z0-9-]+\\.yaml)` \\| `([^`]+)` \\|$").FindAllStringSubmatch(guide, -1)
-	if len(rows) != 4 {
-		t.Fatalf("the guide lists %d contracts, want 4", len(rows))
+	if len(rows) != 5 {
+		t.Fatalf("the guide lists %d contracts, want 5", len(rows))
 	}
 	var defs []contracts.Definition
 	for _, row := range rows {

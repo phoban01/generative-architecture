@@ -266,6 +266,7 @@ with their JSON types. The Cluster API provider contracts ship under
 | `infrastructure-machine-v1beta2.yaml` | `capi.infrastructure-machine/v1beta2` |
 | `infrastructure-cluster-v1beta1.yaml` | `capi.infrastructure-cluster/v1beta1` |
 | `bootstrap-config-v1beta1.yaml` | `capi.bootstrap-config/v1beta1` |
+| `bootstrap-config-v1beta2.yaml` | `capi.bootstrap-config/v1beta2` |
 
 An upstream type needs no marker. Name it with an external selector, and
 `contracts.Inspect` resolves it from the module cache:

@@ -17,6 +17,7 @@ var capiContracts = map[string]string{
 	"infrastructure-machine-v1beta2.yaml": "capi.infrastructure-machine/v1beta2",
 	"infrastructure-cluster-v1beta1.yaml": "capi.infrastructure-cluster/v1beta1",
 	"bootstrap-config-v1beta1.yaml":       "capi.bootstrap-config/v1beta1",
+	"bootstrap-config-v1beta2.yaml":       "capi.bootstrap-config/v1beta2",
 }
 
 func TestClusterAPILibraryLoads(t *testing.T) {
@@ -135,6 +136,12 @@ func TestClusterAPIContractsAgainstProviderFixture(t *testing.T) {
 		},
 		{name: "bootstrap without data secret", contract: "capi.bootstrap-config/v1beta1", goType: "BootstrapWithoutDataSecretName", wantErr: "field status.dataSecretName: missing contract field status.dataSecretName"},
 		{name: "machine is not a bootstrap config", contract: "capi.bootstrap-config/v1beta1", goType: "InfraMachine", wantErr: "field status.dataSecretName: missing contract field"},
+		{
+			name: "bootstrap v1beta2", contract: "capi.bootstrap-config/v1beta2", goType: "BootstrapConfigV1Beta2",
+			wantPaths:  map[string]string{"status.initialization.dataSecretCreated": "status.initialization.dataSecretCreated", "status.dataSecretName": "status.dataSecretName"},
+			wantAbsent: []string{"status.conditions"},
+		},
+		{name: "v1beta1 bootstrap against v1beta2", contract: "capi.bootstrap-config/v1beta2", goType: "BootstrapConfig", wantErr: "field status.initialization.dataSecretCreated: missing contract field"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			impl := Implementation{Contract: tc.contract, Package: "example.org/capiprovider", Type: tc.goType}

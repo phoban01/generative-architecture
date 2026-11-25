@@ -1,0 +1,24 @@
+# Cluster API BootstrapConfig provider contract, version v1beta2.
+# Source: the BootstrapConfig contract page for cluster-api v1.11, the first
+# release with the v1beta2 contract.
+#
+# status.initialization.dataSecretCreated replaces status.ready. The contract
+# drops status.failureReason and status.failureMessage.
+#
+# A "*" type also accepts a pointer, because a pointer has the same JSON shape.
+# status.conditions is checked as conditions.
+apiVersion: architecture.local/v1alpha1
+kind: InteractionContract
+metadata:
+  name: capi.bootstrap-config
+  annotations:
+    architecture.local/upstream: sigs.k8s.io/cluster-api
+    architecture.local/upstream-version: v1.11.0
+    architecture.local/reference: https://release-1-11.cluster-api.sigs.k8s.io/developer/providers/contracts/bootstrap-config
+spec:
+  version: v1beta2
+  fields:
+    status.initialization.dataSecretCreated: "*bool"
+    status.dataSecretName: "*string"
+  optional:
+    status.conditions: conditions
