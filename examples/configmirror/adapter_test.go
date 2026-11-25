@@ -78,7 +78,7 @@ func TestObservedVariables(t *testing.T) {
 	defer a.Close()
 	want := []string{
 		"ConfigMap_copy_data_value", "ConfigMap_copy_exists", "ConfigMap_source_data_value", "ConfigMap_source_exists",
-		"cached_ConfigMap_source_data_value", "dirty", "due", "now", "processing", "ready", "retries",
+		"cached_ConfigMap_source_data_value", "due", "now", "priority", "processing", "queued", "retries", "taken",
 	}
 	if got := a.Observed(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("observed %v, want %v", got, want)

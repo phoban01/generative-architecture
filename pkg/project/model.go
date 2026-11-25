@@ -23,8 +23,11 @@ type Controller struct {
 	Name string `yaml:"name"`
 	// Workers is the number of concurrent reconciles; RetryTicks is the
 	// delay, in model ticks, before a failed key is retried.
-	Workers    int `yaml:"workers"`
-	RetryTicks int `yaml:"retryTicks"`
+	Workers int `yaml:"workers"`
+	// Queue is the native work queue: priority (the default, controller-
+	// runtime's priority queue) or fifo (client-go's rate-limited queue).
+	Queue      string `yaml:"queue,omitempty"`
+	RetryTicks int    `yaml:"retryTicks"`
 	// Key is the abstraction object the reconcile request addresses.
 	Key string `yaml:"key"`
 	// Effects names the effect of each client method the reconciler calls.
@@ -93,6 +96,9 @@ func (s Spec) validateModel() error {
 			return fmt.Errorf("%s: receiver %s or name %s declared twice", at, c.Receiver, c.Name)
 		}
 		receivers[c.Receiver], names[c.Name] = true, true
+		if c.Queue != "" && c.Queue != "fifo" && c.Queue != "priority" {
+			return fmt.Errorf("%s: queue %q must be fifo or priority", at, c.Queue)
+		}
 		if c.Workers <= 0 || c.RetryTicks <= 0 {
 			return fmt.Errorf("%s: workers and retryTicks must be positive, got %d and %d", at, c.Workers, c.RetryTicks)
 		}

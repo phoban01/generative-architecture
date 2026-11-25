@@ -38,21 +38,23 @@ const (
 type GroupProfile struct {
 	Name     string `yaml:"name"`
 	MaxTicks int    `yaml:"maxTicks"`
-	// Queue selects the queue kind of every controller: fifo (the default)
-	// or priority. A controller's own Queue field overrides it.
+	// Queue selects the queue kind of every controller: priority (the
+	// default, as controller-runtime v0.23 uses a priority queue unless
+	// configured otherwise)
+	// or fifo. A controller's own Queue field overrides it.
 	Queue       string            `yaml:"queue,omitempty"`
 	Controllers []ModelController `yaml:"controllers"`
 }
 
 // QueueOf resolves the queue kind of c: its own field, then the profile's,
-// then fifo. It rejects unknown kinds.
+// then priority. It rejects unknown kinds.
 func (p GroupProfile) QueueOf(c ModelController) (string, error) {
 	q := c.Queue
 	if q == "" {
 		q = p.Queue
 	}
 	if q == "" {
-		q = QueueFIFO
+		q = QueuePriority
 	}
 	if q != QueueFIFO && q != QueuePriority {
 		return "", fmt.Errorf("controller %s: unknown queue %q (want fifo or priority)", c.Name, q)

@@ -132,6 +132,9 @@ func (gen generated) replayAdapter() (map[string][]byte, string, error) {
 		return nil, reason, err
 	}
 	main.Key = ir.ObjectRef{Namespace: key.Namespace, Name: key.Name}
+	if main.Queue, err = o.profile.QueueOf(o.profile.Controllers[0]); err != nil {
+		return nil, "", err
+	}
 	if files[adapterMain], err = adaptergen.GenerateReplayMain(pkg, main); err != nil {
 		return nil, "program: " + err.Error(), nil
 	}

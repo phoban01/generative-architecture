@@ -7,9 +7,12 @@ import (
 	"github.com/phoban01/generative-architecture/pkg/ir"
 )
 
-// queueKind describes the queue every controller of a group profile runs:
+// queueKinds describe the queue a controller of a group profile runs:
 // the controller-runtime workqueue the runtime model summarizes.
-const queueKind = "rate-limited FIFO workqueue, one entry per key"
+var queueKinds = map[string]string{
+	cr.QueueFIFO:     "rate-limited FIFO workqueue, one entry per key",
+	cr.QueuePriority: "priority queue, one item per key",
+}
 
 // RuntimeView draws a controller-runtime group profile: a queue element per
 // controller with its workers, retry and requeue delays and queue kind, the
@@ -35,8 +38,12 @@ func RuntimeView(name string, p cr.GroupProfile, source ir.Source) ([]Element, [
 		if c.Workers < 1 {
 			return nil, nil, View{}, fmt.Errorf("profile %s: controller %s has no workers", p.Name, c.Name)
 		}
+		kind, err := p.QueueOf(c)
+		if err != nil {
+			return nil, nil, View{}, fmt.Errorf("profile %s: %w", p.Name, err)
+		}
 		queue, controller := ID("queue_"+c.Name), ID("runtime_"+c.Name)
-		add(Element{ID: queue, Kind: KindQueue, Title: c.Name + " queue", Description: fmt.Sprintf("%s; workers %d; retry after %d ticks; requeue after %d ticks; clock bound %d ticks", queueKind, c.Workers, c.RetryTicks, c.AfterTicks, p.MaxTicks)})
+		add(Element{ID: queue, Kind: KindQueue, Title: c.Name + " queue", Description: fmt.Sprintf("%s; workers %d; retry after %d ticks; requeue after %d ticks; clock bound %d ticks", queueKinds[kind], c.Workers, c.RetryTicks, c.AfterTicks, p.MaxTicks)})
 		add(Element{ID: controller, Kind: KindController, Title: c.Name, Description: "reconciler of group " + p.Name})
 		relations = append(relations, Relation{From: queue, To: controller, Label: "dequeue", Description: fmt.Sprintf("%d workers", c.Workers), Evidence: ir.Declared, Source: source})
 		for _, k := range c.Keys {

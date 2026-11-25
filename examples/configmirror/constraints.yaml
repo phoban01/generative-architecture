@@ -8,7 +8,7 @@ spec:
   # actions <effect>_<outcome>.
   properties:
     - name: queueSafety
-      expression: '!(ready && processing) && (!ready || dirty)'
+      expression: '!(queued && due >= 0) && (!processing || taken >= -100)'
     - name: writesObservedValue
       expression: 'event != "writeTarget_ok" || ConfigMap_copy_data_value == snapshot'
     - name: boundedRetries

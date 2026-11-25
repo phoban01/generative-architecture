@@ -48,11 +48,13 @@ func TestGroupProfileQueue(t *testing.T) {
 	}
 	for _, tc := range []struct {
 		name, profile, controller string
+		fifo                      bool
 		ok                        bool
 	}{
 		{name: "default", ok: true},
-		{name: "fifo", profile: "fifo", ok: true},
-		{name: "controller fifo", controller: "fifo", ok: true},
+		{name: "priority", profile: "priority", ok: true},
+		{name: "fifo", profile: "fifo", ok: true, fifo: true},
+		{name: "controller fifo", controller: "fifo", ok: true, fifo: true},
 		{name: "unknown", profile: "lifo"},
 		{name: "controller unknown", profile: "fifo", controller: "lifo"},
 	} {
@@ -70,8 +72,8 @@ func TestGroupProfileQueue(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !reflect.DeepEqual(m.Spec, base.Spec) {
-				t.Fatal("fifo model differs from the default model")
+			if same := reflect.DeepEqual(m.Spec, base.Spec); same == tc.fifo {
+				t.Fatalf("the default model is the priority model; fifo=%v same=%v", tc.fifo, same)
 			}
 		})
 	}

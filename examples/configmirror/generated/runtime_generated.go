@@ -59,11 +59,12 @@ func ApplyRuntime(worker RuntimeWorker, event string) (bool, error) {
 func ProjectRuntime(worker RuntimeWorker) map[string]any {
 	now, due := worker.Clock()
 	return map[string]any{
-		"dirty":      worker.Dirty(),
 		"due":        due,
 		"now":        now,
+		"priority":   worker.Priority(),
 		"processing": worker.Processing(),
-		"ready":      worker.Ready(),
+		"queued":     worker.Queued(),
 		"retries":    worker.Retries(),
+		"taken":      worker.Taken(),
 	}
 }

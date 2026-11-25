@@ -38,7 +38,7 @@ func TestGenerateModel(t *testing.T) {
 	}
 	// State is the abstraction's variables, the runtime variables and the
 	// process control.
-	for _, name := range append(abs.SortedVariables(), "pc", "processing", "ready", "dirty", "retries", "now", "due", "finished", "failed") {
+	for _, name := range append(abs.SortedVariables(), "pc", "processing", "queued", "priority", "taken", "retries", "now", "due", "finished", "failed") {
 		if _, ok := spec.State[name]; !ok {
 			t.Errorf("state lacks %s", name)
 		}

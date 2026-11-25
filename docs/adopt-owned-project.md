@@ -275,6 +275,8 @@ spec:
 
 - `receiver` is the Go type name that `arch extract` reports.
 - `key` is the abstraction object the reconcile request addresses.
+- `queue` is the native work queue: `priority` (the default, as in
+  controller-runtime v0.23) or `fifo` for client-go's rate-limited queue.
 - `effects` names the effect of each client method the reconciler calls,
   as `<package path>.<interface>.<method>`.
 - `kind` restricts an effect to calls made with that kind, so a method that

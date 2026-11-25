@@ -75,8 +75,10 @@ type ReplayMain struct {
 	Actor string
 	// Key is the reconcile request the worker serves.
 	Key ir.ObjectRef
-	// RetryTicks is the worker's retry delay.
+	// RetryTicks is the worker's retry delay; Queue is its native queue
+	// kind, fifo or priority (the default when empty).
 	RetryTicks int
+	Queue      string
 }
 
 type replayImport struct{ Alias, Path string }
@@ -103,6 +105,7 @@ type replayData struct {
 	Actor      string
 	Key        ir.ObjectRef
 	RetryTicks int
+	Queue      string
 }
 
 // GenerateReplayMain emits a main package that replays traces through the
@@ -140,7 +143,10 @@ func GenerateReplayMain(pkg string, r ReplayMain) ([]byte, error) {
 		imports = append(imports, replayImport{Alias: a, Path: path})
 		return a
 	}
-	d := replayData{Reconciler: alias(r.Reconciler.Import) + "." + r.Reconciler.Name, Actor: r.Actor, Key: r.Key, RetryTicks: r.RetryTicks}
+	if r.Queue != "" && r.Queue != "fifo" && r.Queue != "priority" {
+		return nil, fmt.Errorf("replay: queue %q must be fifo or priority", r.Queue)
+	}
+	d := replayData{Reconciler: alias(r.Reconciler.Import) + "." + r.Reconciler.Name, Actor: r.Actor, Key: r.Key, RetryTicks: r.RetryTicks, Queue: r.Queue}
 	seen := map[ir.GVK]bool{}
 	for _, t := range r.Types {
 		if t.Import == "" || t.Name == "" || t.Resource.Version == "" || t.Resource.Kind == "" {
@@ -395,7 +401,7 @@ func newAdapter(ctx context.Context, m *model.Compiled) (*adapter, error) {
 	r := &{{.Reconciler}}{
 {{range .Fields}}		{{.Name}}: {{.Value}},
 {{end}}	}
-	if a.worker, err = cr.NewWorker(ctx, reconcile.Request{NamespacedName: client.ObjectKey{Namespace: {{q .Key.Namespace}}, Name: {{q .Key.Name}}}}, {{.RetryTicks}}, r); err != nil {
+	if a.worker, err = cr.NewWorkerWith(ctx, reconcile.Request{NamespacedName: client.ObjectKey{Namespace: {{q .Key.Namespace}}, Name: {{q .Key.Name}}}}, cr.WorkerOptions{Queue: {{q .Queue}}, RetryTicks: {{.RetryTicks}}}, r); err != nil {
 		cancel()
 		return nil, err
 	}

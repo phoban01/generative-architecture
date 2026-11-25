@@ -33,9 +33,6 @@ spec:
     cached_ConfigMap_source_metadata_resourceVersion:
       type: int
       initial: "0"
-    dirty:
-      type: bool
-      initial: "false"
     due:
       type: int
       initial: "-1"
@@ -57,10 +54,13 @@ spec:
     pc:
       type: int
       initial: "8"
+    priority:
+      type: int
+      initial: "0"
     processing:
       type: bool
       initial: "false"
-    ready:
+    queued:
       type: bool
       initial: "false"
     retries:
@@ -70,6 +70,9 @@ spec:
       type: string
       initial: '""'
     source_metadata_resourceVersion:
+      type: int
+      initial: "0"
+    taken:
       type: int
       initial: "0"
     target_data_value:
@@ -128,62 +131,61 @@ spec:
     - name: enqueue
       guard: "true"
       updates:
-        dirty: "true"
-        ready: ready || !processing
+        due: "-1"
+        priority: '((queued || due >= 0) && priority > 0) ? priority : 0'
+        queued: "true"
     - name: begin
-      guard: 'ready && !processing && (processing ? 1 : 0) < 1 && retries < 3'
+      guard: 'queued && !processing && (processing ? 1 : 0) < 1 && retries < 3'
       updates:
-        dirty: "false"
         err: "false"
         failed: "false"
         finished: "false"
         outcome: '"success"'
         pc: "8"
         processing: "true"
-        ready: "false"
+        queued: "false"
         snapshot: '""'
         source_metadata_resourceVersion: "0"
+        taken: priority
         target_data_value: '""'
         target_metadata_resourceVersion: "0"
     - name: fire
       guard: due >= 0 && now >= due
       updates:
-        dirty: "true"
         due: "-1"
-        ready: ready || !processing
+        queued: "true"
     - name: finish
       guard: processing && finished && outcome == "success"
       updates:
         processing: "false"
-        ready: dirty
         retries: "0"
     - name: finishError
       guard: processing && finished && outcome == "error"
       updates:
-        due: '(due < 0 || now + 2 < due) ? (now + 2) : due'
+        due: 'queued ? -1 : ((due < 0 || now + 2 < due) ? (now + 2) : due)'
+        priority: '((queued || due >= 0) && priority > taken) ? priority : taken'
         processing: "false"
-        ready: dirty
         retries: retries + 1
     - name: finishRequeue
       guard: processing && finished && outcome == "requeue"
       updates:
-        due: '(due < 0 || now + 2 < due) ? (now + 2) : due'
+        due: 'queued ? -1 : ((due < 0 || now + 2 < due) ? (now + 2) : due)'
+        priority: '((queued || due >= 0) && priority > taken) ? priority : taken'
         processing: "false"
-        ready: dirty
         retries: retries + 1
     - name: finishAfter
       guard: processing && finished && outcome == "after"
       updates:
-        due: '(due < 0 || now + 2 < due) ? (now + 2) : due'
+        due: 'queued ? -1 : ((due < 0 || now + 2 < due) ? (now + 2) : due)'
+        priority: '((queued || due >= 0) && priority > taken) ? priority : taken'
         processing: "false"
-        ready: dirty
         retries: "0"
     - name: finishErrorAfter
       guard: processing && finished && outcome == "errorAfter"
       updates:
-        due: '(due < 0 || now + 2 < due) ? (now + 2) : due'
+        due: 'queued ? -1 : ((due < 0 || now + 2 < due) ? (now + 2) : due)'
+        priority: '((queued || due >= 0) && priority > taken) ? priority : taken'
         processing: "false"
-        ready: dirty
         retries: retries + 1
     - name: node0_return
       guard: '!finished && pc == 0 && (true)'
@@ -287,12 +289,12 @@ spec:
         pc: "7"
       effect: readSource
   properties:
-    - name: exclusive
-      expression: '!(ready && processing) && (!ready || dirty)'
+    - name: single
+      expression: '!(queued && due >= 0)'
     - name: capacity
       expression: '(processing ? 1 : 0) <= 1'
     - name: queueSafety
-      expression: '!(ready && processing) && (!ready || dirty)'
+      expression: '!(queued && due >= 0) && (!processing || taken >= -100)'
     - name: writesObservedValue
       expression: event != "writeTarget_ok" || ConfigMap_copy_data_value == snapshot
     - name: boundedRetries

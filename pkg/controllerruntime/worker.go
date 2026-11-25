@@ -42,7 +42,7 @@ type Worker struct {
 
 // NewWorker starts a FIFO worker without startup or deletion.
 func NewWorker(ctx context.Context, key reconcile.Request, retryTicks int, r reconcile.Reconciler) (*Worker, error) {
-	return NewWorkerWith(ctx, key, WorkerOptions{RetryTicks: retryTicks}, r)
+	return NewWorkerWith(ctx, key, WorkerOptions{Queue: QueueFIFO, RetryTicks: retryTicks}, r)
 }
 
 // NewWorkerWith starts a worker with options.

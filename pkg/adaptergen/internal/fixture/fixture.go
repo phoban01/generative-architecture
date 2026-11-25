@@ -150,7 +150,7 @@ func ProvisionerEffects() map[string]ir.Effect {
 // Runtime is the group model of one FIFO controller reconciling the sample
 // Database with one worker, retrying after two ticks, over a ten-tick clock.
 func Runtime() (cr.GroupModel, error) {
-	return cr.BuildGroupModel(cr.GroupProfile{Name: "DatabaseRuntime", MaxTicks: 10, Controllers: []cr.ModelController{{
+	return cr.BuildGroupModel(cr.GroupProfile{Name: "DatabaseRuntime", MaxTicks: 10, Queue: cr.QueueFIFO, Controllers: []cr.ModelController{{
 		Name: "db", Workers: 1, RetryTicks: 2, AfterTicks: 2,
 		Keys: []cr.ModelKey{{ID: "db1", Namespace: "demo", Name: "db-1"}},
 	}}})

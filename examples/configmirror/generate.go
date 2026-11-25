@@ -63,7 +63,7 @@ type Settings struct {
 	Initial map[string]string
 	// Runtime is the controller's runtime profile.
 	Runtime struct {
-		Name                          string
+		Name, Queue                   string
 		Workers, RetryTicks, MaxTicks int
 	}
 }
@@ -109,7 +109,7 @@ func NewSettings(p project.Project) (Settings, error) {
 	for symbol, object := range decl.ObjectKeys {
 		s.KeyObjects[symbol] = object
 	}
-	s.Runtime.Name, s.Runtime.Workers, s.Runtime.RetryTicks, s.Runtime.MaxTicks = decl.Name, decl.Workers, decl.RetryTicks, p.Spec.Runtime.MaxTicks
+	s.Runtime.Name, s.Runtime.Queue, s.Runtime.Workers, s.Runtime.RetryTicks, s.Runtime.MaxTicks = decl.Name, decl.Queue, decl.Workers, decl.RetryTicks, p.Spec.Runtime.MaxTicks
 	return s, nil
 }
 
@@ -736,7 +736,7 @@ func RuntimeModel(abs abstraction.Abstraction, s Settings) (cr.GroupModel, adapt
 		return cr.GroupModel{}, adaptergen.RuntimeBinding{}, fmt.Errorf("the reconcile key addresses no abstracted object")
 	}
 	g, err := cr.BuildGroupModel(cr.GroupProfile{Name: "ConfigMirror", MaxTicks: s.Runtime.MaxTicks, Controllers: []cr.ModelController{{
-		Name: s.Runtime.Name, Workers: s.Runtime.Workers, RetryTicks: s.Runtime.RetryTicks, AfterTicks: s.Runtime.RetryTicks,
+		Name: s.Runtime.Name, Queue: s.Runtime.Queue, Workers: s.Runtime.Workers, RetryTicks: s.Runtime.RetryTicks, AfterTicks: s.Runtime.RetryTicks,
 		Keys: []cr.ModelKey{{ID: key.ID, Namespace: key.Namespace, Name: key.Name}},
 	}}})
 	if err != nil {

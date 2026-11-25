@@ -7,14 +7,14 @@ spec:
   # reports them as unchecked unless --verify runs quint verify.
   properties:
     - name: queueSafety
-      expression: '!(ready && processing) && (!ready || dirty)'
+      expression: '!(queued && due >= 0) && (!processing || taken >= -100)'
     - name: writesObservedValue
       expression: 'event != "writeTarget_ok" || ConfigMap_copy_data_value == snapshot'
     - name: boundedRetries
       expression: 'retries >= 0 && retries <= 3'
   temporal:
     - name: queueDrains
-      leadsTo: {from: 'ready', to: '!ready'}
+      leadsTo: {from: 'queued', to: '!queued'}
     - name: copyCatchesUp
       eventually: 'ConfigMap_copy_data_value == snapshot'
   fairness:

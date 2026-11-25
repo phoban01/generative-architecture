@@ -273,7 +273,7 @@ func (c controllerModel) profile() (cr.GroupProfile, error) {
 		return cr.GroupProfile{}, fmt.Errorf("controller %s: key %s is not an abstracted object", c.decl.Name, c.decl.Key)
 	}
 	return cr.GroupProfile{Name: c.name, MaxTicks: c.maxTicks, Controllers: []cr.ModelController{{
-		Name: c.decl.Name, Workers: c.decl.Workers, RetryTicks: c.decl.RetryTicks, AfterTicks: c.decl.RetryTicks,
+		Name: c.decl.Name, Queue: c.decl.Queue, Workers: c.decl.Workers, RetryTicks: c.decl.RetryTicks, AfterTicks: c.decl.RetryTicks,
 		Keys: []cr.ModelKey{{ID: key.ID, Namespace: key.Namespace, Name: key.Name}},
 	}}}, nil
 }

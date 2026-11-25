@@ -68,7 +68,9 @@ func New(ctx context.Context, m *model.Compiled) (*Adapter, error) {
 	observer := cr.Observer{Registry: m.Effects(), Scheme: scheme, Hook: a.gate.Hook}
 	r := &Reconciler{Client: observer.Client(cr.SplitClient(a.api, a.cache), "cached"), APIReader: observer.Reader(a.api, "direct"), Target: targetKey}
 	var err error
-	a.worker, err = cr.NewWorker(ctx, reconcile.Request{NamespacedName: sourceKey}, 2, r)
+	// The project declares no queue, so the reconciler runs on the default
+	// priority queue of the runtime profile.
+	a.worker, err = cr.NewWorkerWith(ctx, reconcile.Request{NamespacedName: sourceKey}, cr.WorkerOptions{Queue: cr.QueuePriority, RetryTicks: 2}, r)
 	if err != nil {
 		cancel()
 		return nil, err

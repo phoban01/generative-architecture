@@ -25,8 +25,9 @@ type Group struct {
 }
 type ControllerOptions struct {
 	Name string
-	// Queue selects the native queue: QueueFIFO (the default) runs client-go's
-	// rate-limited FIFO queue, QueuePriority controller-runtime's priority queue.
+	// Queue selects the native queue: QueuePriority (the default) runs
+	// controller-runtime's priority queue, QueueFIFO client-go's rate-limited
+	// FIFO queue.
 	Queue string
 	// Startup gives the controller a source that syncs only on Sync, so
 	// controller-runtime starts no worker before then.
@@ -104,12 +105,12 @@ func (g *Group) Add(o ControllerOptions) (*Controller, error) {
 	c.permits = make(chan struct{})
 	usePriority := false
 	switch o.Queue {
-	case "", QueueFIFO:
+	case QueueFIFO:
 		d := &keyDelays{TypedInterface: workqueue.NewTyped[reconcile.Request](), group: g, due: map[reconcile.Request]int64{}}
 		c.delay = d
 		native := workqueue.NewTypedRateLimitingQueueWithConfig(workqueue.NewTypedItemExponentialFailureRateLimiter[reconcile.Request](time.Duration(o.RetryTicks)*time.Second, time.Duration(o.RetryTicks)*time.Second), workqueue.TypedRateLimitingQueueConfig[reconcile.Request]{DelayingQueue: d})
 		c.queue = &multiGate{TypedRateLimitingInterface: native, owner: c}
-	case QueuePriority:
+	case "", QueuePriority:
 		usePriority = true
 		c.pq = newPriorityGate(c, o.RetryTicks)
 		c.queue = c.pq
