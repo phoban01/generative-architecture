@@ -27,7 +27,7 @@ func TestLoadReferenceSystem(t *testing.T) {
 	if p.Root != root {
 		t.Fatalf("module root %s, want %s", p.Root, root)
 	}
-	want := []string{"abstraction.yaml", "config/crd/refsystem.example.org_backups.yaml", "config/crd/refsystem.example.org_databases.yaml", "config/crd/refsystem.example.org_tenants.yaml", "config/discovery/builtin.json", "project.yaml"}
+	want := []string{"abstraction.yaml", "boundaries/flux/kustomization.yaml", "config/crd/refsystem.example.org_backups.yaml", "config/crd/refsystem.example.org_databases.yaml", "config/crd/refsystem.example.org_tenants.yaml", "config/discovery/builtin.json", "project.yaml"}
 	got := p.SortedHashes()
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("hashed %v, want %v", got, want)
