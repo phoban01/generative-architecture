@@ -41,11 +41,9 @@ spec:
       identity:
         - [metadata, name]
       references:
-        # The controller owner reference. ownerReferences is a list, and
-        # the controller selects the entry with controller: true. The
-        # abstraction has no form for a list element. The loader accepts
-        # this path, but no generator reads it as a list (ADR-0008).
-        - path: [metadata, ownerReferences, name]
+        # The controller owner reference: the metadata.ownerReferences entry
+        # with controller true names the CronJob that owns the Job.
+        - owner: true
           targetGVK: {group: batch.tutorial.kubebuilder.io, version: v1, kind: CronJob}
   bounds:
     # One CronJob and the Jobs of two scheduled runs; four reconciles.

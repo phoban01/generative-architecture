@@ -100,3 +100,29 @@ func TestGenerateReaderReferenceCheck(t *testing.T) {
 		t.Errorf("empty spec accepted: %v", err)
 	}
 }
+
+// An owner reference generates a check of the controller owner reference's
+// kind and name through both generators.
+func TestGenerateOwnerReferenceCheck(t *testing.T) {
+	a, err := fixture.Abstraction()
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.Spec.Resources[1].References = append(a.Spec.Resources[1].References, abstraction.Reference{Owner: true, TargetGVK: a.Spec.Resources[0].GVK})
+	for name, generate := range map[string]func(string, abstraction.Spec) ([]byte, error){"dynamic": adaptergen.GenerateReferenceCheck, "reader": adaptergen.GenerateReaderReferenceCheck} {
+		t.Run(name, func(t *testing.T) {
+			src, err := generate(fixture.Package, a.Spec)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := `"instance-for-db-1", "Database", []string{"db-1"}); err != nil`
+			if !strings.Contains(string(src), "ownerCheck(ctx, api, ") || !strings.Contains(string(src), want) {
+				t.Fatalf("generated source lacks the owner check %q:\n%s", want, src)
+			}
+			if !strings.Contains(string(src), "metadata.ownerReferences[controller] names a Database") {
+				t.Errorf("generated source lacks the owner comment:\n%s", src)
+			}
+			typecheck(t, src)
+		})
+	}
+}

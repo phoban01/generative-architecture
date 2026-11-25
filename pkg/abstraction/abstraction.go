@@ -85,9 +85,15 @@ func (f Field) Compared() (value string, ok bool) {
 }
 
 // Reference says that a field of this resource names an object of another.
+// Reference says that a field of the resource names an object of another
+// declared resource by metadata.name. With Owner set, the reference is the
+// controller owner reference instead: the metadata.ownerReferences entry
+// with controller true must name a declared object of the target kind, and
+// Path is empty.
 type Reference struct {
 	Path      []string `yaml:"path"`
 	TargetGVK ir.GVK   `yaml:"targetGVK"`
+	Owner     bool     `yaml:"owner,omitempty"`
 }
 
 // Resource declares which objects and fields of one kind enter the model.
@@ -209,9 +215,17 @@ func (a Abstraction) Validate() error {
 			}
 		}
 		for i, ref := range r.References {
-			key, err := validPath(ref.Path)
-			if err != nil {
-				return fmt.Errorf("%s: references[%d]: %w", where, i, err)
+			key := "owner"
+			if ref.Owner {
+				if len(ref.Path) != 0 {
+					return fmt.Errorf("%s: references[%d]: an owner reference takes no path", where, i)
+				}
+			} else {
+				k, err := validPath(ref.Path)
+				if err != nil {
+					return fmt.Errorf("%s: references[%d]: %w", where, i, err)
+				}
+				key = k
 			}
 			if !known[ref.TargetGVK] {
 				return fmt.Errorf("%s: reference %s targets undeclared resource %s", where, key, ref.TargetGVK)

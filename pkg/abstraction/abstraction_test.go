@@ -67,6 +67,12 @@ func TestValidateFailures(t *testing.T) {
 		"empty domain":                {func(a *Abstraction) { a.Spec.Resources[0].ValueDomains["status.endpoint"] = nil }, "empty"},
 		"domain for undeclared field": {func(a *Abstraction) { a.Spec.Resources[0].ValueDomains["spec.size"] = []string{`"s"`} }, "undeclared field"},
 		"no objects":                  {func(a *Abstraction) { a.Spec.Resources[0].Objects = nil }, "at least one object"},
+		"owner reference with a path": {func(a *Abstraction) {
+			a.Spec.Resources[0].References = append(a.Spec.Resources[0].References, Reference{Owner: true, Path: []string{"metadata", "name"}, TargetGVK: a.Spec.Resources[0].GVK})
+		}, "an owner reference takes no path"},
+		"owner reference to an undeclared kind": {func(a *Abstraction) {
+			a.Spec.Resources[0].References = append(a.Spec.Resources[0].References, Reference{Owner: true, TargetGVK: ir.GVK{Group: "x", Version: "v1", Kind: "Nope"}})
+		}, "reference owner targets undeclared resource"},
 		"too many objects": {func(a *Abstraction) {
 			a.Spec.Resources[0].Objects = append(a.Spec.Resources[0].Objects, Object{ID: "db2", Name: "db-2"})
 		}, "exceed"},
@@ -160,5 +166,13 @@ func TestPopulations(t *testing.T) {
 	want := map[string][]string{"ConfigMap_objects": {"source", "copy"}, "Database_objects": {"db1"}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("Populations() = %v, want %v", got, want)
+	}
+}
+
+func TestOwnerReferenceValidates(t *testing.T) {
+	a := valid()
+	a.Spec.Resources[0].References = append(a.Spec.Resources[0].References, Reference{Owner: true, TargetGVK: a.Spec.Resources[0].GVK})
+	if err := a.Validate(); err != nil {
+		t.Fatal(err)
 	}
 }

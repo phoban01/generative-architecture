@@ -92,7 +92,7 @@ status:
     generated/environment_generated.go: 347659926d05cd2f311902f52f979a49e13841c31d46bbfed8077fea19417dd2
     generated/gating_generated.go: 6a85ff69ed164e31373934c6b0d49a222068fb4905f707d4c5ae1821472c5c4b
     generated/projection_generated.go: 5f3f8af469e97d0e7a75b66bf2cfef06fee6f68eb5c62f66413ae5c35cd8f692
-    generated/references_generated.go: a7ed855a5cc3295b53243d5d1718d43a4ed64069f4ced83fb22238dd9c07a635
+    generated/references_generated.go: 4bd480c491af0e4c6645f37d61c738e9df3f975cba02c10c849d5277b9784aa5
     process.yaml: 538a807b1222fa814cbd1d5c3048a31d644150daa1519d41c7e35c2f2e5b3922
     project.yaml: 2c841d371bc247f2d623b2d16091724e321c33cf60f0bd0f5fd9df983b63e1ea
     resources.yaml: 164911658028c86c67d5288d3c6fbc68d45fee0eb6d6851e634c8c0f05d094b9

@@ -292,7 +292,7 @@ documents keep what an adopter would write.
 - Smallest extension: an optional marker on a basic field (gap 12), and a
   bounded set type whose elements are declared objects.
 
-### 19. Owner references have no form
+### 19. Owner references have no form (closed by #153)
 
 - Construct: `ctrl.SetControllerReference(cronJob, job, r.Scheme)` (495)
   and the field index on the controller owner (557).
@@ -303,6 +303,11 @@ documents keep what an adopter would write.
   would report a valid Job as broken.
 - Smallest extension: an `owner` reference form that selects the entry
   with `controller: true` and checks its kind and name.
+- Resolution: since #153, a reference with `owner: true` is the controller
+  owner reference. The abstraction declares it for Job, and the generated
+  reference checks read the `metadata.ownerReferences` entry with
+  `controller: true` and check its kind and name against the declared
+  CronJob objects.
 
 ### 20. arch generate after a failed extract names the wrong step (closed by #155)
 

@@ -21,6 +21,9 @@ type referenceCheck struct {
 	// object can address.
 	Names []string
 	// Empty allows an absent or empty reference.
+	// Owner makes the check read the controller owner reference instead of
+	// the field at Path.
+	Owner bool
 	Empty bool
 }
 
@@ -38,6 +41,29 @@ func referenceChecks(spec abstraction.Spec) ([]referenceCheck, error) {
 	var out []referenceCheck
 	for _, r := range spec.Resources {
 		for _, ref := range r.References {
+			if ref.Owner {
+				target, ok := targets[ref.TargetGVK]
+				if !ok {
+					return nil, fmt.Errorf("resource %s: owner reference targets undeclared resource %s", r.GVK, ref.TargetGVK)
+				}
+				for _, o := range r.Objects {
+					key, err := objectKey(r.GVK, ir.ObjectRef{Namespace: o.Namespace, Name: o.Name})
+					if err != nil {
+						return nil, fmt.Errorf("owner reference of %s: %w", r.GVK.Kind, err)
+					}
+					c := referenceCheck{Key: key, Field: "metadata.ownerReferences[controller]", Target: ref.TargetGVK.Kind, Owner: true}
+					for _, t := range target.Objects {
+						if t.Namespace == "" || t.Namespace == o.Namespace {
+							c.Names = append(c.Names, t.Name)
+						}
+					}
+					if len(c.Names) == 0 {
+						return nil, fmt.Errorf("owner reference of %s: no declared %s can be named from namespace %q", key, ref.TargetGVK.Kind, o.Namespace)
+					}
+					out = append(out, c)
+				}
+				continue
+			}
 			path := abstraction.PathKey(ref.Path)
 			if len(ref.Path) == 0 {
 				return nil, fmt.Errorf("resource %s: reference has no path", r.GVK)
@@ -132,9 +158,15 @@ import (
 func CheckReferences(ctx context.Context, api dynamic.Interface, mapper meta.RESTMapper) error {
 {{- range .Checks}}
 	// {{.Key}}: {{.Field}} names a {{.Target}}
+{{- if .Owner}}
+	if err := ownerCheck(ctx, api, mapper, {{gvk .Key.GVK}}, {{q .Key.Namespace}}, {{q .Key.Name}}, {{q .Target}}, []string{ {{- path .Names -}} }); err != nil {
+		return err
+	}
+{{- else}}
 	if err := referenceCheck(ctx, api, mapper, {{gvk .Key.GVK}}, {{q .Key.Namespace}}, {{q .Key.Name}}, []string{ {{- path .Path -}} }, {{q .Target}}, []string{ {{- path .Names -}} }, {{.Empty}}); err != nil {
 		return err
 	}
+{{- end}}
 {{- end}}
 	return nil
 }
@@ -165,6 +197,43 @@ func referenceCheck(ctx context.Context, api dynamic.Interface, mapper meta.REST
 		return nil
 	}
 	return fmt.Errorf("%s %s/%s: %s %q names no declared %s", gvk.Kind, namespace, name, strings.Join(path, "."), v, target)
+}
+
+// ownerCheck gets one object and checks that its controller owner reference
+// names one of names with kind target. An absent object passes; an object
+// without a controller owner fails.
+func ownerCheck(ctx context.Context, api dynamic.Interface, mapper meta.RESTMapper, gvk schema.GroupVersionKind, namespace, name, target string, names []string) error {
+	mapping, err := mapper.RESTMapping(gvk.GroupKind(), gvk.Version)
+	if err != nil {
+		return err
+	}
+	var client dynamic.ResourceInterface = api.Resource(mapping.Resource)
+	if mapping.Scope.Name() == meta.RESTScopeNameNamespace {
+		client = api.Resource(mapping.Resource).Namespace(namespace)
+	}
+	obj, err := client.Get(ctx, name, metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return controllerOwner(obj, gvk, namespace, name, target, names)
+}
+
+// controllerOwner checks the metadata.ownerReferences entry with controller
+// true of obj against the target kind and the declared names.
+func controllerOwner(obj *unstructured.Unstructured, gvk schema.GroupVersionKind, namespace, name, target string, names []string) error {
+	for _, ref := range obj.GetOwnerReferences() {
+		if ref.Controller == nil || !*ref.Controller {
+			continue
+		}
+		if ref.Kind == target && slices.Contains(names, ref.Name) {
+			return nil
+		}
+		return fmt.Errorf("%s %s/%s: controller owner %s %q names no declared %s", gvk.Kind, namespace, name, ref.Kind, ref.Name, target)
+	}
+	return fmt.Errorf("%s %s/%s: no controller owner reference; expected a %s", gvk.Kind, namespace, name, target)
 }
 `
 
@@ -214,9 +283,15 @@ import (
 func CheckReferences(ctx context.Context, api client.Reader) error {
 {{- range .Checks}}
 	// {{.Key}}: {{.Field}} names a {{.Target}}
+{{- if .Owner}}
+	if err := ownerCheck(ctx, api, {{gvk .Key.GVK}}, {{q .Key.Namespace}}, {{q .Key.Name}}, {{q .Target}}, []string{ {{- path .Names -}} }); err != nil {
+		return err
+	}
+{{- else}}
 	if err := referenceCheck(ctx, api, {{gvk .Key.GVK}}, {{q .Key.Namespace}}, {{q .Key.Name}}, []string{ {{- path .Path -}} }, {{q .Target}}, []string{ {{- path .Names -}} }, {{.Empty}}); err != nil {
 		return err
 	}
+{{- end}}
 {{- end}}
 	return nil
 }
@@ -241,5 +316,36 @@ func referenceCheck(ctx context.Context, api client.Reader, gvk schema.GroupVers
 		return nil
 	}
 	return fmt.Errorf("%s %s/%s: %s %q names no declared %s", gvk.Kind, namespace, name, strings.Join(path, "."), v, target)
+}
+
+// ownerCheck gets one object and checks that its controller owner reference
+// names one of names with kind target. An absent object passes; an object
+// without a controller owner fails.
+func ownerCheck(ctx context.Context, api client.Reader, gvk schema.GroupVersionKind, namespace, name, target string, names []string) error {
+	obj := &unstructured.Unstructured{}
+	obj.SetGroupVersionKind(gvk)
+	err := api.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, obj)
+	if apierrors.IsNotFound(err) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("%s %s/%s: %w", gvk.Kind, namespace, name, err)
+	}
+	return controllerOwner(obj, gvk, namespace, name, target, names)
+}
+
+// controllerOwner checks the metadata.ownerReferences entry with controller
+// true of obj against the target kind and the declared names.
+func controllerOwner(obj *unstructured.Unstructured, gvk schema.GroupVersionKind, namespace, name, target string, names []string) error {
+	for _, ref := range obj.GetOwnerReferences() {
+		if ref.Controller == nil || !*ref.Controller {
+			continue
+		}
+		if ref.Kind == target && slices.Contains(names, ref.Name) {
+			return nil
+		}
+		return fmt.Errorf("%s %s/%s: controller owner %s %q names no declared %s", gvk.Kind, namespace, name, ref.Kind, ref.Name, target)
+	}
+	return fmt.Errorf("%s %s/%s: no controller owner reference; expected a %s", gvk.Kind, namespace, name, target)
 }
 `
