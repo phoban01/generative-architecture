@@ -74,7 +74,7 @@ func TestGenerateRuntimeRejects(t *testing.T) {
 		want    string
 	}{
 		"two keys":         {two, events(map[string]string{"advance": "advance"}), "one key"},
-		"priority queue":   {priority, events(map[string]string{"advance": "advance"}), "FIFO"},
+		"priority dirty":   {priority, adaptergen.RuntimeBinding{Events: map[string]string{"advance": "advance"}, Variables: map[string]string{"c_a_dirty": "dirty"}}, "not a state variable"},
 		"no events":        {m, adaptergen.RuntimeBinding{}, "at least one"},
 		"unknown action":   {m, events(map[string]string{"db_db1_list": "list"}), "not an action"},
 		"duplicate event":  {m, events(map[string]string{"db_db1_success": "finish", "db_db1_error": "finish"}), "distinct event"},
@@ -88,5 +88,47 @@ func TestGenerateRuntimeRejects(t *testing.T) {
 				t.Fatalf("expected an error containing %q, got %v", tc.want, err)
 			}
 		})
+	}
+}
+
+// A priority-queue controller with startup and deletion routes the
+// low-priority adds, the sync and the tombstone to the worker and projects
+// the queue's priorities and the synced and deleted flags.
+func TestGenerateRuntimePriorityStartupDeletion(t *testing.T) {
+	m, err := cr.BuildGroupModel(cr.GroupProfile{Name: "Lifecycle", MaxTicks: 5, Queue: cr.QueuePriority, Controllers: []cr.ModelController{{
+		Name: "c", Workers: 1, RetryTicks: 1, AfterTicks: 2, Startup: true, Deletion: true,
+		Keys: []cr.ModelKey{{ID: "a", Namespace: "n", Name: "a"}},
+	}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := adaptergen.RuntimeBinding{
+		Events:    map[string]string{"advance": "advance", "c_a_enqueue": "enqueue", "c_a_enqueueLow": "enqueueLow", "c_a_list": "list", "c_sync": "sync", "c_a_tombstone": "tombstone", "c_a_start": "begin", "c_a_fire": "fire", "c_a_success": "finish", "c_a_error": "finishError"},
+		Variables: map[string]string{"now": "now", "c_a_queued": "queued", "c_a_processing": "processing", "c_a_retries": "retries", "c_a_due": "due", "c_a_priority": "priority", "c_a_taken": "taken", "c_a_deleted": "deleted", "c_synced": "synced"},
+	}
+	src, err := adaptergen.GenerateRuntime(fixture.Package, m, b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := typecheck(t, src)
+	assertNoModelState(t, p)
+	text := string(src)
+	for _, want := range []string{
+		`case "enqueueLow":` + "\n\t\tworker.EnqueueLow()",
+		`case "list":` + "\n\t\tworker.EnqueueLow()",
+		`case "sync":` + "\n\t\treturn true, worker.Sync()",
+		`case "tombstone":` + "\n\t\treturn true, worker.Tombstone()",
+		`"queued":     worker.Queued(),`,
+		`"priority":   worker.Priority(),`,
+		`"taken":      worker.Taken(),`,
+		`"deleted":    worker.Deleted(),`,
+		`"synced":     worker.Synced(),`,
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("generated runtime lacks %q:\n%s", want, text)
+		}
+	}
+	if strings.Contains(text, "worker.Dirty()") {
+		t.Errorf("a priority runtime projects the FIFO dirty flag:\n%s", text)
 	}
 }

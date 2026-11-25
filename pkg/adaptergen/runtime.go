@@ -24,22 +24,39 @@ var workerCalls = map[string]struct {
 	call    string
 	failing bool
 }{
-	"advance": {"Advance()", false},
-	"enqueue": {"Enqueue()", false},
-	"start":   {"StartOne()", true},
-	"finish":  {"Wait()", true},
-	"fire":    {"Fire()", true},
+	"advance":    {"Advance()", false},
+	"enqueue":    {"Enqueue()", false},
+	"enqueueLow": {"EnqueueLow()", false},
+	"list":       {"EnqueueLow()", false},
+	"tombstone":  {"Tombstone()", true},
+	"sync":       {"Sync()", true},
+	"start":      {"StartOne()", true},
+	"finish":     {"Wait()", true},
+	"fire":       {"Fire()", true},
 }
 
 // workerReads is the worker expression that observes each per-key state
-// variable of a FIFO controller, by suffix. The clock variables now and due
-// come from Clock.
-var workerReads = map[string]string{
-	"ready":      "worker.Ready()",
-	"dirty":      "worker.Dirty()",
-	"processing": "worker.Processing()",
-	"retries":    "worker.Retries()",
-	"due":        "due",
+// variable, by suffix, of a FIFO controller and of a priority controller.
+// The clock variables now and due come from Clock; the controller's synced
+// flag comes from Synced.
+var workerReads = map[string]map[string]string{
+	cr.QueueFIFO: {
+		"ready":      "worker.Ready()",
+		"dirty":      "worker.Dirty()",
+		"processing": "worker.Processing()",
+		"retries":    "worker.Retries()",
+		"due":        "due",
+		"deleted":    "worker.Deleted()",
+	},
+	cr.QueuePriority: {
+		"queued":     "worker.Queued()",
+		"processing": "worker.Processing()",
+		"retries":    "worker.Retries()",
+		"due":        "due",
+		"priority":   "worker.Priority()",
+		"taken":      "worker.Taken()",
+		"deleted":    "worker.Deleted()",
+	},
 }
 
 type runtimeCase struct {
@@ -56,7 +73,7 @@ type runtimeRead struct {
 // runtimeTable validates the binding against the group model and resolves
 // each routed event to a worker call and each projected variable to a
 // worker read. The single-key Worker facade drives one controller with one
-// key on a FIFO queue, without startup or deletion.
+// key on a FIFO or a priority queue, with or without startup and deletion.
 func runtimeTable(m cr.GroupModel, b RuntimeBinding) ([]runtimeCase, []runtimeRead, error) {
 	if len(m.Profile.Controllers) != 1 {
 		return nil, nil, fmt.Errorf("runtime %s: the worker drives one controller, got %d", m.Profile.Name, len(m.Profile.Controllers))
@@ -68,9 +85,6 @@ func runtimeTable(m cr.GroupModel, b RuntimeBinding) ([]runtimeCase, []runtimeRe
 	queue, err := m.Profile.QueueOf(c)
 	if err != nil {
 		return nil, nil, err
-	}
-	if queue != cr.QueueFIFO || c.Startup || c.Deletion {
-		return nil, nil, fmt.Errorf("runtime %s: the worker drives a FIFO queue without startup or deletion", m.Profile.Name)
 	}
 	if len(b.Events) == 0 {
 		return nil, nil, fmt.Errorf("runtime %s: at least one routed event is required", m.Profile.Name)
@@ -99,9 +113,9 @@ func runtimeTable(m cr.GroupModel, b RuntimeBinding) ([]runtimeCase, []runtimeRe
 		cases = append(cases, runtimeCase{Event: name, Call: call.call, Failing: call.failing})
 	}
 	sort.Slice(cases, func(i, j int) bool { return cases[i].Event < cases[j].Event })
-	reads := map[string]string{"now": "now"}
+	reads := map[string]string{"now": "now", c.Name + "_synced": "worker.Synced()"}
 	prefix := c.Name + "_" + c.Keys[0].ID + "_"
-	for suffix, read := range workerReads {
+	for suffix, read := range workerReads[queue] {
 		reads[prefix+suffix] = read
 	}
 	names := map[string]bool{}
@@ -132,7 +146,9 @@ func runtimeTable(m cr.GroupModel, b RuntimeBinding) ([]runtimeCase, []runtimeRe
 //
 // ApplyRuntime drives the worker for each event the binding routes: an
 // enqueue adds the key, a start takes it, every finish outcome waits for the
-// invocation, an advance moves the clock and a fire delivers a due timer.
+// invocation, an advance moves the clock, a fire delivers a due timer, a
+// list or a low-priority add enqueues from the initial list, a sync marks
+// the caches synced and a tombstone enqueues a missed delete.
 // It reports whether event named a runtime event. ProjectRuntime reads the
 // worker's queue and clock under the model's names. Both take only the
 // worker: they never read expected model state, and the file imports no
@@ -181,6 +197,14 @@ type RuntimeWorker interface {
 	Processing() bool
 	Retries() int64
 	Clock() (now, due int64)
+	EnqueueLow()
+	Sync() error
+	Synced() bool
+	Tombstone() error
+	Queued() bool
+	Priority() int64
+	Taken() int64
+	Deleted() bool
 }
 
 // ApplyRuntime drives worker for the runtime event of {{.Name}} named event.

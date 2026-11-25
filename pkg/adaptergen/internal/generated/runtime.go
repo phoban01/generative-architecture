@@ -15,6 +15,14 @@ type RuntimeWorker interface {
 	Processing() bool
 	Retries() int64
 	Clock() (now, due int64)
+	EnqueueLow()
+	Sync() error
+	Synced() bool
+	Tombstone() error
+	Queued() bool
+	Priority() int64
+	Taken() int64
+	Deleted() bool
 }
 
 // ApplyRuntime drives worker for the runtime event of DatabaseRuntime named event.
