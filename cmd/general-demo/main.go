@@ -1,19 +1,33 @@
 // general-demo checks the reusable runtime model against real controller-runtime
 // queues. Business reconcilers are tested separately; these outcomes are scripted.
+// It runs two profiles of the same controllers: client-go's FIFO queue and
+// controller-runtime's priority queue with startup sync.
 package main
 
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
+	"time"
+
 	cr "github.com/phoban01/generative-architecture/pkg/controllerruntime"
 	"github.com/phoban01/generative-architecture/pkg/krm"
 	"github.com/phoban01/generative-architecture/pkg/model"
 	"github.com/phoban01/generative-architecture/pkg/quint"
 	"github.com/phoban01/generative-architecture/pkg/report"
-	"os"
-	"path/filepath"
-	"time"
 )
+
+// runtimeProfile is one profile document with the model and report it
+// produces, relative to the example root, and the scope its report states.
+type runtimeProfile struct {
+	document, modelFile, reportFile, scope string
+}
+
+var profiles = []runtimeProfile{
+	{"profile.yaml", "generated/Model.qnt", "report.yaml", "bounded runtime simulation; real FIFO workers; scripted reconcile outcomes"},
+	{"priority-profile.yaml", "generated/priority/Model.qnt", "priority-report.yaml", "bounded runtime simulation; real controller-runtime priority queues with startup sync; scripted reconcile outcomes"},
+}
 
 func main() {
 	if err := run(); err != nil {
@@ -21,10 +35,21 @@ func main() {
 		os.Exit(1)
 	}
 }
+
 func run() error {
 	root := "examples/runtimegroup"
+	for _, p := range profiles {
+		if err := runProfile(root, p); err != nil {
+			return fmt.Errorf("%s: %w", p.document, err)
+		}
+	}
+	return nil
+}
+
+func runProfile(root string, p runtimeProfile) error {
 	var profile cr.GroupProfile
-	if _, err := krm.Read(filepath.Join(root, "profile.yaml"), "RuntimeGroup", &profile); err != nil {
+	meta, err := krm.Read(filepath.Join(root, p.document), "RuntimeGroup", &profile)
+	if err != nil {
 		return err
 	}
 	generated, err := cr.BuildGroupModel(profile)
@@ -35,11 +60,11 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	dir := filepath.Join(root, "generated")
-	if err = os.MkdirAll(dir, 0755); err != nil {
+	modelPath := filepath.Join(root, p.modelFile)
+	if err = os.MkdirAll(filepath.Dir(modelPath), 0755); err != nil {
 		return err
 	}
-	if err = os.WriteFile(filepath.Join(dir, "Model.qnt"), []byte(m.Quint()), 0644); err != nil {
+	if err = os.WriteFile(modelPath, []byte(m.Quint()), 0644); err != nil {
 		return err
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -64,9 +89,9 @@ func run() error {
 	// Native targeted tests guarantee overlapping invocations and dirty keys;
 	// sampled schedules broaden coverage without claiming exhaustiveness.
 	v := report.Verification{
-		Name:        "multiple-controllers",
+		Name:        meta.Name,
 		Mode:        report.ModeStrict,
-		Scope:       "bounded runtime simulation; real FIFO workers; scripted reconcile outcomes",
+		Scope:       p.scope,
 		Sampling:    &report.Sampling{Samples: options.Samples, Steps: options.Steps, Seed: options.Seed},
 		Traces:      len(samples.Traces),
 		Transitions: steps,
@@ -76,9 +101,9 @@ func run() error {
 	if blocking := v.Blocking(); len(blocking) > 0 {
 		return fmt.Errorf("%s finding: %s", blocking[0].Category, blocking[0].Message)
 	}
-	if err = v.Write(filepath.Join(root, "report.yaml")); err != nil {
+	if err = v.Write(filepath.Join(root, p.reportFile)); err != nil {
 		return err
 	}
-	fmt.Printf("PASS reusable runtime: %d traces, %d transitions\n", len(samples.Traces), steps)
+	fmt.Printf("PASS reusable runtime (%s): %d traces, %d transitions\n", meta.Name, len(samples.Traces), steps)
 	return nil
 }

@@ -35,7 +35,7 @@ See [the project plan](PROJECT-PLAN.md) for the requirements index, milestones a
 | `cmd/arch/testdata/configmirror/` | The ConfigMirror project document: the one project that runs the whole `arch` pipeline, in the adoption guide and in CI's `architecture` job. |
 | `examples/configmirror/` | Regression fixture. The first source-generated controller: its model, replay projection, environment and boundary gating are generated; Quint traces are replayed against the real controller, a mutation suite checks detection and a receipt records the inputs. |
 | `examples/database/` | Regression fixture and the source of [START-HERE.md](START-HERE.md). Process, watches and dynamic-client accesses are extracted from Go; replay runs the real reconcile against a fake dynamic API through a projection generated from `abstraction.yaml`. |
-| `examples/runtimegroup/` | Regression fixture. A multi-controller runtime profile checked against real controller-runtime workers and client-go FIFO queues. |
+| `examples/runtimegroup/` | Regression fixture. A multi-controller runtime profile checked against real controller-runtime workers, once on client-go FIFO queues and once on controller-runtime priority queues with startup sync. |
 | `testdata/external/cronjob/` | The pinned kubebuilder CronJob controller (Checkpoint B), used by the upstream adoption guide. |
 | `testdata/consumer/` | A separate Go module that imports the public packages. |
 

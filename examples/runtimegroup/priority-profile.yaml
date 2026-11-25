@@ -1,0 +1,27 @@
+apiVersion: architecture.local/v1alpha1
+kind: RuntimeGroup
+metadata:
+  name: multiple-controllers-priority
+spec:
+  # The same controllers and keys as profile.yaml on controller-runtime's
+  # priority queue, with the startup list and cache sync modelled.
+  name: MultipleControllersPriority
+  maxTicks: 20
+  queue: priority
+  controllers:
+    - name: writer
+      workers: 2
+      retryTicks: 2
+      afterTicks: 3
+      startup: true
+      keys:
+        - {id: a, name: a}
+        - {id: b, name: b}
+    - name: reader
+      workers: 1
+      retryTicks: 3
+      afterTicks: 4
+      startup: true
+      keys:
+        - {id: a, name: a}
+        - {id: b, name: b}

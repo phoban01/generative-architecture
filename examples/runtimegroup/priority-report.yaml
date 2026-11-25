@@ -1,0 +1,65 @@
+apiVersion: architecture.local/v1alpha1
+kind: VerificationReport
+metadata:
+  name: multiple-controllers-priority
+status:
+  result: passed
+  mode: strict
+  failures:
+    conformance: 0
+    safety: 0
+    tool: 0
+    unsupported: 0
+  scope: bounded runtime simulation; real controller-runtime priority queues with startup sync; scripted reconcile outcomes
+  sampling:
+    samples: 40
+    steps: 60
+    seed: 20261013
+  traces: 40
+  transitions: 2400
+  coverage:
+    advance: 186
+    reader_a_after: 10
+    reader_a_enqueue: 190
+    reader_a_enqueueLow: 170
+    reader_a_error: 10
+    reader_a_errorAfter: 11
+    reader_a_list: 24
+    reader_a_requeue: 10
+    reader_a_start: 63
+    reader_a_success: 13
+    reader_a_terminal: 5
+    reader_b_after: 10
+    reader_b_enqueue: 172
+    reader_b_enqueueLow: 200
+    reader_b_error: 11
+    reader_b_errorAfter: 16
+    reader_b_list: 25
+    reader_b_requeue: 10
+    reader_b_start: 78
+    reader_b_success: 11
+    reader_b_terminal: 18
+    reader_sync: 40
+    writer_a_after: 15
+    writer_a_enqueue: 182
+    writer_a_enqueueLow: 198
+    writer_a_error: 11
+    writer_a_errorAfter: 12
+    writer_a_list: 32
+    writer_a_requeue: 14
+    writer_a_start: 74
+    writer_a_success: 12
+    writer_a_terminal: 8
+    writer_b_after: 6
+    writer_b_enqueue: 186
+    writer_b_enqueueLow: 174
+    writer_b_error: 10
+    writer_b_errorAfter: 11
+    writer_b_fire: 1
+    writer_b_list: 45
+    writer_b_requeue: 6
+    writer_b_start: 59
+    writer_b_success: 8
+    writer_b_terminal: 13
+    writer_sync: 40
+  findings: []
