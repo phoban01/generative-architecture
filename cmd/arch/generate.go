@@ -145,6 +145,15 @@ func generate(g globals) (generated, error) {
 		return gen, fmt.Errorf("controller %s: %w", c.ID, err)
 	}
 	gen.spec = &spec
+	// Temporal definitions are validated here as well as in arch check, so
+	// a bad constraints document fails before any sampling.
+	compiled, err := model.Compile(spec)
+	if err != nil {
+		return gen, fmt.Errorf("controller %s: %w", c.ID, err)
+	}
+	if _, err := loadTemporal(p, compiled); err != nil {
+		return gen, err
+	}
 	if gen.profile, err = cm.profile(); err != nil {
 		return gen, err
 	}

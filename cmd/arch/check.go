@@ -16,6 +16,7 @@ import (
 	"github.com/phoban01/generative-architecture/pkg/krm"
 	"github.com/phoban01/generative-architecture/pkg/model"
 	"github.com/phoban01/generative-architecture/pkg/mutation"
+	"github.com/phoban01/generative-architecture/pkg/project"
 	"github.com/phoban01/generative-architecture/pkg/quint"
 	"github.com/phoban01/generative-architecture/pkg/report"
 )
@@ -67,7 +68,7 @@ func runCheck(g globals, args []string) error {
 	}
 	// Inputs that drifted since arch generate make the model stale.
 	stale := len(findings) > 0
-	liveness, err := loadTemporal(ev)
+	liveness, err := loadTemporal(ev.project, ev.model)
 	if err != nil && !stale {
 		return fmt.Errorf("arch check: %w", err)
 	}
@@ -129,12 +130,12 @@ const verifyTimeout = 5 * time.Minute
 // constraints document and validates each property against the model. An
 // invalid definition is an error. A valid one without fairness is not: it
 // is reported as unchecked.
-func loadTemporal(ev evidence) (model.Constraints, error) {
+func loadTemporal(p project.Project, m *model.Compiled) (model.Constraints, error) {
 	var out model.Constraints
 	var paths []string
-	for _, rel := range ev.project.Spec.Constraints {
+	for _, rel := range p.Spec.Constraints {
 		var doc model.Constraints
-		path := filepath.Join(ev.project.Dir, rel)
+		path := filepath.Join(p.Dir, rel)
 		if _, err := krm.Read(path, constraintsKind, &doc); err != nil {
 			return out, err
 		}
@@ -151,7 +152,7 @@ func loadTemporal(ev evidence) (model.Constraints, error) {
 			return out, fmt.Errorf("%s: temporal %s: declared twice", paths[i], t.Name)
 		}
 		names[t.Name] = true
-		if _, err := ev.model.TemporalModule(t, out.Fairness); err != nil && !errors.Is(err, model.ErrNoFairness) {
+		if _, err := m.TemporalModule(t, out.Fairness); err != nil && !errors.Is(err, model.ErrNoFairness) {
 			return out, fmt.Errorf("%s: %w", paths[i], err)
 		}
 	}

@@ -94,7 +94,7 @@ func TestLoadTemporalFailsClosed(t *testing.T) {
 		}
 	}
 	write("  temporal:\n    - name: reachesThree\n      eventually: 'count == 3'\n")
-	c, err := loadTemporal(ev)
+	c, err := loadTemporal(ev.project, ev.model)
 	if err != nil || len(c.Temporal) != 1 || !c.Fairness.Empty() {
 		t.Fatalf("a property without fairness loads and is reported unchecked: %+v %v", c, err)
 	}
@@ -105,7 +105,7 @@ func TestLoadTemporalFailsClosed(t *testing.T) {
 		"  temporal:\n    - name: p\n      always: 'true'\n":                                           "field always not found",
 	} {
 		write(spec)
-		if _, err := loadTemporal(ev); err == nil || !strings.Contains(err.Error(), want) {
+		if _, err := loadTemporal(ev.project, ev.model); err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("%q: got %v, want %q", spec, err, want)
 		}
 	}

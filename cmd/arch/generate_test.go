@@ -229,3 +229,13 @@ func TestGenerateAppliesViewHints(t *testing.T) {
 		t.Errorf("the receipt does not record the hints document: %+v", r.Files)
 	}
 }
+
+// A temporal property over an unknown symbol fails arch generate, not only
+// arch check, so a bad constraints document never reaches sampling.
+func TestGenerateValidatesTemporal(t *testing.T) {
+	_, err := generateTo(t, "testdata/configmirror/bad-temporal.yaml")
+	want := "bad-temporal-constraints.yaml: temporal reachesMissing: eventually: line 1, column 1: unknown CEL symbol missing"
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("got %v, want %q", err, want)
+	}
+}

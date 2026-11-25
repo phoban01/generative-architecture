@@ -1,0 +1,13 @@
+apiVersion: architecture.local/v1alpha1
+kind: ModelConstraints
+metadata:
+  name: config-mirror-bad-temporal
+spec:
+  # A temporal property over a symbol the model does not have. arch
+  # generate rejects the document before any sampling.
+  properties:
+    - name: boundedRetries
+      expression: 'retries >= 0 && retries <= 3'
+  temporal:
+    - name: reachesMissing
+      eventually: 'missing == 3'
