@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -60,9 +61,12 @@ type generated struct {
 	spec        *model.Spec // nil when the project has no controller
 	// links are the resource bindings between the controllers, derived
 	// from their watches and effects (ADR-0010); empty for one controller.
-	links    []composition.Link
-	effects  []ir.Effect
-	irSHA256 string
+	links []composition.Link
+	// boundaries are the BoundaryModel components the project document
+	// names; each is assumed and joins by resource like a controller.
+	boundaries []boundaryOutput
+	effects    []ir.Effect
+	irSHA256   string
 }
 
 // controllerOutput is what generation derives from one controller.
@@ -156,6 +160,9 @@ func generate(g globals) (generated, error) {
 			return gen, err
 		}
 		gen.controllers = append(gen.controllers, o)
+	}
+	if gen.boundaries, err = loadBoundaries(p, gen.controllers); err != nil {
+		return gen, err
 	}
 	spec, links, err := gen.compose(properties)
 	if err != nil {
@@ -372,6 +379,11 @@ func (gen generated) components() ([]composition.Component, map[string]ir.Eviden
 		evidence[c.Name] = ir.Extracted
 		sources[c.Name] = o.controller.Provenance.Source
 	}
+	for _, b := range gen.boundaries {
+		components = append(components, b.component)
+		evidence[b.name()] = ir.Assumed
+		sources[b.name()] = ir.Source{File: relative(gen.project.Root, filepath.Join(gen.project.Dir, b.decl.Path))}
+	}
 	return components, evidence, sources
 }
 
@@ -487,6 +499,29 @@ func (gen generated) receipt() (generationReceipt, error) {
 	for _, rel := range p.SortedHashes() {
 		extra = append(extra, filepath.ToSlash(filepath.Join(dir, rel)))
 	}
+	// A boundary's model and contracts are inputs too; the document itself
+	// is already among the project's hashes.
+	root, err := filepath.Abs(p.Root)
+	if err != nil {
+		return generationReceipt{}, err
+	}
+	seen := map[string]bool{}
+	for _, f := range extra {
+		seen[f] = true
+	}
+	for _, b := range gen.boundaries {
+		for _, f := range b.files {
+			abs, err := filepath.Abs(f)
+			if err != nil {
+				return generationReceipt{}, err
+			}
+			if rel := filepath.ToSlash(relative(root, abs)); !seen[rel] {
+				seen[rel] = true
+				extra = append(extra, rel)
+			}
+		}
+	}
+	sort.Strings(extra)
 	r, err := receipt.Collect(p.Root, p.Spec.Packages, extra, map[string]string{"go": runtime.Version()})
 	if err != nil {
 		return generationReceipt{}, err
@@ -547,6 +582,9 @@ func (gen generated) writeComposition(out string) (*receipt.File, error) {
 	for _, o := range gen.controllers {
 		doc.Components = append(doc.Components, o.name())
 	}
+	for _, b := range gen.boundaries {
+		doc.Components = append(doc.Components, b.name())
+	}
 	doc.Links = gen.links
 	if err := krm.WriteResult(path, compositionKind, gen.project.Name, doc); err != nil {
 		return nil, err
@@ -572,4 +610,34 @@ func subresourceOf(key string) string {
 		return sub
 	}
 	return ""
+}
+
+// boundaryOutput is a boundary component the project document names, with
+// the files the boundary was read from.
+type boundaryOutput struct {
+	decl      project.Boundary
+	component composition.Component
+	files     []string
+}
+
+func (b boundaryOutput) name() string { return b.component.Name }
+
+// loadBoundaries loads the project's boundary components. A boundary's
+// name must not be a controller's.
+func loadBoundaries(p project.Project, controllers []controllerOutput) ([]boundaryOutput, error) {
+	var out []boundaryOutput
+	for i, b := range p.Spec.Boundaries {
+		ref := composition.ComponentRef{Name: b.ComponentName(), Boundary: b.Path, Applies: b.Applies}
+		for _, o := range controllers {
+			if o.name() == ref.Name {
+				return nil, fmt.Errorf("boundaries[%d]: name %s is a controller's; set name", i, ref.Name)
+			}
+		}
+		c, files, err := composition.LoadBoundary(p.Dir, ref)
+		if err != nil {
+			return nil, fmt.Errorf("boundaries[%d] (%s): %w", i, ref.Name, err)
+		}
+		out = append(out, boundaryOutput{decl: b, component: c, files: files})
+	}
+	return out, nil
 }

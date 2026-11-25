@@ -17,7 +17,7 @@ go run ./cmd/arch --project examples/refsystem/project.yaml --out examples/refsy
 go run ./cmd/arch --project examples/refsystem/project.yaml --out examples/refsystem/generated check --samples 60 --steps 150
 ```
 
-The composition document records the two derived bindings: the tenant controller's Tenant to the database controller, and the database controller's Database to the backup controller. Neither binding has a protocol contract yet, so `check` reports connectivity only.
+The composition document records the derived bindings: the tenant controller's Tenant to the database controller, the database controller's Database to the backup controller, and each owned kind to the Flux Kustomization boundary that applies it (`spec.boundaries`). No binding has a protocol contract yet, so `check` reports connectivity only.
 
 To adopt arch, follow one of the two guides. Every command in them runs in `go test`.
 
@@ -38,7 +38,7 @@ See [the project plan](PROJECT-PLAN.md) for the requirements index, milestones a
 
 | Example | Role |
 | --- | --- |
-| `examples/refsystem/` | The reference system and the adoption walkthrough. Three controllers extract with no unsupported construct and compose into one model from their declarations; the Flux boundary comes later. |
+| `examples/refsystem/` | The reference system and the adoption walkthrough. Three controllers extract with no unsupported construct and compose into one model with the Flux Kustomization boundary from their declarations. |
 | `cmd/arch/testdata/configmirror/` | The ConfigMirror project document: the one project that runs the whole `arch` pipeline, in the adoption guide and in CI's `architecture` job. |
 | `examples/configmirror/` | Regression fixture. The first source-generated controller: its model, replay projection, environment and boundary gating are generated; Quint traces are replayed against the real controller, a mutation suite checks detection and a receipt records the inputs. |
 | `examples/database/` | Regression fixture and the source of [START-HERE.md](START-HERE.md). Process, watches and dynamic-client accesses are extracted from Go; replay runs the real reconcile against a fake dynamic API through a projection generated from `abstraction.yaml`. |

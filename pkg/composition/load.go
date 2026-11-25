@@ -149,7 +149,7 @@ func Load(root, path string) (Loaded, error) {
 			if ref.IR != "" {
 				return out, fmt.Errorf("%s: ir and boundary are exclusive; the boundary brings its facts", at)
 			}
-			c, files, err := loadBoundary(dir, ref)
+			c, files, err := LoadBoundary(dir, ref)
 			if err != nil {
 				return out, fmt.Errorf("%s: %w", at, err)
 			}
@@ -310,13 +310,13 @@ func weakest(a, b ir.Evidence) ir.Evidence {
 	return a
 }
 
-// loadBoundary loads the BoundaryModel a component names. The component's
+// LoadBoundary loads the BoundaryModel a component names. The component's
 // model is the boundary's TransitionModel fragment. A boundary never
 // contributes an extracted process. Its ports, watches and effects are
 // assumed. A resource port gets the resource contract of its GVK, so it joins
 // like a derived port. The kinds ref.Applies names become apply effects and
-// resource out ports. loadBoundary returns every file it read.
-func loadBoundary(dir string, ref ComponentRef) (Component, []string, error) {
+// resource out ports. LoadBoundary returns every file it read.
+func LoadBoundary(dir string, ref ComponentRef) (Component, []string, error) {
 	if ref.Model != "" {
 		return Component{}, nil, fmt.Errorf("model and boundary are exclusive; the boundary names its model")
 	}

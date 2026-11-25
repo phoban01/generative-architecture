@@ -15,8 +15,10 @@ import (
 	"strings"
 
 	"golang.org/x/mod/module"
+	"gopkg.in/yaml.v3"
 
 	"github.com/phoban01/generative-architecture/pkg/catalog"
+	"github.com/phoban01/generative-architecture/pkg/ir"
 	"github.com/phoban01/generative-architecture/pkg/krm"
 )
 
@@ -47,7 +49,7 @@ type Spec struct {
 	Packages    []string       `yaml:"packages"`
 	Catalog     Catalog        `yaml:"catalog,omitempty"`
 	Constraints []string       `yaml:"constraints,omitempty"`
-	Boundaries  []string       `yaml:"boundaries,omitempty"`
+	Boundaries  []Boundary     `yaml:"boundaries,omitempty"`
 	Runtime     Runtime        `yaml:"runtime,omitempty"`
 	Bounds      map[string]int `yaml:"bounds,omitempty"`
 	// Abstraction names the Abstraction document that maps objects to
@@ -138,11 +140,19 @@ func (s Spec) Validate() error {
 		}
 		return []string{v}
 	}
-	for field, paths := range map[string][]string{"catalog.crds": s.Catalog.CRDs, "catalog.discovery": s.Catalog.Discovery, "constraints": s.Constraints, "boundaries": s.Boundaries, "abstraction": single(s.Abstraction), "viewHints": single(s.ViewHints)} {
+	for field, paths := range map[string][]string{"catalog.crds": s.Catalog.CRDs, "catalog.discovery": s.Catalog.Discovery, "constraints": s.Constraints, "boundaries": boundaryPaths(s.Boundaries), "abstraction": single(s.Abstraction), "viewHints": single(s.ViewHints)} {
 		for _, rel := range paths {
 			if rel == "" || filepath.IsAbs(rel) || strings.HasPrefix(filepath.ToSlash(rel), "../") {
 				return fmt.Errorf("%s: path %q must be relative to the document and inside its directory", field, rel)
 			}
+		}
+	}
+	names := map[string]bool{}
+	for i, b := range s.Boundaries {
+		if name := b.ComponentName(); !boundName.MatchString(name) || names[name] {
+			return fmt.Errorf("boundaries[%d]: component name %q must be a unique identifier; set name", i, name)
+		} else {
+			names[name] = true
 		}
 	}
 	for name, v := range s.Bounds {
@@ -164,7 +174,7 @@ func (p Project) Documents() []string {
 	out = append(out, p.Spec.Catalog.CRDs...)
 	out = append(out, p.Spec.Catalog.Discovery...)
 	out = append(out, p.Spec.Constraints...)
-	out = append(out, p.Spec.Boundaries...)
+	out = append(out, boundaryPaths(p.Spec.Boundaries)...)
 	if p.Spec.Abstraction != "" {
 		out = append(out, p.Spec.Abstraction)
 	}
@@ -278,4 +288,50 @@ func moduleOf(gomod string) (string, bool) {
 		}
 	}
 	return "", true
+}
+
+// Boundary names a BoundaryModel document that arch generate composes with
+// the project's controllers as an assumed component. Path is relative to
+// the project document. Name is the component's name; it defaults to the
+// document's base name. Applies names, per out port of the boundary with
+// an authored contract, the kinds the upstream project applies in this
+// system; each becomes an assumed apply effect and a resource port. A
+// plain string in the document is a path.
+type Boundary struct {
+	Path    string              `yaml:"path"`
+	Name    string              `yaml:"name,omitempty"`
+	Applies map[string][]ir.GVK `yaml:"applies,omitempty"`
+}
+
+// UnmarshalYAML accepts a path or a mapping.
+func (b *Boundary) UnmarshalYAML(n *yaml.Node) error {
+	if n.Kind == yaml.ScalarNode {
+		b.Path = n.Value
+		return nil
+	}
+	type plain Boundary
+	var p plain
+	if err := n.Decode(&p); err != nil {
+		return err
+	}
+	*b = Boundary(p)
+	return nil
+}
+
+// ComponentName is the boundary's name in the composed model: Name, or the
+// document's base name without its extension.
+func (b Boundary) ComponentName() string {
+	if b.Name != "" {
+		return b.Name
+	}
+	base := filepath.Base(b.Path)
+	return strings.TrimSuffix(base, filepath.Ext(base))
+}
+
+func boundaryPaths(boundaries []Boundary) []string {
+	out := make([]string, 0, len(boundaries))
+	for _, b := range boundaries {
+		out = append(out, b.Path)
+	}
+	return out
 }

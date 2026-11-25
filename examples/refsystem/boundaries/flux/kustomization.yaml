@@ -1,0 +1,66 @@
+apiVersion: architecture.local/v1alpha1
+kind: BoundaryModel
+metadata:
+  name: flux-kustomize-controller
+spec:
+  upstream: github.com/fluxcd/kustomize-controller
+  version: v1.4.0
+  model: kustomization-model.yaml
+  owns:
+  - {group: kustomize.toolkit.fluxcd.io, version: v1, kind: Kustomization}
+  watches:
+  - id: kustomizations
+    resource: {group: kustomize.toolkit.fluxcd.io, version: v1, kind: Kustomization}
+  - id: gitRepositories
+    resource: {group: source.toolkit.fluxcd.io, version: v1, kind: GitRepository}
+  effects:
+  - id: readKustomization
+    resource: {group: kustomize.toolkit.fluxcd.io, version: v1, kind: Kustomization}
+    operation: get
+    consistency: cached
+  - id: readSource
+    resource: {group: source.toolkit.fluxcd.io, version: v1, kind: GitRepository}
+    operation: get
+    consistency: cached
+  - id: patchStatus
+    resource: {group: kustomize.toolkit.fluxcd.io, version: v1, kind: Kustomization}
+    operation: patch
+    consistency: direct
+    subresource: status
+  ports:
+    # The applied objects depend on the source content, so the port names an
+    # authored contract instead of one resource. A consumer binds to it.
+    applied:
+      state: applied
+      contract: kustomize.toolkit.fluxcd.io/applied
+      version: v1
+      direction: out
+    ready:
+      state: ready
+      resource: {group: kustomize.toolkit.fluxcd.io, version: v1, kind: Kustomization}
+      direction: out
+  assumptions:
+  - id: interval
+    statement: The controller reconciles each Kustomization again after spec.interval, which the model shows as a periodic requeue (tick).
+    evidence: declared
+    reference: https://fluxcd.io/flux/components/kustomize/kustomizations/#interval
+    conformance: {kind: documentation, reference: https://fluxcd.io/flux/components/kustomize/kustomizations/#interval}
+  - id: serverSideApply
+    statement: The controller applies the built manifests with server-side apply, with field manager kustomize-controller.
+    evidence: declared
+    reference: https://fluxcd.io/flux/components/kustomize/kustomizations/#controlling-the-apply-behavior-of-resources
+    conformance: {kind: documentation, reference: https://fluxcd.io/flux/components/kustomize/kustomizations/#controlling-the-apply-behavior-of-resources}
+  - id: dependsOn
+    statement: The controller does not apply a Kustomization until every Kustomization in spec.dependsOn is ready.
+    evidence: declared
+    reference: https://fluxcd.io/flux/components/kustomize/kustomizations/#dependencies
+    conformance: {kind: documentation, reference: https://fluxcd.io/flux/components/kustomize/kustomizations/#dependencies}
+  - id: prune
+    statement: When spec.prune is true, the controller deletes the objects that an earlier apply created and the current source no longer contains.
+    evidence: declared
+    reference: https://fluxcd.io/flux/components/kustomize/kustomizations/#prune
+    conformance: {kind: documentation, reference: https://fluxcd.io/flux/components/kustomize/kustomizations/#prune}
+  - id: readyAfterApply
+    statement: The Ready condition becomes true only after an apply, and the next apply clears it until the health checks pass again.
+    evidence: assumed
+    conformance: {kind: none}

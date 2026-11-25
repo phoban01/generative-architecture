@@ -117,3 +117,13 @@ spec:
     nightlyJob.status.succeeded: '0'
     nightlyJob.status.failed: '0'
     nightlyJob.exists: 'false'
+  # Flux applies the Tenant, Database and Backup manifests. The boundary is
+  # a copy of pkg/boundary/library/flux; a test keeps them equal.
+  boundaries:
+    - path: boundaries/flux/kustomization.yaml
+      name: flux
+      applies:
+        applied:
+          - {group: refsystem.example.org, version: v1alpha1, kind: Tenant}
+          - {group: refsystem.example.org, version: v1alpha1, kind: Database}
+          - {group: refsystem.example.org, version: v1alpha1, kind: Backup}

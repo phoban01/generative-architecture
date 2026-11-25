@@ -93,5 +93,8 @@ go run ./cmd/arch --project examples/refsystem/project.yaml --out examples/refsy
 The reads keyed by `client.ObjectKey` literals, such as the Namespace named
 after the Tenant, resolve through the abstraction, whose identity fields
 fix each object's name. The generated files are not committed; `cmd/arch`
-generates the system in its tests. The Flux boundary model is added by a
-later milestone issue.
+generates the system in its tests. `spec.boundaries` adds the Flux
+Kustomization boundary (`boundaries/flux`, a copy of the library's) as an
+assumed component that applies the Tenant, Database and Backup manifests,
+so each owned kind binds to it as well. The boundary's own model, the
+periodic apply and the Ready condition, runs beside the controllers.

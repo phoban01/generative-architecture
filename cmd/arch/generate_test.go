@@ -557,10 +557,12 @@ func TestGenerateStatusPatch(t *testing.T) {
 	}
 }
 
-// The reference system composes: its three controllers generate into one
-// model, and the derived bindings join the tenant controller's Tenant to
-// the database controller and the database controller's Database to the
-// backup controller.
+// The reference system composes: its three controllers and the Flux
+// boundary generate into one
+// model. The derived bindings join the tenant controller's Tenant to
+// the database controller, the database controller's Database to the
+// backup controller, and each owned kind to the Kustomization that applies
+// it.
 func TestGenerateReferenceSystem(t *testing.T) {
 	out, err := generateTo(t, filepath.Join(refsystemDir, "project.yaml"))
 	if err != nil {
@@ -570,7 +572,7 @@ func TestGenerateReferenceSystem(t *testing.T) {
 	if err := krm.ReadResult(filepath.Join(out, compositionFile), compositionKind, &doc); err != nil {
 		t.Fatal(err)
 	}
-	if want := []string{"backup", "database", "tenant"}; !slices.Equal(doc.Components, want) {
+	if want := []string{"backup", "database", "tenant", "flux"}; !slices.Equal(doc.Components, want) {
 		t.Fatalf("components %v, want %v", doc.Components, want)
 	}
 	var links []string
@@ -580,6 +582,9 @@ func TestGenerateReferenceSystem(t *testing.T) {
 	want := []string{
 		"database.database_v1alpha1_refsystem_example_org -> backup.database_v1alpha1_refsystem_example_org",
 		"tenant.tenant_v1alpha1_refsystem_example_org -> database.tenant_v1alpha1_refsystem_example_org",
+		"backup.backup_v1alpha1_refsystem_example_org -> flux.backup_v1alpha1_refsystem_example_org",
+		"database.database_v1alpha1_refsystem_example_org -> flux.database_v1alpha1_refsystem_example_org",
+		"tenant.tenant_v1alpha1_refsystem_example_org -> flux.tenant_v1alpha1_refsystem_example_org",
 	}
 	if !slices.Equal(links, want) {
 		t.Fatalf("links %v, want %v", links, want)

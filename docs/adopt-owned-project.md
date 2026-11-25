@@ -301,7 +301,11 @@ spec:
 
 `arch generate` composes several controllers from their declarations. The
 reference system declares all three, so it builds one model and writes the
-composition document with the derived bindings:
+composition document with the derived bindings. `spec.boundaries` adds each
+BoundaryModel the document names as an assumed component, with `applies`
+naming the kinds an upstream project applies in this system (see the
+upstream guide); the reference system composes the Flux Kustomization
+boundary this way:
 
 ```sh
 arch --project examples/refsystem/project.yaml --out examples/refsystem/generated generate

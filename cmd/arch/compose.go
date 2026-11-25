@@ -455,7 +455,7 @@ func changeValueEvent(r abstraction.Resource, id string, f abstraction.Field, li
 // prefixed with the controller's name. An environment action that only
 // changes shared state exists once.
 func (gen generated) compose(properties []model.Property) (model.Spec, []composition.Link, error) {
-	if len(gen.controllers) == 1 {
+	if len(gen.controllers) == 1 && len(gen.boundaries) == 0 {
 		spec := gen.controllers[0].spec
 		spec.Properties = append(spec.Properties, properties...)
 		return spec, nil, nil
@@ -482,7 +482,16 @@ func (gen generated) compose(properties []model.Property) (model.Spec, []composi
 	spec := model.Spec{Name: modelName(gen.project.Name), State: map[string]model.Variable{}, Domains: gen.abs.Spec.Populations(), Properties: append([]model.Property(nil), properties...)}
 	effects := map[string]effect.Descriptor{}
 	seenActions := map[string]bool{}
+	// A boundary's model merges like a controller's: all of its state is
+	// private, so every variable and action takes its prefix.
+	parts := make([]part, 0, len(gen.controllers)+len(gen.boundaries))
 	for _, o := range gen.controllers {
+		parts = append(parts, part{id: o.name(), spec: o.spec, effects: o.effects})
+	}
+	for _, b := range gen.boundaries {
+		parts = append(parts, part{id: b.name(), spec: b.component.Model})
+	}
+	for _, o := range parts {
 		prefix := o.name() + "_"
 		renames := map[string]expr.Expression{}
 		for name, v := range o.spec.State {
@@ -598,3 +607,12 @@ func existsInitial(initial map[string]string, id string) (string, error) {
 	}
 	return v, nil
 }
+
+// part is one component of the composed model: a controller or a boundary.
+type part struct {
+	id      string
+	spec    model.Spec
+	effects []effect.Descriptor
+}
+
+func (p part) name() string { return p.id }

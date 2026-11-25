@@ -1,0 +1,34 @@
+apiVersion: architecture.local/v1alpha1
+kind: TransitionModel
+metadata:
+  name: flux-kustomization
+spec:
+  name: FluxKustomization
+  state:
+    now: {type: int, initial: '0'}
+    due: {type: bool, initial: 'true'}
+    dependsOnReady: {type: bool, initial: 'false'}
+    applied: {type: bool, initial: 'false'}
+    ready: {type: bool, initial: 'false'}
+  actions:
+  # tick is the periodic requeue after spec.interval, bounded to three rounds.
+  - name: tick
+    guard: now < 3
+    updates: {now: now + 1, due: 'true'}
+  # dependenciesReady is the environment step in which every dependsOn entry
+  # becomes ready.
+  - name: dependenciesReady
+    guard: '!dependsOnReady'
+    updates: {dependsOnReady: 'true'}
+  - name: apply
+    guard: due && dependsOnReady
+    updates: {applied: 'true', due: 'false', ready: 'false'}
+  # ready is a state variable, so the action that sets it is markReady.
+  - name: markReady
+    guard: applied && !ready
+    updates: {ready: 'true'}
+  properties:
+  - name: readyAfterApply
+    expression: '!ready || applied'
+  - name: applyWaitsForDependencies
+    expression: '!applied || dependsOnReady'
