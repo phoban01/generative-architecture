@@ -40,27 +40,32 @@ func ApplyProcessEvent(ctx context.Context, gate *effect.Gate, nodes map[string]
 			return err
 		}
 		return gatingBoundary(ctx, gate, event, "createInstance", observe)
-	case "node6_branch":
+	case "node6_readName":
+		if err := gatingExpect(event, node, ir.NodeEffect, "readName"); err != nil {
+			return err
+		}
+		return gatingBoundary(ctx, gate, event, "readName", observe)
+	case "node7_branch":
 		return gatingExpect(event, node, ir.NodeBranch, "")
-	case "node7_readInstance":
+	case "node8_readInstance":
 		if err := gatingExpect(event, node, ir.NodeEffect, "readInstance"); err != nil {
 			return err
 		}
 		return gatingBoundary(ctx, gate, event, "readInstance", observe)
-	case "node8_return":
+	case "node9_return":
 		return gatingExpect(event, node, ir.NodeReturn, "")
-	case "node9_branch":
+	case "node10_branch":
 		return gatingExpect(event, node, ir.NodeBranch, "")
-	case "node10_checkContract":
+	case "node11_checkContract":
 		if err := gatingExpect(event, node, ir.NodeEffect, "checkContract"); err != nil {
 			return err
 		}
 		return gatingBoundary(ctx, gate, event, "checkContract", observe)
-	case "node11_return":
+	case "node12_return":
 		return gatingExpect(event, node, ir.NodeReturn, "")
-	case "node12_branch":
+	case "node13_branch":
 		return gatingExpect(event, node, ir.NodeBranch, "")
-	case "node13_readDatabase":
+	case "node14_readDatabase":
 		if err := gatingExpect(event, node, ir.NodeEffect, "readDatabase"); err != nil {
 			return err
 		}

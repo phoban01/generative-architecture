@@ -62,6 +62,9 @@ spec:
     databaseInstanceResourceVersionSeen:
       type: int
       initial: "0"
+    databaseName:
+      type: string
+      initial: '""'
     databaseResourceVersion:
       type: int
       initial: "0"
@@ -134,6 +137,13 @@ spec:
         kind: DatabaseInstance
       operation: get
       consistency: direct
+    - id: readName
+      resource:
+        group: demo.architecture.local
+        version: v1alpha1
+        kind: Database
+      operation: identity
+      consistency: schema
   actions:
     - name: createDb1_false
       guard: '!Database_db1_exists && invocations == 0'
@@ -199,7 +209,7 @@ spec:
       guard: '!finished && pc == 5 && (true)'
       updates:
         DatabaseInstance_inst1_exists: "true"
-        DatabaseInstance_inst1_spec_databaseName: '"db-1"'
+        DatabaseInstance_inst1_spec_databaseName: databaseName
         databaseInstanceEvent: '"create"'
         databaseInstanceEventPending: "false"
         databaseInstanceGeneration: databaseInstanceGeneration + 1
@@ -209,60 +219,67 @@ spec:
         instanceCreates: instanceCreates + 1
         pc: "4"
       effect: createInstance
-    - name: node6_branch
+    - name: node6_readName
       guard: '!finished && pc == 6 && (true)'
       updates:
-        pc: '!instanceFound ? 5 : 3'
-    - name: node7_readInstance
+        databaseName: '"db-1"'
+        pc: "5"
+      effect: readName
+    - name: node7_branch
       guard: '!finished && pc == 7 && (true)'
+      updates:
+        pc: '!instanceFound ? 6 : 3'
+    - name: node8_readInstance
+      guard: '!finished && pc == 8 && (true)'
       updates:
         endpoint: DatabaseInstance_inst1_status_endpoint
         instanceFound: DatabaseInstance_inst1_exists
-        pc: "6"
+        pc: "7"
       effect: readInstance
-    - name: node8_return
-      guard: '!finished && pc == 8 && (true)'
+    - name: node9_return
+      guard: '!finished && pc == 9 && (true)'
       updates:
         finished: "true"
         outcome: '"unsupported"'
         pc: "-1"
-    - name: node9_branch
-      guard: '!finished && pc == 9 && (true)'
-      updates:
-        pc: '!compatible ? 8 : 7'
-    - name: node10_checkContract
+    - name: node10_branch
       guard: '!finished && pc == 10 && (true)'
       updates:
-        compatible: Database_db1_contractSatisfied
-        pc: "9"
-      effect: checkContract
-    - name: node11_return
+        pc: '!compatible ? 9 : 8'
+    - name: node11_checkContract
       guard: '!finished && pc == 11 && (true)'
+      updates:
+        compatible: Database_db1_contractSatisfied
+        pc: "10"
+      effect: checkContract
+    - name: node12_return
+      guard: '!finished && pc == 12 && (true)'
       updates:
         finished: "true"
         outcome: '"absent"'
         pc: "-1"
-    - name: node12_branch
-      guard: '!finished && pc == 12 && (true)'
-      updates:
-        pc: '!found ? 11 : 10'
-    - name: node13_readDatabase
+    - name: node13_branch
       guard: '!finished && pc == 13 && (true)'
       updates:
+        pc: '!found ? 12 : 11'
+    - name: node14_readDatabase
+      guard: '!finished && pc == 14 && (true)'
+      updates:
         found: Database_db1_exists
-        pc: "12"
+        pc: "13"
       effect: readDatabase
     - name: reconcile
       guard: (finished && invocations < 4) && queued_demo_db_1
       updates:
         compatible: "false"
+        databaseName: '""'
         endpoint: '""'
         finished: "false"
         found: "false"
         instanceFound: "false"
         invocations: invocations + 1
         outcome: '""'
-        pc: "13"
+        pc: "14"
         queued_demo_db_1: "false"
     - name: idle
       guard: finished

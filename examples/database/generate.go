@@ -49,17 +49,21 @@ var storeEffects = map[string]string{
 	"DatabaseInstance":              "readInstance",
 	"CreateDatabaseInstance":        "createInstance",
 	"UpdateDatabaseStatus":          "publish",
+	"DatabaseName":                  "readName",
 }
 
 // derivedEffects are effects of Store methods that reach no API object: each
 // reads a derived field, named here, of an object an earlier effect read.
 // The effect is labelled with that field's resource.
-var derivedEffects = map[string]string{"checkContract": "contractSatisfied"}
+var derivedEffects = map[string]string{"checkContract": "contractSatisfied", "readName": "metadata.name"}
 
 // Operation and consistency of a derived read. It evaluates content the
 // controller already holds, so it has no API consistency.
 const (
-	derivedOperation   = "derive"
+	derivedOperation = "derive"
+	// identityOperation is the derived read of an identity path, which the
+	// abstraction fixes per object.
+	identityOperation  = "identity"
 	derivedConsistency = "schema"
 )
 
@@ -167,11 +171,15 @@ func generateEffects(abs abstraction.Abstraction, accesses dynamicgen.Result) ([
 		byEffect[a.Effect] = d
 	}
 	for id, field := range derivedEffects {
-		r, _, ok := fieldNamed(abs, field)
+		r, _, identity, ok := fieldNamed(abs, field)
 		if !ok {
 			return nil, fmt.Errorf("derived effect %s reads %s, which the abstraction does not declare", id, field)
 		}
-		byEffect[id] = effect.Descriptor{ID: id, Resource: effect.Resource{Group: r.GVK.Group, Version: r.GVK.Version, Kind: r.GVK.Kind}, Operation: derivedOperation, Consistency: derivedConsistency}
+		op := derivedOperation
+		if identity {
+			op = identityOperation
+		}
+		byEffect[id] = effect.Descriptor{ID: id, Resource: effect.Resource{Group: r.GVK.Group, Version: r.GVK.Version, Kind: r.GVK.Kind}, Operation: op, Consistency: derivedConsistency}
 	}
 	var out []effect.Descriptor
 	for method, id := range storeEffects {
@@ -186,16 +194,22 @@ func generateEffects(abs abstraction.Abstraction, accesses dynamicgen.Result) ([
 }
 
 // fieldNamed finds the abstraction field whose key (its name, else its
-// dot-joined path) is key.
-func fieldNamed(abs abstraction.Abstraction, key string) (abstraction.Resource, abstraction.Field, bool) {
+// dot-joined path) is key, or the identity path with that key, which the
+// abstraction fixes per object and the model reads as a string.
+func fieldNamed(abs abstraction.Abstraction, key string) (r abstraction.Resource, f abstraction.Field, identity, ok bool) {
 	for _, r := range abs.Spec.Resources {
 		for _, f := range r.Fields {
 			if f.Key() == key {
-				return r, f, true
+				return r, f, false, true
+			}
+		}
+		for _, p := range r.Identity {
+			if abstraction.PathKey(p) == key {
+				return r, abstraction.Field{Path: p, Type: abstraction.TypeString}, true, true
 			}
 		}
 	}
-	return abstraction.Resource{}, abstraction.Field{}, false
+	return abstraction.Resource{}, abstraction.Field{}, false, false
 }
 
 // controllerWrites collects the abstraction variables the Store's summaries
@@ -725,7 +739,7 @@ func watchEmits(spec model.Spec, env []EnvironmentAction, abs abstraction.Abstra
 		}
 		e := watchEvent{kind: d.Resource.Kind}
 		switch d.Operation {
-		case "get", "list", derivedOperation:
+		case "get", "list", derivedOperation, identityOperation:
 			continue
 		case "create":
 			e.event = watchmodel.Create

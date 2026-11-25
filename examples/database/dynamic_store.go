@@ -57,8 +57,11 @@ func (s *DynamicStore) DatabaseInstance() (bool, string) {
 	}
 	return true, id
 }
-func (s *DynamicStore) CreateDatabaseInstance() {
-	obj := &unstructured.Unstructured{Object: map[string]any{"spec": map[string]any{"databaseName": s.Key.Name}}}
+func (s *DynamicStore) DatabaseName() string {
+	return s.Key.Name
+}
+func (s *DynamicStore) CreateDatabaseInstance(databaseName string) {
+	obj := &unstructured.Unstructured{Object: map[string]any{"spec": map[string]any{"databaseName": databaseName}}}
 	obj.SetGroupVersionKind(s.InstanceKind)
 	obj.SetName("instance-for-" + s.Key.Name)
 	obj.SetNamespace(s.Key.Namespace)

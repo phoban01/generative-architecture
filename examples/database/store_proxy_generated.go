@@ -24,6 +24,7 @@ var proxyStoreEffects = map[string]effect.Descriptor{
 	"createInstance": {Actor: "", ID: "createInstance", Resource: effect.Resource{Group: "demo.architecture.local", Version: "v1alpha1", Kind: "DatabaseInstance"}, Operation: "create", Consistency: "direct"},
 	"readDatabase":   {Actor: "", ID: "readDatabase", Resource: effect.Resource{Group: "demo.architecture.local", Version: "v1alpha1", Kind: "Database"}, Operation: "get", Consistency: "direct"},
 	"readInstance":   {Actor: "", ID: "readInstance", Resource: effect.Resource{Group: "demo.architecture.local", Version: "v1alpha1", Kind: "DatabaseInstance"}, Operation: "get", Consistency: "direct"},
+	"readName":       {Actor: "", ID: "readName", Resource: effect.Resource{Group: "demo.architecture.local", Version: "v1alpha1", Kind: "Database"}, Operation: "identity", Consistency: "schema"},
 	"checkContract":  {Actor: "", ID: "checkContract", Resource: effect.Resource{Group: "demo.architecture.local", Version: "v1alpha1", Kind: "Database"}, Operation: "derive", Consistency: "schema"},
 	"publish":        {Actor: "", ID: "publish", Resource: effect.Resource{Group: "demo.architecture.local", Version: "v1alpha1", Kind: "Database"}, Operation: "status.update", Consistency: "direct"},
 }
@@ -33,9 +34,9 @@ var proxyStoreEffects = map[string]effect.Descriptor{
 var proxyStoreOutcomes = map[string]map[string]bool{}
 
 // CreateDatabaseInstance performs effect createInstance at the gate.
-func (p StoreProxy) CreateDatabaseInstance() {
-	p.Gate.Hook(p.Context, effect.Call{Descriptor: proxyStoreEffects["createInstance"], Submitted: map[string]any{}}, func() effect.Result {
-		p.Store.CreateDatabaseInstance()
+func (p StoreProxy) CreateDatabaseInstance(a0 string) {
+	p.Gate.Hook(p.Context, effect.Call{Descriptor: proxyStoreEffects["createInstance"], Submitted: map[string]any{"databaseName": a0}}, func() effect.Result {
+		p.Store.CreateDatabaseInstance(a0)
 		return effect.Result{Snapshot: map[string]any{}}
 	})
 }
@@ -59,6 +60,16 @@ func (p StoreProxy) DatabaseInstance() (bool, string) {
 		return effect.Result{Snapshot: map[string]any{"result0": r0, "result1": r1}}
 	})
 	return r0, r1
+}
+
+// DatabaseName performs effect readName at the gate.
+func (p StoreProxy) DatabaseName() string {
+	var r0 string
+	p.Gate.Hook(p.Context, effect.Call{Descriptor: proxyStoreEffects["readName"], Submitted: map[string]any{}}, func() effect.Result {
+		r0 = p.Store.DatabaseName()
+		return effect.Result{Snapshot: map[string]any{"result0": r0}}
+	})
+	return r0
 }
 
 // SatisfiesProvisioningContract performs effect checkContract at the gate.

@@ -117,7 +117,7 @@ func TestSelectorsResolveToJSONFieldPaths(t *testing.T) {
 func TestCallResolvesCalleeBySymbol(t *testing.T) {
 	l := loadFixture(t, "./examples/database", "", "Reconcile")
 	scope := map[string]expr.Symbol{}
-	for name, typ := range map[string]string{"found": "bool", "compatible": "bool", "instanceFound": "bool", "endpoint": "string"} {
+	for name, typ := range map[string]string{"found": "bool", "compatible": "bool", "instanceFound": "bool", "endpoint": "string", "databaseName": "string"} {
 		scope[name] = expr.Symbol{Type: typ, Quint: name}
 	}
 	kinds := map[Callee]string{
@@ -125,6 +125,7 @@ func TestCallResolvesCalleeBySymbol(t *testing.T) {
 		{Package: "github.com/phoban01/generative-architecture/examples/database", Receiver: "Store", Method: "SatisfiesProvisioningContract"}: "checkContract",
 		{Package: "github.com/phoban01/generative-architecture/examples/database", Receiver: "Store", Method: "DatabaseInstance"}:              "readInstance",
 		{Package: "github.com/phoban01/generative-architecture/examples/database", Receiver: "Store", Method: "CreateDatabaseInstance"}:        "createInstance",
+		{Package: "github.com/phoban01/generative-architecture/examples/database", Receiver: "Store", Method: "DatabaseName"}:                  "readName",
 	}
 	var seen []Callee
 	opts := Options{Scope: scope, Returns: []Return{{Type: "string"}}}
@@ -143,7 +144,7 @@ func TestCallResolvesCalleeBySymbol(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(seen) != 5 || seen[2] != (Callee{Package: "github.com/phoban01/generative-architecture/examples/database", Receiver: "Store", Method: "DatabaseInstance"}) {
+	if len(seen) != 6 || seen[3] != (Callee{Package: "github.com/phoban01/generative-architecture/examples/database", Receiver: "Store", Method: "DatabaseInstance"}) {
 		t.Fatalf("unexpected callees %+v", seen)
 	}
 	var instance *Node
@@ -170,7 +171,7 @@ func TestCallResolvesCalleeBySymbol(t *testing.T) {
 		t.Fatal(err)
 	}
 	text, err := Extract(source, Options{File: l.Path, Method: "Reconcile", Scope: scope, Returns: []Return{{Type: "string"}}, Statement: func(s ast.Stmt, convert Convert) (Node, bool, error) {
-		operations := map[string]string{"found := store.DatabaseExists()": "readDatabase", "compatible := store.SatisfiesProvisioningContract()": "checkContract", "instanceFound, endpoint := store.DatabaseInstance()": "readInstance", "store.CreateDatabaseInstance()": "createInstance"}
+		operations := map[string]string{"found := store.DatabaseExists()": "readDatabase", "compatible := store.SatisfiesProvisioningContract()": "checkContract", "instanceFound, endpoint := store.DatabaseInstance()": "readInstance", "databaseName := store.DatabaseName()": "readName", "store.CreateDatabaseInstance(databaseName)": "createInstance"}
 		if kind, ok := operations[Code(s)]; ok {
 			return Node{Kind: kind}, true, nil
 		}

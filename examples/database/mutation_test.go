@@ -72,6 +72,7 @@ func TestMutationSuite(t *testing.T) {
 		"repeated-create":               {"model"},
 		"missing-create":                {"model"},
 		"database-generation-predicate": {"model", "replay"},
+		"wrong-database-name":           {"model"},
 	}
 	if got := suite.CaughtBy(detections); !reflect.DeepEqual(got, want) {
 		t.Fatalf("caught by %v, want %v\n%s", got, want, detections)

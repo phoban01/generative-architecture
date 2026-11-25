@@ -5,11 +5,14 @@ package database
 // Store operations are integration boundaries, not controller decision logic.
 // SatisfiesProvisioningContract represents discovery of the provider's
 // supported contract. It is distinct from whether a instance has been provisioned.
+// DatabaseName is the name of the Database the Store is scoped to; the
+// instance the controller creates references it.
 type Store interface {
 	DatabaseExists() bool
+	DatabaseName() string
 	SatisfiesProvisioningContract() bool
 	DatabaseInstance() (exists bool, endpoint string)
-	CreateDatabaseInstance()
+	CreateDatabaseInstance(databaseName string)
 	UpdateDatabaseStatus(endpoint string)
 }
 
@@ -27,7 +30,8 @@ func Reconcile(store Store) string {
 	}
 	instanceFound, endpoint := store.DatabaseInstance()
 	if !instanceFound {
-		store.CreateDatabaseInstance()
+		databaseName := store.DatabaseName()
+		store.CreateDatabaseInstance(databaseName)
 		return "waiting"
 	}
 	if endpoint == "" {

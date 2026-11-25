@@ -65,7 +65,7 @@ spec:
     # The controller waits without creating the instance it waits for.
     - name: missing-create
       file: controller.go
-      find: store.CreateDatabaseInstance()
+      find: store.CreateDatabaseInstance(databaseName)
       replace: ""
       expect: [waitingHasAInstance]
     # A generation filter on the Database drops the status update the
@@ -78,3 +78,9 @@ spec:
         - find: handler "sigs.k8s.io/controller-runtime/pkg/handler"
           replace: "builder \"sigs.k8s.io/controller-runtime/pkg/builder\"\n\thandler \"sigs.k8s.io/controller-runtime/pkg/handler\"\n\tpredicate \"sigs.k8s.io/controller-runtime/pkg/predicate\""
       expect: [databaseWatchEnqueuesReconciler, queued_demo_db_1]
+    # The instance references a Database other than the one it serves.
+    - name: wrong-database-name
+      file: controller.go
+      find: store.CreateDatabaseInstance(databaseName)
+      replace: store.CreateDatabaseInstance("db-2")
+      expect: [instanceReferencesItsDatabase]

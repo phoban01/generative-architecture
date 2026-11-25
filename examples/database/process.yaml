@@ -16,6 +16,11 @@ spec:
         guard: 'true'
         updates: {found: Database_db1_exists}
         effect: readDatabase
+    readName:
+      - name: readName
+        guard: 'true'
+        updates: {databaseName: '"db-1"'}
+        effect: readName
     checkContract:
       - name: checkContract
         guard: 'true'
@@ -31,7 +36,7 @@ spec:
         guard: 'true'
         updates:
           DatabaseInstance_inst1_exists: 'true'
-          DatabaseInstance_inst1_spec_databaseName: '"db-1"'
+          DatabaseInstance_inst1_spec_databaseName: _value
           instanceCreates: 'instanceCreates + 1'
         effect: createInstance
     publish:

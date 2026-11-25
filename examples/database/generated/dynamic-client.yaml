@@ -16,8 +16,8 @@ status:
         plural: databaseinstances
         scope: Namespaced
       namespace: s.Key.Namespace
-      line: 65
-      methodSha256: 3864c892a60473c5df864ced862a425050b35508758de96389aa9c168193ba18
+      line: 68
+      methodSha256: 50268b9e5e5b1675d2bd411a23cdf068dc3230a5a7546af18334e2038048f9a9
     - method: DatabaseExists
       effect: readDatabase
       operation: get
@@ -58,6 +58,6 @@ status:
         plural: databases
         scope: Namespaced
       namespace: s.Key.Namespace
-      line: 77
+      line: 80
       methodSha256: 27bd3227e2b931122a6b47c7715626dd2ffbaa5ae8c4029fc6d2fc54805e7eaf
-  sourceSha256: 7db856a9052735afc12869671313b1f17e2ed4b837bdac555320e79338379dc8
+  sourceSha256: 8e691a744e210e5ac0081367e7e66d95f23b7c42c1da288df051ab9d6c1266e9

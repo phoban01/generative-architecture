@@ -43,6 +43,7 @@ func TestGenerateModel(t *testing.T) {
 		{ID: "publish", Resource: database, Operation: "status.update", Consistency: "direct"},
 		{ID: "readDatabase", Resource: database, Operation: "get", Consistency: "direct"},
 		{ID: "readInstance", Resource: instance, Operation: "get", Consistency: "direct"},
+		{ID: "readName", Resource: database, Operation: "identity", Consistency: "schema"},
 	}
 	if !reflect.DeepEqual(e.Spec.Effects, want) {
 		t.Errorf("effects %+v, want %+v", e.Spec.Effects, want)

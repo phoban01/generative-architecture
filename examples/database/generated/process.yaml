@@ -3,12 +3,12 @@ kind: ExtractedProcess
 metadata:
   name: database-provisioning
 status:
-  entry: 13
+  entry: 14
   nodes:
     - id: 0
       kind: return
       go: return "ready"
-      line: 37
+      line: 41
       expression: '"ready"'
       next: -1
       results:
@@ -16,13 +16,13 @@ status:
     - id: 1
       kind: publish
       go: store.UpdateDatabaseStatus(endpoint)
-      line: 36
+      line: 40
       expression: endpoint
       next: 0
     - id: 2
       kind: return
       go: return "waiting"
-      line: 34
+      line: 38
       expression: '"waiting"'
       next: -1
       results:
@@ -30,74 +30,80 @@ status:
     - id: 3
       kind: branch
       go: endpoint == ""
-      line: 33
+      line: 37
       expression: (endpoint == "")
       next: 2
       else: 1
     - id: 4
       kind: return
       go: return "waiting"
-      line: 31
+      line: 35
       expression: '"waiting"'
       next: -1
       results:
         - '"waiting"'
     - id: 5
       kind: createInstance
-      go: store.CreateDatabaseInstance()
-      line: 30
+      go: store.CreateDatabaseInstance(databaseName)
+      line: 34
+      expression: databaseName
       next: 4
     - id: 6
+      kind: readName
+      go: databaseName := store.DatabaseName()
+      line: 33
+      next: 5
+    - id: 7
       kind: branch
       go: '!instanceFound'
-      line: 29
+      line: 32
       expression: '!(instanceFound)'
-      next: 5
+      next: 6
       else: 3
-    - id: 7
+    - id: 8
       kind: readInstance
       go: instanceFound, endpoint := store.DatabaseInstance()
-      line: 28
-      next: 6
-    - id: 8
+      line: 31
+      next: 7
+    - id: 9
       kind: return
       go: return "unsupported"
-      line: 26
+      line: 29
       expression: '"unsupported"'
       next: -1
       results:
         - '"unsupported"'
-    - id: 9
+    - id: 10
       kind: branch
       go: '!compatible'
-      line: 25
+      line: 28
       expression: '!(compatible)'
-      next: 8
-      else: 7
-    - id: 10
+      next: 9
+      else: 8
+    - id: 11
       kind: checkContract
       go: compatible := store.SatisfiesProvisioningContract()
-      line: 24
-      next: 9
-    - id: 11
+      line: 27
+      next: 10
+    - id: 12
       kind: return
       go: return "absent"
-      line: 22
+      line: 25
       expression: '"absent"'
       next: -1
       results:
         - '"absent"'
-    - id: 12
+    - id: 13
       kind: branch
       go: '!found'
-      line: 21
+      line: 24
       expression: '!(found)'
-      next: 11
-      else: 10
-    - id: 13
+      next: 12
+      else: 11
+    - id: 14
       kind: readDatabase
       go: found := store.DatabaseExists()
-      line: 20
-      next: 12
-  sourceSha256: 501992ebf2133324aa347def107af60d33b7a4d813b8872d125be53fb32c251f
-  methodSha256: 5b892cee055a3c5bc7d38d3c624a1329dfb32065927e85b62e43e647e3017874
+      line: 23
+      next: 13
+  sourceSha256: 1d4e783753fb1c7aabe902911e6b800e1281e87cbfb499ab122db776228fddf4
+  methodSha256: 29314df3f4be05226824aa4dfe9ac6e3da80c02eefcfa341e435ec584ba5b3bf

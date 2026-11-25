@@ -53,7 +53,8 @@ func Reconcile(store Store) string {
 	}
 	instanceFound, endpoint := store.DatabaseInstance()
 	if !instanceFound {
-		store.CreateDatabaseInstance()
+		databaseName := store.DatabaseName()
+		store.CreateDatabaseInstance(databaseName)
 		return "waiting"
 	}
 	if endpoint == "" {

@@ -39,6 +39,7 @@ spec:
     - {name: compatible, type: bool}
     - {name: instanceFound, type: bool}
     - {name: endpoint, type: string}
+    - {name: databaseName, type: string}
     - {name: outcome, type: string}
     - {name: invocations, type: int}
     - {name: instanceCreates, type: int}
