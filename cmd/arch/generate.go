@@ -39,6 +39,10 @@ const (
 	// counterexamplesDir holds the violating trace arch check kept and its
 	// execution view.
 	counterexamplesDir = "counterexamples"
+	// compositionFile holds the components and the derived bindings of a
+	// composed model, so arch check and arch replay report them.
+	compositionFile = "composition.yaml"
+	compositionKind = "Composition"
 )
 
 // reconcileMethod is the method the typed frontend lowers.
@@ -431,9 +435,16 @@ func (gen generated) write(out string) error {
 	if err := w.Write(filepath.Join(out, likec4Dir)); err != nil {
 		return err
 	}
+	composed, err := gen.writeComposition(out)
+	if err != nil {
+		return err
+	}
 	r, err := gen.receipt()
 	if err != nil {
 		return err
+	}
+	if composed != nil {
+		r.Generated = append(r.Generated, *composed)
 	}
 	return r.write(filepath.Join(out, receiptsFile), gen.project.Name)
 }
@@ -511,4 +522,38 @@ func missingIR(irPath, supportPath string) error {
 	first := support.Unsupported[0]
 	construct, _, _ := strings.Cut(first.Construct, "\n")
 	return fmt.Errorf("%s not found; arch extract failed closed on %d unsupported constructs, listed in %s; first: %s %s at %s:%d", irPath, len(support.Unsupported), supportPath, first.Kind, construct, first.Location.File, first.Location.Line)
+}
+
+// compositionDoc is the Composition document arch generate writes beside
+// a composed model: the components in declaration order and the resource
+// bindings between them.
+type compositionDoc struct {
+	Components []string           `yaml:"components"`
+	Links      []composition.Link `yaml:"links"`
+}
+
+// writeComposition writes the composition document of a composed model,
+// and removes a stale one for a single controller. It returns the file as
+// a generated input of later runs, or nil.
+func (gen generated) writeComposition(out string) (*receipt.File, error) {
+	path := filepath.Join(out, compositionFile)
+	if len(gen.links) == 0 {
+		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return nil, err
+		}
+		return nil, nil
+	}
+	doc := compositionDoc{}
+	for _, o := range gen.controllers {
+		doc.Components = append(doc.Components, o.name())
+	}
+	doc.Links = gen.links
+	if err := krm.WriteResult(path, compositionKind, gen.project.Name, doc); err != nil {
+		return nil, err
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return &receipt.File{Path: compositionFile, SHA256: fmt.Sprintf("%x", sha256.Sum256(b))}, nil
 }

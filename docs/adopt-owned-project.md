@@ -321,7 +321,8 @@ arch --project examples/configmirror/project.yaml --out /tmp/configmirror render
   sets the titles, groups and layout of the generated views; it adds no
   element.
 - `arch check` samples the model with Quint, writes the traces and
-  `report.yaml`, and fails on a constraint violation. The violating trace
+  `report.yaml`, and fails on a constraint violation. For a composed model
+  it lists how each controller's inputs were bound. The violating trace
   and its execution view go under `counterexamples/`. It prints:
 
   ```text

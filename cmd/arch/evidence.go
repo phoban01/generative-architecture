@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"sort"
 
+	"github.com/phoban01/generative-architecture/pkg/composition"
 	"github.com/phoban01/generative-architecture/pkg/conformance"
 	"github.com/phoban01/generative-architecture/pkg/ir"
 	"github.com/phoban01/generative-architecture/pkg/krm"
@@ -33,6 +34,9 @@ type evidence struct {
 	model    *model.Compiled
 	modelSHA string
 	receipt  generationReceipt
+	// links are the resource bindings of a composed model, from the
+	// composition document arch generate writes; empty for one controller.
+	links []composition.Link
 	// warnings lists the library inputs that drifted (ADR-0009).
 	warnings []string
 }
@@ -71,6 +75,12 @@ func loadEvidence(g globals) (evidence, []report.Finding, error) {
 		return ev, nil, fmt.Errorf("%s: %w", specPath, err)
 	}
 	ev.modelSHA = fmt.Sprintf("%x", sha256.Sum256([]byte(ev.model.Quint())))
+	var composed compositionDoc
+	if err := krm.ReadResult(filepath.Join(g.out, compositionFile), compositionKind, &composed); err == nil {
+		ev.links = composed.Links
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return ev, nil, err
+	}
 	if ev.receipt, err = readReceipt(filepath.Join(g.out, receiptsFile)); err != nil {
 		return ev, nil, err
 	}

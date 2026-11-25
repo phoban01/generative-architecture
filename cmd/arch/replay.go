@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"sort"
 
+	"github.com/phoban01/generative-architecture/pkg/composition"
 	"github.com/phoban01/generative-architecture/pkg/conformance"
 	"github.com/phoban01/generative-architecture/pkg/report"
 )
@@ -50,6 +51,7 @@ func runReplay(g globals, args []string) error {
 	}
 	scope := fmt.Sprintf("replay of %d saved traces against the generated model; no implementation replay", len(paths))
 	v := ev.verification(scope, map[string]string{"go": runtime.Version()})
+	v.Bindings, v.Protocols = composition.ReportSections(ev.links, nil, nil)
 	v.Findings = findings
 	if len(findings) == 0 {
 		for _, p := range paths {

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/phoban01/generative-architecture/pkg/composition"
 	"github.com/phoban01/generative-architecture/pkg/conformance"
 	"github.com/phoban01/generative-architecture/pkg/ir"
 	"github.com/phoban01/generative-architecture/pkg/krm"
@@ -95,6 +96,9 @@ func runCheck(g globals, args []string) error {
 		}
 	}
 	v := ev.verification(scope, tools)
+	// A composed model reports how its inputs were bound; arch has no
+	// protocol links yet, so the protocol section stays empty.
+	v.Bindings, v.Protocols = composition.ReportSections(ev.links, nil, nil)
 	v.Sampling = &sampling
 	record := opts.Record()
 	v.Receipt.Sampling = &record

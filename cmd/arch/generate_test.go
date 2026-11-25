@@ -418,3 +418,38 @@ func TestGenerateComposesControllers(t *testing.T) {
 		}
 	}
 }
+
+// A composed model's bindings reach the check report: the copy's ConfigMap
+// port of the exporter is bound to the mirror's. The composition document
+// is a generated input of the run.
+func TestCheckReportsBindings(t *testing.T) {
+	if os.Getenv("QUINT_BIN") == "" {
+		t.Skip("QUINT_BIN not set")
+	}
+	const pair = "testdata/pair/project.yaml"
+	out, err := generateTo(t, pair)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := readReceipt(filepath.Join(out, receiptsFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var recorded bool
+	for _, f := range r.Generated {
+		recorded = recorded || f.Path == compositionFile
+	}
+	if !recorded {
+		t.Fatalf("the receipt does not record %s: %+v", compositionFile, r.Generated)
+	}
+	if _, err := arch(t, pair, out, false, "check", "--samples", "4", "--steps", "20"); err != nil {
+		t.Fatal(err)
+	}
+	v := readVerification(t, filepath.Join(out, checkReport))
+	if len(v.Bindings) != 1 || v.Bindings[0].Link != "mirror.configmap_v1 -> exporter.configmap_v1" || v.Bindings[0].Status != report.BindingBound {
+		t.Fatalf("bindings %+v", v.Bindings)
+	}
+	if len(v.Protocols) != 0 {
+		t.Fatalf("protocols %+v", v.Protocols)
+	}
+}
