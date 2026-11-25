@@ -204,7 +204,8 @@ A `BoundaryModel` describes an unmodified upstream controller
   resource, or an authored contract and version, and a direction.
 - `assumptions`: each statement has an `evidence` of `declared` (from
   upstream documentation, with a `reference`) or `assumed`, and a
-  `conformance` hook (`documentation` with a reference, or `none`).
+  `conformance` hook (`envtest` naming a test that checks it against a
+  local API server, `documentation` with a reference, or `none`).
 
 Every fact of a boundary enters the IR as `assumed`. A passing run never
 upgrades it to `extracted`.

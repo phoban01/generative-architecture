@@ -57,7 +57,7 @@ spec:
     statement: The controller applies the built manifests with server-side apply, with field manager kustomize-controller.
     evidence: declared
     reference: https://fluxcd.io/flux/components/kustomize/kustomizations/#controlling-the-apply-behavior-of-resources
-    conformance: {kind: documentation, reference: https://fluxcd.io/flux/components/kustomize/kustomizations/#controlling-the-apply-behavior-of-resources}
+    conformance: {kind: envtest, reference: pkg/boundary.TestEnvtestServerSideApplyFieldManager}
   - id: dependsOn
     statement: The controller does not apply a Kustomization until every Kustomization in spec.dependsOn is ready.
     evidence: declared
