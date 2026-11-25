@@ -79,13 +79,18 @@ type extraction struct {
 	resource map[ir.GVK]abstraction.Resource
 }
 
-// localVariable is the model variable holding a selected field of a Go
-// object local.
-func (x *extraction) localVariable(local string, fieldPath []string) string {
-	if v, ok := x.decl.Locals[local+"."+abstraction.PathKey(fieldPath)]; ok {
+// localVariable is the model variable holding the selected field f of a Go
+// object local: the local the project declares for it, else
+// <local>_<name> for a named field and <local>_<path elements> otherwise.
+// The project names the field by the path as the abstraction writes it.
+func (x *extraction) localVariable(local string, f abstraction.Field) string {
+	if v, ok := x.decl.Locals[local+"."+abstraction.PathKey(f.Path)]; ok {
 		return v
 	}
-	return local + "_" + strings.Join(fieldPath, "_")
+	if f.Name != "" {
+		return local + "_" + f.Name
+	}
+	return local + "_" + strings.Join(abstraction.JSONPath(f.Path), "_")
 }
 
 // extractOptions builds the typed-frontend options for Reconcile.
@@ -128,7 +133,7 @@ func extractOptions(l goflow.Loaded, abs abstraction.Abstraction, decl project.C
 			return false
 		}
 		x.locals[id.Name] = r
-		v := x.localVariable(id.Name, r.Fields[0].Path)
+		v := x.localVariable(id.Name, r.Fields[0])
 		scope[v] = expr.Symbol{Type: r.Fields[0].Type, Quint: v}
 		return true
 	})
@@ -178,10 +183,10 @@ func (x *extraction) resourceOf(t types.Type) (ir.GVK, bool) {
 // field maps a selected field of a Go object local to its model variable.
 func (x *extraction) field(root string, fieldPath []string) (expr.Expression, bool) {
 	r, ok := x.locals[root]
-	if !ok || abstraction.PathKey(fieldPath) != abstraction.PathKey(r.Fields[0].Path) {
+	if !ok || abstraction.PathKey(fieldPath) != abstraction.PathKey(abstraction.JSONPath(r.Fields[0].Path)) {
 		return "", false
 	}
-	return expr.Expression(x.localVariable(root, fieldPath)), true
+	return expr.Expression(x.localVariable(root, r.Fields[0])), true
 }
 
 // call summarizes a client call: its effect, operation, consistency and
@@ -216,21 +221,21 @@ func (x *extraction) call(c goflow.Callee, call *ast.CallExpr, _ goflow.Convert)
 		return goflow.Node{}, false, fmt.Errorf("%s: object %s is not an abstracted %s object", c, object, r.GVK.Kind)
 	}
 	f := r.Fields[0]
-	value := abstraction.VariableName(r.GVK.Kind, object, f.Path)
+	value := abstraction.FieldVariable(r.GVK.Kind, object, f)
 	version := abstraction.VariableName(r.GVK.Kind, object, versionPath)
 	b := map[string]string{
 		"$exists":          abstraction.ExistsVariable(r.GVK.Kind, object),
-		"$snapshotVersion": x.localVariable(local, versionPath),
+		"$snapshotVersion": x.localVariable(local, abstraction.Field{Path: versionPath}),
 	}
 	switch {
 	case e.Operation == ir.OpGet && e.Consistency == ir.ConsistencyCached:
 		// Objects are neither created nor deleted while the model runs, so
 		// the cache's view of existence is the API server's.
-		b["$cache"], b["$cacheVersion"], b["$snapshot"] = adaptergen.CachedVariable(value), adaptergen.CachedVariable(version), x.localVariable(local, f.Path)
+		b["$cache"], b["$cacheVersion"], b["$snapshot"] = adaptergen.CachedVariable(value), adaptergen.CachedVariable(version), x.localVariable(local, f)
 	case e.Operation == ir.OpGet:
-		b["$object"], b["$resourceVersion"], b["$snapshot"] = value, version, x.localVariable(local, f.Path)
+		b["$object"], b["$resourceVersion"], b["$snapshot"] = value, version, x.localVariable(local, f)
 	case e.Operation == ir.OpUpdate:
-		b["$object"], b["$resourceVersion"], b["$value"] = value, version, x.localVariable(local, f.Path)
+		b["$object"], b["$resourceVersion"], b["$value"] = value, version, x.localVariable(local, f)
 	default:
 		return goflow.Node{}, false, fmt.Errorf("%s: no bindings for operation %s", c, e.Operation)
 	}

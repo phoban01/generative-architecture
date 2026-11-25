@@ -1,0 +1,23 @@
+apiVersion: architecture.local/v1alpha1
+kind: Abstraction
+metadata:
+  name: keyed
+spec:
+  resources:
+    - gvk: {group: "", version: v1, kind: ConfigMap}
+      objects:
+        - {id: source, namespace: demo, name: source}
+        - {id: copy, namespace: demo, name: copy}
+      fields:
+        # A map key with a dot and a slash, quoted; the field is named.
+        - {path: [data, '"app.config/key"'], type: string, name: appKey}
+      valueDomains:
+        appKey: ['"a"', '""']
+      identity:
+        - [metadata, name]
+  bounds:
+    maxObjectsPerResource: 2
+    maxInvocations: 3
+  excludes:
+    - delete
+    - list

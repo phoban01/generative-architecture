@@ -197,7 +197,7 @@ func (x *extraction) call(c goflow.Callee, call *ast.CallExpr, _ goflow.Convert)
 		}
 	}
 	f := r.Fields[0]
-	value := abstraction.VariableName(r.GVK.Kind, object, f.Path)
+	value := abstraction.FieldVariable(r.GVK.Kind, object, f)
 	version := abstraction.VariableName(r.GVK.Kind, object, versionPath)
 	b := map[string]string{
 		"$exists":          abstraction.ExistsVariable(r.GVK.Kind, object),
@@ -403,7 +403,7 @@ func objectsOf(abs abstraction.Abstraction) map[string]objectInfo {
 	for _, r := range abs.Spec.Resources {
 		for _, o := range r.Objects {
 			out[abstraction.ExistsVariable(r.GVK.Kind, o.ID)] = objectInfo{resource: r, object: o,
-				value:   abstraction.VariableName(r.GVK.Kind, o.ID, r.Fields[0].Path),
+				value:   abstraction.FieldVariable(r.GVK.Kind, o.ID, r.Fields[0]),
 				exists:  abstraction.ExistsVariable(r.GVK.Kind, o.ID),
 				version: abstraction.VariableName(r.GVK.Kind, o.ID, versionPath)}
 		}
@@ -416,7 +416,7 @@ func compose(abs abstraction.Abstraction, program goflow.Program, constraints []
 	state := abs.StateVariables()
 	for _, o := range objects {
 		initial, ok := initialValues[o.object.ID]
-		if !ok || !slices.Contains(o.resource.ValueDomains[abstraction.PathKey(o.resource.Fields[0].Path)], initial) {
+		if !ok || !slices.Contains(o.resource.ValueDomains[o.resource.Fields[0].Key()], initial) {
 			return model.Spec{}, fmt.Errorf("object %s: initial value %q is not in its value domain", o.object.ID, initial)
 		}
 		state[o.exists] = model.Variable{Type: abstraction.TypeBool, Initial: "true"}
@@ -654,7 +654,7 @@ func environmentActions(reads, writes, cached map[string]objectInfo) []model.Act
 		if _, written := writes[exists]; written {
 			continue
 		}
-		for i, v := range o.resource.ValueDomains[abstraction.PathKey(o.resource.Fields[0].Path)] {
+		for i, v := range o.resource.ValueDomains[o.resource.Fields[0].Key()] {
 			out = append(out, model.Action{
 				Name:    adaptergen.ChangeValueEvent(o.object.ID, v, i),
 				Guard:   expr.Expression(fmt.Sprintf("%s != %s", o.value, v)),

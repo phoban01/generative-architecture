@@ -72,7 +72,7 @@ func objectsOf(abs abstraction.Abstraction) map[string]objectInfo {
 	for _, r := range abs.Spec.Resources {
 		for _, o := range r.Objects {
 			out[abstraction.ExistsVariable(r.GVK.Kind, o.ID)] = objectInfo{resource: r, object: o,
-				value:   abstraction.VariableName(r.GVK.Kind, o.ID, r.Fields[0].Path),
+				value:   abstraction.FieldVariable(r.GVK.Kind, o.ID, r.Fields[0]),
 				exists:  abstraction.ExistsVariable(r.GVK.Kind, o.ID),
 				version: abstraction.VariableName(r.GVK.Kind, o.ID, versionPath)}
 		}
@@ -95,7 +95,7 @@ func (c controllerModel) build() (model.Spec, []effect.Descriptor, error) {
 		if !ok {
 			return model.Spec{}, nil, fmt.Errorf("object %s has no initial value; declare it under spec.initial", o.object.ID)
 		}
-		if !slices.Contains(o.resource.ValueDomains[abstraction.PathKey(o.resource.Fields[0].Path)], initial) {
+		if !slices.Contains(o.resource.ValueDomains[o.resource.Fields[0].Key()], initial) {
 			return model.Spec{}, nil, fmt.Errorf("object %s: initial value %s is not in its value domain", o.object.ID, initial)
 		}
 		state[o.exists] = model.Variable{Type: abstraction.TypeBool, Initial: "true"}
@@ -328,7 +328,7 @@ func environmentActions(reads, writes, cached map[string]objectInfo) []model.Act
 		if _, written := writes[exists]; written {
 			continue
 		}
-		for i, v := range o.resource.ValueDomains[abstraction.PathKey(o.resource.Fields[0].Path)] {
+		for i, v := range o.resource.ValueDomains[o.resource.Fields[0].Key()] {
 			out = append(out, model.Action{
 				Name:    adaptergen.ChangeValueEvent(o.object.ID, v, i),
 				Guard:   expr.Expression(fmt.Sprintf("%s != %s", o.value, v)),

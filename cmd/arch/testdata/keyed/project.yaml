@@ -1,0 +1,37 @@
+apiVersion: architecture.local/v1alpha1
+kind: Project
+metadata:
+  name: keyed
+spec:
+  # A reconciler whose selected field is a quoted map key.
+  module: github.com/phoban01/generative-architecture
+  packages:
+    - ./cmd/arch/testdata/keyed
+  catalog:
+    discovery:
+      - discovery.json
+  abstraction: abstraction.yaml
+  runtime:
+    profile: controller-runtime
+    maxTicks: 20
+  bounds:
+    maxObjectsPerResource: 2
+    maxInvocations: 3
+  controllers:
+    - receiver: Reconciler
+      name: keyed
+      workers: 1
+      retryTicks: 2
+      key: source
+      effects:
+        - call: sigs.k8s.io/controller-runtime/pkg/client.Client.Get
+          effect: readSource
+        - call: sigs.k8s.io/controller-runtime/pkg/client.Reader.Get
+          effect: readTarget
+        - call: sigs.k8s.io/controller-runtime/pkg/client.Client.Update
+          effect: writeTarget
+      objectKeys:
+        github.com/phoban01/generative-architecture/cmd/arch/testdata/keyed.Reconciler.Target: copy
+  initial:
+    source: '""'
+    copy: '""'

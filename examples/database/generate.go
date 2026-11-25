@@ -645,7 +645,7 @@ func watchFields(abs abstraction.Abstraction, watches []ir.Watch, refs map[strin
 				continue
 			}
 			for _, f := range r.Fields {
-				if !goPath(f.Path, w.Mapping.FieldPath) {
+				if !goPath(abstraction.JSONPath(f.Path), w.Mapping.FieldPath) {
 					continue
 				}
 				domain := r.ValueDomains[f.Key()]

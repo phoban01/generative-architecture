@@ -5,10 +5,12 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -258,5 +260,37 @@ func TestGenerateDeclaresPopulations(t *testing.T) {
 	spec.Properties = append(spec.Properties, model.Property{Name: "namedObjects", Expression: `ConfigMap_objects.all(o, o != "")`})
 	if _, err := model.Compile(spec); err != nil {
 		t.Fatalf("a quantifier over the population does not compile: %v", err)
+	}
+}
+
+// A selected field under a quoted map key generates a model whose variables
+// use the field's name, and the Go read and write of the key match it.
+func TestGenerateQuotedMapKey(t *testing.T) {
+	out, err := generateTo(t, "testdata/keyed/project.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var spec model.Spec
+	if _, err := krm.Read(filepath.Join(out, specFile), "TransitionModel", &spec); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"ConfigMap_source_appKey", "ConfigMap_copy_appKey"} {
+		if _, ok := spec.State[name]; !ok {
+			t.Errorf("model lacks %s: %v", name, slices.Sorted(maps.Keys(spec.State)))
+		}
+	}
+	for name := range spec.State {
+		if strings.Contains(name, "app.config") {
+			t.Errorf("raw map key in a variable name: %s", name)
+		}
+	}
+	var copied bool
+	for _, a := range spec.Actions {
+		if a.Updates["target_appKey"] == "source_appKey" {
+			copied = true
+		}
+	}
+	if !copied {
+		t.Fatalf("the keyed value is not copied between the locals: %+v", spec.Actions)
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"go/token"
 	"go/types"
 	"reflect"
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -177,10 +178,20 @@ func (inv *inventory) listOptions(args []ast.Expr) (map[string]string, error) {
 	return out, nil
 }
 
-// symbolOf names the model symbol of a field path on a variable.
+// symbolOf names the model symbol of a field path on a variable. A path
+// element that is not an identifier, such as the map key app.config/key,
+// has every other character replaced by an underscore, so the symbol is a
+// CEL and Quint identifier.
 func symbolOf(root string, path []string) string {
-	return root + "_" + strings.Join(path, "_")
+	parts := make([]string, 0, len(path)+1)
+	parts = append(parts, root)
+	for _, p := range path {
+		parts = append(parts, nonIdentifier.ReplaceAllString(p, "_"))
+	}
+	return strings.Join(parts, "_")
 }
+
+var nonIdentifier = regexp.MustCompile(`[^A-Za-z0-9_]+`)
 
 // declare records a field of the body: a symbol when its type is basic,
 // and where it first appears.
