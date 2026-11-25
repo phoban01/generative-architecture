@@ -75,9 +75,14 @@ func canonical(v string) string {
 // them, with the run metadata (date, source path, timestamp) removed from
 // the #meta block so that the bytes depend on the model and the seed only.
 type Result struct {
-	Version string
-	Traces  []conformance.Trace
-	ITF     [][]byte
+	// Counterexample is the first sampled trace that violated the
+	// invariant, with its ITF bytes, when Sample returns a violation error.
+	// Its Status is "violation". Both are empty for any other result.
+	Counterexample    conformance.Trace
+	CounterexampleITF []byte
+	Version           string
+	Traces            []conformance.Trace
+	ITF               [][]byte
 }
 
 // Sample produces bounded simulation traces. It is not exhaustive verification.
@@ -129,6 +134,11 @@ func Sample(ctx context.Context, m *model.Compiled, opts Options) (Result, error
 	}
 	_, err = run("run", path, "--backend", "typescript", "--max-samples", strconv.Itoa(opts.Samples), "--n-traces", strconv.Itoa(opts.Samples), "--max-steps", strconv.Itoa(opts.Steps), "--step", opts.Steering.stepName(), "--seed", strconv.FormatInt(opts.Seed, 10), "--invariant", "safety", "--out-itf", filepath.Join(dir, "trace-{seq}.itf.json"), "--verbosity", "1")
 	if err != nil {
+		if strings.Contains(err.Error(), "[violation]") {
+			// Quint keeps the traces it sampled, the violating one among
+			// them. The caller gets it as the counterexample.
+			result.Counterexample, result.CounterexampleITF = counterexampleIn(dir)
+		}
 		return result, err
 	}
 	paths, err := filepath.Glob(filepath.Join(dir, "trace-*.itf.json"))
@@ -159,4 +169,26 @@ func Sample(ctx context.Context, m *model.Compiled, opts Options) (Result, error
 		result.ITF = append(result.ITF, b)
 	}
 	return result, nil
+}
+
+// counterexampleIn returns the first trace under dir, in file order, whose
+// status is violation, with its ITF bytes stripped of run metadata. It
+// returns empty values when no trace violates or none can be read.
+func counterexampleIn(dir string) (conformance.Trace, []byte) {
+	paths, _ := filepath.Glob(filepath.Join(dir, "trace-*.itf.json"))
+	for _, p := range paths {
+		t, err := conformance.ReadITF(p)
+		if err != nil || t.Status != "violation" {
+			continue
+		}
+		b, err := os.ReadFile(p)
+		if err != nil {
+			continue
+		}
+		if b, err = stripRunMetadata(b); err != nil {
+			continue
+		}
+		return t, b
+	}
+	return conformance.Trace{}, nil
 }

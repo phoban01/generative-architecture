@@ -316,7 +316,8 @@ arch --project cmd/arch/testdata/configmirror/project.yaml --out /tmp/configmirr
   sets the titles, groups and layout of the generated views; it adds no
   element.
 - `arch check` samples the model with Quint, writes the traces and
-  `report.yaml`, and fails on a constraint violation. It prints:
+  `report.yaml`, and fails on a constraint violation. The violating trace
+  and its execution view go under `counterexamples/`. It prints:
 
   ```text
   check passed (inventory mode): 40 traces, 2400 transitions, 0 findings

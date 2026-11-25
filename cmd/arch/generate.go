@@ -31,6 +31,13 @@ const (
 	specFile     = "model.yaml"
 	likec4Dir    = "likec4"
 	receiptsFile = "receipts.yaml"
+	// processFile holds the IR process of the generated model, so arch check
+	// can link the steps of a counterexample to their source.
+	processFile = "process.yaml"
+	processKind = "Process"
+	// counterexamplesDir holds the violating trace arch check kept and its
+	// execution view.
+	counterexamplesDir = "counterexamples"
 )
 
 // reconcileMethod is the method the typed frontend lowers.
@@ -309,11 +316,14 @@ func (gen generated) write(out string) error {
 		if err := krm.Write(filepath.Join(out, specFile), "TransitionModel", gen.project.Name, *gen.spec); err != nil {
 			return err
 		}
+		if err := krm.WriteResult(filepath.Join(out, processFile), processKind, gen.project.Name, gen.process); err != nil {
+			return err
+		}
 		if err := os.WriteFile(filepath.Join(out, modelFile), []byte(m.Quint()), 0o644); err != nil {
 			return err
 		}
 	} else {
-		for _, f := range []string{specFile, modelFile} {
+		for _, f := range []string{specFile, modelFile, processFile} {
 			if err := os.Remove(filepath.Join(out, f)); err != nil && !errors.Is(err, os.ErrNotExist) {
 				return err
 			}

@@ -13,7 +13,9 @@ import (
 	"time"
 
 	"github.com/phoban01/generative-architecture/pkg/conformance"
+	"github.com/phoban01/generative-architecture/pkg/ir"
 	"github.com/phoban01/generative-architecture/pkg/krm"
+	"github.com/phoban01/generative-architecture/pkg/likec4"
 	"github.com/phoban01/generative-architecture/pkg/model"
 	"github.com/phoban01/generative-architecture/pkg/mutation"
 	"github.com/phoban01/generative-architecture/pkg/project"
@@ -206,13 +208,36 @@ func checkTemporal(ev evidence, c model.Constraints, reason string, opts quint.O
 func sample(g globals, ev evidence, opts quint.Options) (string, []report.Finding) {
 	ctx, cancel := context.WithTimeout(context.Background(), checkTimeout)
 	defer cancel()
+	// A counterexample of an earlier run is stale evidence.
+	if err := os.RemoveAll(filepath.Join(g.out, counterexamplesDir)); err != nil {
+		return "", []report.Finding{{Category: report.CategoryTool, Message: err.Error()}}
+	}
 	result, err := quint.Sample(ctx, ev.model, opts)
 	if err != nil {
 		category := report.CategoryTool
 		if strings.Contains(err.Error(), "[violation]") {
 			category = report.CategorySafety
 		}
-		return result.Version, []report.Finding{{Category: category, Message: fmt.Sprintf("quint: %s", firstLines(err.Error(), 6))}}
+		f := report.Finding{Category: category, Message: fmt.Sprintf("quint: %s", firstLines(err.Error(), 6))}
+		if result.CounterexampleITF != nil {
+			saved, err := saveCounterexample(g, result)
+			if err != nil {
+				return result.Version, []report.Finding{f, {Category: report.CategoryTool, Message: "counterexample: " + err.Error()}}
+			}
+			// The finding points at the first state the model's own check
+			// rejects; Quint may keep states past it.
+			states := result.Counterexample.States
+			step := len(states) - 1
+			for i, s := range states {
+				if ev.model.Check(s.Values, s.Event) != nil {
+					step = i
+					break
+				}
+			}
+			f.Trace, f.Step, f.Event = saved, step, states[step].Event
+			f.Message += "; counterexample saved as " + saved
+		}
+		return result.Version, []report.Finding{f}
 	}
 	dir := filepath.Join(g.out, tracesDir)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -288,4 +313,40 @@ func firstLines(s string, n int) string {
 		lines = append(lines[:n], "...")
 	}
 	return strings.Join(lines, " | ")
+}
+
+// saveCounterexample keeps the violating trace under <out>/counterexamples
+// and draws it as an execution view in a LikeC4 workspace beside it. The
+// steps link to their source through the process arch generate wrote;
+// without that document the view carries no sources. It returns the path
+// of the trace relative to --out.
+func saveCounterexample(g globals, result quint.Result) (string, error) {
+	dir := filepath.Join(g.out, counterexamplesDir)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	name := "counterexample"
+	rel := filepath.ToSlash(filepath.Join(counterexamplesDir, name+".itf.json"))
+	if err := os.WriteFile(filepath.Join(g.out, rel), result.CounterexampleITF, 0o644); err != nil {
+		return "", err
+	}
+	var links []ir.Source
+	var process ir.Process
+	if err := krm.ReadResult(filepath.Join(g.out, processFile), processKind, &process); err == nil {
+		links = conformance.SourceLinks(result.Counterexample, process)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return "", err
+	}
+	var w likec4.Workspace
+	elements, relations, view, err := likec4.ExecutionView(name, result.Counterexample, links)
+	if err != nil {
+		return "", err
+	}
+	if err := w.Add(elements, relations, view); err != nil {
+		return "", err
+	}
+	if err := w.Write(filepath.Join(dir, likec4Dir)); err != nil {
+		return "", err
+	}
+	return rel, nil
 }

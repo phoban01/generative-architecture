@@ -276,7 +276,26 @@ func TestCheckReportsSafetyViolation(t *testing.T) {
 	if _, err := arch(t, violated, out, false, "check", "--samples", "20", "--steps", "60"); err == nil || !strings.Contains(err.Error(), "safety finding") {
 		t.Fatalf("expected a safety finding, got %v", err)
 	}
-	if v := readVerification(t, filepath.Join(out, checkReport)); v.Result != report.Failed || v.Findings[0].Category != report.CategorySafety {
+	v := readVerification(t, filepath.Join(out, checkReport))
+	if v.Result != report.Failed || v.Findings[0].Category != report.CategorySafety {
 		t.Fatalf("report %s findings %+v", v.Result, v.Findings)
+	}
+	// The violating trace is kept beside its execution view, and the
+	// finding names it.
+	f := v.Findings[0]
+	if f.Trace != "counterexamples/counterexample.itf.json" || f.Step == 0 || f.Event == "" || !strings.Contains(f.Message, "counterexample saved as counterexamples/counterexample.itf.json") {
+		t.Fatalf("finding does not name the counterexample: %+v", f)
+	}
+	trace, err := conformance.ReadITF(filepath.Join(out, f.Trace))
+	if err != nil || trace.Status != "violation" || len(trace.States) <= f.Step {
+		t.Fatalf("saved counterexample %v %+v", err, trace)
+	}
+	views, err := os.ReadFile(filepath.Join(out, "counterexamples", likec4Dir, "views", "counterexample.c4"))
+	if err != nil || !strings.Contains(string(views), "dynamic view counterexample") {
+		t.Fatalf("execution view %v:\n%s", err, views)
+	}
+	model, err := os.ReadFile(filepath.Join(out, "counterexamples", likec4Dir, "model.c4"))
+	if err != nil || !strings.Contains(string(model), "controller.go:") {
+		t.Fatalf("execution view has no source links %v:\n%s", err, model)
 	}
 }
