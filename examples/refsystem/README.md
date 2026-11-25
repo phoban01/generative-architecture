@@ -65,8 +65,8 @@ go run ./cmd/arch --project examples/refsystem/project.yaml --out examples/refsy
 It reads all three `Reconcile` methods with no unsupported construct. The
 abstraction selects every field the methods read or write, so no field is
 `unresolved` and `--strict` passes. Without it, 39 fields are unresolved.
-`arch generate` refuses the IR,
-because it takes one controller per project. `cmd/arch` checks that the committed files match
+`arch generate` composes the three controllers from their declarations in
+`project.yaml` (see below). `cmd/arch` checks that the committed files match
 a fresh run. [docs/supported-patterns.md](../../docs/supported-patterns.md)
 lists the constructs the controllers use.
 
@@ -77,4 +77,21 @@ The Secret has the Database's name. A name such as
 lower a string concatenation with a field. The controller keeps the bare
 name until it can.
 
-The composed model and the Flux boundary model are added by later milestone issues.
+## Composed model
+
+Each controller is declared under `spec.controllers` of `project.yaml`: its
+key object, one effect per client method and kind, and the initial value of
+every abstracted field. `arch generate` composes the three models into one
+(`composition.yaml` lists the components and the derived bindings), and
+`arch check` samples it:
+
+```sh
+go run ./cmd/arch --project examples/refsystem/project.yaml --out examples/refsystem/generated generate
+go run ./cmd/arch --project examples/refsystem/project.yaml --out examples/refsystem/generated check --samples 60 --steps 150
+```
+
+The reads keyed by `client.ObjectKey` literals, such as the Namespace named
+after the Tenant, resolve through the abstraction, whose identity fields
+fix each object's name. The generated files are not committed; `cmd/arch`
+generates the system in its tests. The Flux boundary model is added by a
+later milestone issue.

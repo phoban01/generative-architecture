@@ -13,6 +13,7 @@ func TestBuiltinUpdate(t *testing.T) {
 	}{
 		{ir.OpUpdate, "$object", "$value"},
 		{OperationKey(ir.OpUpdate, "status"), "$status", "$statusValue"},
+		{OperationKey(ir.OpPatch, "status"), "$status", "$statusValue"},
 	} {
 		t.Run(tc.operation, func(t *testing.T) {
 			s, err := r.Lookup(tc.operation, ir.ConsistencyDirect)

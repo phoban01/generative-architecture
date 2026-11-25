@@ -47,3 +47,28 @@ spec:
         - name: error
           guard: 'true'
           error: transient
+    # A whole-object merge patch of the status subresource (client.Merge):
+    # the patch is the caller's object, so it carries the caller's
+    # resourceVersion and the API server checks it like an update. The
+    # selected status fields ($status) take the status fields the caller
+    # passes ($statusValue); a patch computed from a diff (client.MergeFrom)
+    # is not summarized.
+    - operation: status.patch
+      consistency: direct
+      bindings: [$exists, $status, $resourceVersion, $statusValue, $snapshotVersion]
+      outcomes:
+        - name: ok
+          guard: $exists && $resourceVersion == $snapshotVersion
+          updates:
+            $status: $statusValue
+            $resourceVersion: $resourceVersion + 1
+            $snapshotVersion: $resourceVersion + 1
+        - name: conflict
+          guard: $exists && $resourceVersion != $snapshotVersion
+          error: conflict
+        - name: notFound
+          guard: '!$exists'
+          error: notFound
+        - name: error
+          guard: 'true'
+          error: transient

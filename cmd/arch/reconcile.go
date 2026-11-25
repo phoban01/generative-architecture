@@ -44,7 +44,7 @@ type clientEffect struct {
 // operations maps a client method name to its operation key in the summary
 // library. Only operations with summary bindings are listed; other methods
 // are unsupported and fail with the callee named.
-var operations = map[string]string{"Get": ir.OpGet, "Update": ir.OpUpdate, "Create": ir.OpCreate, "Delete": ir.OpDelete}
+var operations = map[string]string{"Get": ir.OpGet, "Update": ir.OpUpdate, "Create": ir.OpCreate, "Delete": ir.OpDelete, "Patch": ir.OpPatch}
 
 // statusWriters are the receivers of a call through Client.Status().
 var statusWriters = map[string]bool{"SubResourceWriter": true, "StatusWriter": true}
@@ -63,11 +63,14 @@ func clientEffects(decl project.Controller) (map[goflow.Callee][]clientEffect, e
 		}
 		op, ok := operations[method]
 		if !ok {
-			return nil, fmt.Errorf("controller %s: %s: method %s is not supported; supported methods are Get, Update, Create, Delete and Status().Update", decl.Name, e.Call, method)
+			return nil, fmt.Errorf("controller %s: %s: method %s is not supported; supported methods are Get, Update, Create, Delete, Status().Update and Status().Patch", decl.Name, e.Call, method)
+		}
+		if op == ir.OpPatch && !statusWriters[receiver] {
+			return nil, fmt.Errorf("controller %s: %s: Patch is supported on the status subresource only", decl.Name, e.Call)
 		}
 		if statusWriters[receiver] {
-			if op != ir.OpUpdate {
-				return nil, fmt.Errorf("controller %s: %s: status %s is not supported; only Status().Update is", decl.Name, e.Call, method)
+			if op != ir.OpUpdate && op != ir.OpPatch {
+				return nil, fmt.Errorf("controller %s: %s: status %s is not supported; only Status().Update and Status().Patch are", decl.Name, e.Call, method)
 			}
 			op = summaries.OperationKey(op, "status")
 		}
@@ -243,6 +246,14 @@ func (x *extraction) call(c goflow.Callee, call *ast.CallExpr, _ goflow.Convert)
 		return goflow.Node{}, false, fmt.Errorf("%s: unexpected arity", c)
 	}
 	objArg := call.Args[len(call.Args)-1]
+	if declared[0].Operation == summaries.OperationKey(ir.OpPatch, "status") {
+		// Patch(ctx, obj, patch): the summary covers client.Merge, the
+		// whole-object merge patch, which carries the object's version.
+		if len(call.Args) != 3 || goflow.Code(call.Args[2]) != "client.Merge" {
+			return goflow.Node{}, false, fmt.Errorf("%s: only a client.Merge patch is supported, got %s", c, goflow.Code(call))
+		}
+		objArg = call.Args[1]
+	}
 	local, r, err := x.local(objArg)
 	if err != nil {
 		return goflow.Node{}, false, err
@@ -295,7 +306,7 @@ func (x *extraction) call(c goflow.Callee, call *ast.CallExpr, _ goflow.Convert)
 	case e.Operation == ir.OpUpdate, e.Operation == ir.OpCreate:
 		b["$resourceVersion"] = version
 		vectors["$object"], vectors["$value"] = values, snapshots
-	case e.Operation == summaries.OperationKey(ir.OpUpdate, "status"):
+	case e.Operation == summaries.OperationKey(ir.OpUpdate, "status"), e.Operation == summaries.OperationKey(ir.OpPatch, "status"):
 		// A status update replaces the selected status fields with the
 		// local's status fields and leaves the other fields alone.
 		b["$resourceVersion"] = version

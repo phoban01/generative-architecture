@@ -20,6 +20,100 @@ spec:
   abstraction: abstraction.yaml
   runtime:
     profile: controller-runtime
+    maxTicks: 30
   bounds:
     maxObjectsPerResource: 1
     maxInvocations: 4
+  controllers:
+    - receiver: TenantReconciler
+      name: tenant
+      workers: 1
+      retryTicks: 2
+      key: acme
+      effects:
+        - call: sigs.k8s.io/controller-runtime/pkg/client.Client.Get
+          kind: Tenant
+          effect: readTenant
+        - call: sigs.k8s.io/controller-runtime/pkg/client.Client.Get
+          kind: Namespace
+          effect: readNamespace
+        - call: sigs.k8s.io/controller-runtime/pkg/client.Client.Get
+          kind: ResourceQuota
+          effect: readQuota
+        - call: sigs.k8s.io/controller-runtime/pkg/client.Client.Create
+          kind: Namespace
+          effect: createNamespace
+        - call: sigs.k8s.io/controller-runtime/pkg/client.Client.Create
+          kind: ResourceQuota
+          effect: createQuota
+        - call: sigs.k8s.io/controller-runtime/pkg/client.SubResourceWriter.Update
+          effect: writeTenantStatus
+    - receiver: DatabaseReconciler
+      name: database
+      workers: 1
+      retryTicks: 2
+      key: main
+      effects:
+        - call: sigs.k8s.io/controller-runtime/pkg/client.Client.Get
+          kind: Database
+          effect: readDatabase
+        - call: sigs.k8s.io/controller-runtime/pkg/client.Client.Get
+          kind: Tenant
+          effect: readDatabaseTenant
+        - call: sigs.k8s.io/controller-runtime/pkg/client.Client.Get
+          kind: Secret
+          effect: readSecret
+        - call: sigs.k8s.io/controller-runtime/pkg/client.Client.Create
+          effect: createSecret
+        - call: sigs.k8s.io/controller-runtime/pkg/client.SubResourceWriter.Patch
+          effect: patchDatabaseStatus
+    - receiver: BackupReconciler
+      name: backup
+      workers: 1
+      retryTicks: 2
+      key: nightly
+      effects:
+        - call: sigs.k8s.io/controller-runtime/pkg/client.Client.Get
+          kind: Backup
+          effect: readBackup
+        - call: sigs.k8s.io/controller-runtime/pkg/client.Client.Get
+          kind: Database
+          effect: readBackupDatabase
+        - call: sigs.k8s.io/controller-runtime/pkg/client.Client.Get
+          kind: Job
+          effect: readJob
+        - call: sigs.k8s.io/controller-runtime/pkg/client.Client.Create
+          effect: createJob
+        - call: sigs.k8s.io/controller-runtime/pkg/client.SubResourceWriter.Update
+          effect: writeBackupStatus
+  initial:
+    acme.metadata.name: '"acme"'
+    acme.spec.quota: '"small"'
+    acme.status.namespaceReady: 'false'
+    acmeNamespace: '""'
+    acmeNamespace.exists: 'false'
+    quota.metadata.name: '""'
+    quota.metadata.namespace: '""'
+    quota.profile: '""'
+    quota.hardPods: '""'
+    quota.exists: 'false'
+    main.metadata.name: '"main"'
+    main.metadata.namespace: '"default"'
+    main.spec.tenant: '"acme"'
+    main.status.ready: 'false'
+    main.status.secretName: '""'
+    mainSecret.metadata.name: '""'
+    mainSecret.metadata.namespace: '""'
+    mainSecret.username: '""'
+    mainSecret.exists: 'false'
+    nightly.metadata.name: '"nightly"'
+    nightly.metadata.namespace: '"default"'
+    nightly.spec.database: '"main"'
+    nightly.status.phase: '""'
+    nightlyJob.metadata.name: '""'
+    nightlyJob.metadata.namespace: '""'
+    nightlyJob.spec.template.spec.restartPolicy: '""'
+    nightlyJob.status.active: '0'
+    nightlyJob.status.succeeded: '0'
+    nightlyJob.status.failed: '0'
+    nightlyJob.exists: 'false'

@@ -16,6 +16,7 @@ spec:
         - {path: [spec, quota], type: string}
         - {path: [status, namespaceReady], type: bool}
       valueDomains:
+        metadata.name: ['"acme"']
         spec.quota: ['"small"']
         status.namespaceReady: ['false', 'true']
       identity:
@@ -26,6 +27,8 @@ spec:
         - {id: acmeNamespace, name: acme}
       fields:
         - {path: [metadata, name], type: string}
+      valueDomains:
+        metadata.name: ['""', '"acme"']
       identity:
         - [metadata, name]
     # The tenant controller creates one ResourceQuota in the tenant
@@ -40,6 +43,8 @@ spec:
         # A resource.Quantity upstream. The model sees its string form.
         - {path: [spec, hard, '"pods"'], name: hardPods, type: string}
       valueDomains:
+        metadata.name: ['""', '"tenant-quota"']
+        metadata.namespace: ['""', '"acme"']
         profile: ['""', '"small"']
         hardPods: ['""', '"10"']
       identity:
@@ -56,6 +61,8 @@ spec:
         - {path: [status, ready], type: bool}
         - {path: [status, secretName], type: string}
       valueDomains:
+        metadata.name: ['"main"']
+        metadata.namespace: ['"default"']
         spec.tenant: ['"acme"']
         status.ready: ['false', 'true']
         status.secretName: ['""', '"main"']
@@ -74,6 +81,8 @@ spec:
         - {path: [metadata, namespace], type: string}
         - {path: [stringData, '"username"'], name: username, type: string}
       valueDomains:
+        metadata.name: ['""', '"main"']
+        metadata.namespace: ['""', '"default"']
         username: ['""', '"main"']
       identity:
         - [metadata, name]
@@ -88,6 +97,8 @@ spec:
         - {path: [spec, database], type: string}
         - {path: [status, phase], type: string}
       valueDomains:
+        metadata.name: ['"nightly"']
+        metadata.namespace: ['"default"']
         spec.database: ['"main"']
         status.phase: ['""', '"Pending"', '"Running"', '"Completed"', '"Failed"']
       identity:
@@ -108,6 +119,8 @@ spec:
         - {path: [status, succeeded], type: int}
         - {path: [status, failed], type: int}
       valueDomains:
+        metadata.name: ['""', '"nightly"']
+        metadata.namespace: ['""', '"default"']
         spec.template.spec.restartPolicy: ['""', '"Never"']
         status.active: ['0', '1']
         status.succeeded: ['0', '1']

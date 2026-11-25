@@ -261,7 +261,7 @@ ran `arch generate` on it. Each finding below was removed in a scratch copy
 of `project.yaml` or `abstraction.yaml` to find the next one. The committed
 documents keep what an adopter would write.
 
-### 16. arch generate supports Get and Update only (partly closed by #150)
+### 16. arch generate supports Get and Update only (closed by #150; List stays out)
 
 - Construct: the declared effects for `client.Reader.List`,
   `client.Writer.Delete` and `client.Writer.Create`.
@@ -274,13 +274,12 @@ documents keep what an adopter would write.
   an object the reconciler read first, through the built-in create and
   delete summaries, and `spec.initial` may set `<object>.exists: false` so
   a created object starts absent.
-- Remaining: `List` binds a filtered catalog list and `Status().Patch`
-  binds patch options; both stay unsupported by generate. `Status().Update`
-  generates through the status.update summary over the selected status
-  fields. A read keyed by a `client.ObjectKey` literal resolves through
-  the abstraction, and `kind` on an effect declaration lets one method
-  serve several kinds; the reference system's tenant controller generates
-  and samples with a declaration.
+- Remaining: `List` binds a filtered catalog list and stays unsupported by
+  generate. `Status().Update` and `Status().Patch` with `client.Merge`
+  generate through the status summaries over the selected status fields. A
+  read keyed by a `client.ObjectKey` literal resolves through the
+  abstraction, and `kind` on an effect declaration lets one method serve
+  several kinds; the reference system composes from its declarations.
 
 ### 17. arch generate takes one field per resource (closed by #151)
 

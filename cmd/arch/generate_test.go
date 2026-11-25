@@ -90,16 +90,6 @@ func TestGenerateConfigMirror(t *testing.T) {
 	likec4Validate(t, filepath.Join(out, likec4Dir))
 }
 
-// TestGenerateReferenceSystem checks that arch generate composes several
-// controllers only from their declarations: the reference system declares
-// none yet, so generation stops at its first controller.
-func TestGenerateReferenceSystem(t *testing.T) {
-	_, err := generateTo(t, "../../examples/refsystem/project.yaml")
-	if err == nil || !strings.Contains(err.Error(), "BackupReconciler has no declaration; add one with receiver BackupReconciler under spec.controllers of ../../examples/refsystem/project.yaml") {
-		t.Fatalf("expected the missing declaration, got %v", err)
-	}
-}
-
 func TestGenerateWithoutControllers(t *testing.T) {
 	out, err := generateTo(t, "testdata/apionly/project.yaml")
 	if err != nil {
@@ -531,6 +521,72 @@ func TestGenerateResolvesObjectKeyLiteral(t *testing.T) {
 	for action, exists := range map[string]string{"readConfigMap_found": "ConfigMap_source_exists", "readNamespace_notFound": "!Namespace_acme_exists"} {
 		if !strings.Contains(guards[action], exists) {
 			t.Fatalf("%s guards %q, want %s: %v", action, guards[action], exists, slices.Sorted(maps.Keys(guards)))
+		}
+	}
+}
+
+// A Status().Patch with client.Merge generates from the status.patch
+// summary: the ok outcome replaces the status field and a stale copy
+// conflicts, as the patch carries the object's version.
+func TestGenerateStatusPatch(t *testing.T) {
+	out, err := generateTo(t, "testdata/patch/project.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var spec model.Spec
+	if _, err := krm.Read(filepath.Join(out, specFile), "TransitionModel", &spec); err != nil {
+		t.Fatal(err)
+	}
+	actions := map[string]model.Action{}
+	for _, a := range spec.Actions {
+		actions[a.Name] = a
+	}
+	ok := actions["writeStatus_ok"]
+	if ok.Updates["Namespace_demo_status_phase"] != "ns_status_phase" || !strings.Contains(string(ok.Guard), "Namespace_demo_metadata_resourceVersion == ns_metadata_resourceVersion") {
+		t.Fatalf("status patch %+v", ok)
+	}
+	if _, conflict := actions["writeStatus_conflict"]; !conflict {
+		t.Fatalf("no conflict outcome: %v", slices.Sorted(maps.Keys(actions)))
+	}
+	c4, err := os.ReadFile(filepath.Join(out, likec4Dir, "model.c4"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(c4), "writeStatus: status.patch (direct)") {
+		t.Fatalf("the resource view does not record the status patch:\n%s", c4)
+	}
+}
+
+// The reference system composes: its three controllers generate into one
+// model, and the derived bindings join the tenant controller's Tenant to
+// the database controller and the database controller's Database to the
+// backup controller.
+func TestGenerateReferenceSystem(t *testing.T) {
+	out, err := generateTo(t, filepath.Join(refsystemDir, "project.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc compositionDoc
+	if err := krm.ReadResult(filepath.Join(out, compositionFile), compositionKind, &doc); err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"backup", "database", "tenant"}; !slices.Equal(doc.Components, want) {
+		t.Fatalf("components %v, want %v", doc.Components, want)
+	}
+	var links []string
+	for _, l := range doc.Links {
+		links = append(links, l.From+" -> "+l.To)
+	}
+	want := []string{
+		"database.database_v1alpha1_refsystem_example_org -> backup.database_v1alpha1_refsystem_example_org",
+		"tenant.tenant_v1alpha1_refsystem_example_org -> database.tenant_v1alpha1_refsystem_example_org",
+	}
+	if !slices.Equal(links, want) {
+		t.Fatalf("links %v, want %v", links, want)
+	}
+	for _, view := range []string{"context", "process_tenant", "process_database", "process_backup", "runtime_tenant"} {
+		if _, err := os.Stat(filepath.Join(out, likec4Dir, "views", view+".c4")); err != nil {
+			t.Fatalf("view %s: %v", view, err)
 		}
 	}
 }

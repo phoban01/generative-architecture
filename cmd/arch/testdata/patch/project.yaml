@@ -1,0 +1,32 @@
+apiVersion: architecture.local/v1alpha1
+kind: Project
+metadata:
+  name: patch
+spec:
+  # A reconciler that merge-patches the status subresource.
+  module: github.com/phoban01/generative-architecture
+  packages:
+    - ./cmd/arch/testdata/patch
+  catalog:
+    discovery:
+      - discovery.json
+  abstraction: abstraction.yaml
+  runtime:
+    profile: controller-runtime
+    maxTicks: 20
+  bounds:
+    maxObjectsPerResource: 1
+    maxInvocations: 3
+  controllers:
+    - receiver: Reconciler
+      name: patch
+      workers: 1
+      retryTicks: 2
+      key: demo
+      effects:
+        - call: sigs.k8s.io/controller-runtime/pkg/client.Client.Get
+          effect: readNamespace
+        - call: sigs.k8s.io/controller-runtime/pkg/client.SubResourceWriter.Patch
+          effect: writeStatus
+  initial:
+    demo: '""'
