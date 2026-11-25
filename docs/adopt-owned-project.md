@@ -239,7 +239,11 @@ With an abstraction, the fields it selects are no longer unresolved.
 ## 8. Declare the controller and write constraints
 
 `arch generate` needs facts that neither the source nor the abstraction
-carries. Declare them under `spec.controllers`, and set `runtime.maxTicks`.
+carries. Declare them under `spec.controllers`, one entry per controller,
+and set `runtime.maxTicks`. With several controllers, generate composes
+them into one model: the abstraction state is shared, each controller
+keeps its own process and runtime state under its name, and the resource
+bindings between them derive from their watches and effects (ADR-0010).
 `examples/configmirror/project.yaml` does this for ConfigMirror:
 
 ```yaml
@@ -291,14 +295,15 @@ spec:
 
 ## 9. Generate, check, replay and render
 
-`arch generate` refuses the reference system today:
+`arch generate` composes several controllers from their declarations. The
+reference system declares none yet, so it stops at the first controller:
 
 ```sh
 arch --project examples/refsystem/project.yaml --out examples/refsystem/generated generate
 ```
 
 ```text
-arch generate: unsupported operation: examples/refsystem/generated/ir.yaml has 3 controllers; composing more than one controller into one model is not supported yet
+arch generate: controller github.com/phoban01/generative-architecture/examples/refsystem/controllers/backup.BackupReconciler has no declaration; add one with receiver BackupReconciler under spec.controllers of examples/refsystem/project.yaml
 ```
 
 ConfigMirror has one controller, so the whole pipeline runs on it:

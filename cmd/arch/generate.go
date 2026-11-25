@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/phoban01/generative-architecture/pkg/abstraction"
+	"github.com/phoban01/generative-architecture/pkg/catalog"
 	"github.com/phoban01/generative-architecture/pkg/composition"
 	cr "github.com/phoban01/generative-architecture/pkg/controllerruntime"
 	"github.com/phoban01/generative-architecture/pkg/effect"
@@ -49,12 +50,31 @@ type generated struct {
 	projectPath string // absolute
 	doc         ir.Document
 	abs         *abstraction.Abstraction
+	// controllers holds one entry per declared controller of the IR, in IR
+	// order; spec is their composed model, or the one controller's model.
+	controllers []controllerOutput
 	spec        *model.Spec // nil when the project has no controller
-	process     ir.Process
-	profile     cr.GroupProfile
-	effects     []ir.Effect
-	irSHA256    string
+	// links are the resource bindings between the controllers, derived
+	// from their watches and effects (ADR-0010); empty for one controller.
+	links    []composition.Link
+	effects  []ir.Effect
+	irSHA256 string
 }
+
+// controllerOutput is what generation derives from one controller.
+type controllerOutput struct {
+	controller ir.Controller
+	decl       project.Controller
+	spec       model.Spec
+	effects    []effect.Descriptor
+	profile    cr.GroupProfile
+	process    ir.Process
+	irEffects  []ir.Effect
+}
+
+// name is the controller's name in the runtime model and in the composed
+// model.
+func (o controllerOutput) name() string { return o.decl.Name }
 
 // runGenerate reads <out>/ir.yaml, which arch extract writes, and the
 // project's Abstraction document. It builds the model of the project's
@@ -110,16 +130,8 @@ func generate(g globals) (generated, error) {
 	if err := checkSupport(g, p, gen.doc); err != nil {
 		return gen, err
 	}
-	switch n := len(gen.doc.Controllers); {
-	case n == 0:
+	if len(gen.doc.Controllers) == 0 {
 		return gen, nil
-	case n > 1:
-		return gen, fmt.Errorf("%w: %s has %d controllers; composing more than one controller into one model is not supported yet", errors.ErrUnsupported, irPath, n)
-	}
-	c := gen.doc.Controllers[0]
-	decl, ok := p.Spec.Controller(c.Receiver)
-	if !ok {
-		return gen, fmt.Errorf("controller %s has no declaration; add one with receiver %s under spec.controllers of %s", c.ID, c.Receiver, g.project)
 	}
 	abs, err := abstraction.Load(filepath.Join(p.Dir, p.Spec.Abstraction))
 	if err != nil {
@@ -134,42 +146,68 @@ func generate(g globals) (generated, error) {
 	if err != nil {
 		return gen, err
 	}
-	l, err := goflow.Load(p.Root, goflow.Selector{Package: c.Package, Receiver: c.Receiver, Method: reconcileMethod})
-	if err != nil {
-		return gen, fmt.Errorf("controller %s: %w", c.ID, err)
+	for _, c := range gen.doc.Controllers {
+		o, err := generateController(g.project, p, c, abs, cat)
+		if err != nil {
+			return gen, err
+		}
+		gen.controllers = append(gen.controllers, o)
 	}
-	_, opts, err := extractOptions(l, abs, decl, cat)
+	spec, links, err := gen.compose(properties)
 	if err != nil {
-		return gen, located(p.Root, err)
+		return gen, err
 	}
-	program, err := goflow.ExtractTyped(l, opts)
-	if err != nil {
-		return gen, located(p.Root, err)
-	}
-	cm := controllerModel{name: modelName(p.Name), abs: abs, decl: decl, initial: p.Spec.Initial, maxTicks: p.Spec.Runtime.MaxTicks, program: *program, properties: properties}
-	spec, effects, err := cm.build()
-	if err != nil {
-		return gen, fmt.Errorf("controller %s: %w", c.ID, err)
-	}
-	gen.spec = &spec
+	gen.spec, gen.links = &spec, links
 	// Temporal definitions are validated here as well as in arch check, so
 	// a bad constraints document fails before any sampling.
 	compiled, err := model.Compile(spec)
 	if err != nil {
-		return gen, fmt.Errorf("controller %s: %w", c.ID, err)
+		return gen, err
 	}
 	if _, err := loadTemporal(p, compiled); err != nil {
 		return gen, err
 	}
-	if gen.profile, err = cm.profile(); err != nil {
-		return gen, err
+	for _, o := range gen.controllers {
+		gen.effects = append(gen.effects, o.irEffects...)
+	}
+	return gen, nil
+}
+
+// generateController extracts one controller's Reconcile and builds its
+// model: its own process, runtime and cache state over the shared
+// abstraction state.
+func generateController(projectPath string, p project.Project, c ir.Controller, abs abstraction.Abstraction, cat *catalog.Catalog) (controllerOutput, error) {
+	decl, ok := p.Spec.Controller(c.Receiver)
+	if !ok {
+		return controllerOutput{}, fmt.Errorf("controller %s has no declaration; add one with receiver %s under spec.controllers of %s", c.ID, c.Receiver, projectPath)
+	}
+	l, err := goflow.Load(p.Root, goflow.Selector{Package: c.Package, Receiver: c.Receiver, Method: reconcileMethod})
+	if err != nil {
+		return controllerOutput{}, fmt.Errorf("controller %s: %w", c.ID, err)
+	}
+	_, opts, err := extractOptions(l, abs, decl, cat)
+	if err != nil {
+		return controllerOutput{}, located(p.Root, err)
+	}
+	program, err := goflow.ExtractTyped(l, opts)
+	if err != nil {
+		return controllerOutput{}, located(p.Root, err)
+	}
+	cm := controllerModel{name: modelName(p.Name), abs: abs, decl: decl, initial: p.Spec.Initial, maxTicks: p.Spec.Runtime.MaxTicks, program: *program}
+	spec, effects, err := cm.build()
+	if err != nil {
+		return controllerOutput{}, fmt.Errorf("controller %s: %w", c.ID, err)
+	}
+	out := controllerOutput{controller: c, decl: decl, spec: spec, effects: effects}
+	if out.profile, err = cm.profile(); err != nil {
+		return controllerOutput{}, err
 	}
 	file := relative(p.Root, l.Path)
-	if gen.process, err = irProcess(c, *program, effects, file); err != nil {
-		return gen, err
+	if out.process, err = irProcess(c, *program, effects, file); err != nil {
+		return controllerOutput{}, err
 	}
-	gen.effects = irEffects(c, effects)
-	return gen, nil
+	out.irEffects = irEffects(c, effects)
+	return out, nil
 }
 
 // checkSupport applies the mode to the support report arch extract wrote
@@ -270,8 +308,10 @@ func irEffects(c ir.Controller, effects []effect.Descriptor) []ir.Effect {
 }
 
 // workspace builds the LikeC4 workspace: the resource view of the IR with
-// the controller's effects, and, when a model exists, the context, process
-// and runtime views.
+// the controllers' effects, and, when a model exists, the context view with
+// the derived bindings and one process and one runtime view per
+// controller. With one controller the views keep the names process and
+// runtime; with several they carry the controller's name.
 func (gen generated) workspace() (likec4.Workspace, error) {
 	var w likec4.Workspace
 	doc := gen.doc
@@ -288,21 +328,56 @@ func (gen generated) workspace() (likec4.Workspace, error) {
 	if gen.spec == nil {
 		return w, w.Validate()
 	}
-	c := gen.doc.Controllers[0]
-	name := gen.profile.Controllers[0].Name
-	components := []composition.Component{{Name: name, Model: *gen.spec}}
-	if err := add(likec4.ContextView("context", components, map[string]ir.Evidence{name: ir.Extracted}, nil, map[string]ir.Source{name: c.Provenance.Source})); err != nil {
-		return w, err
-	}
-	if err := add(likec4.ProcessView("process", "Process: "+c.Name+"."+reconcileMethod, gen.process)); err != nil {
+	components, evidence, sources := gen.components()
+	if err := add(likec4.ContextView("context", components, evidence, gen.links, sources)); err != nil {
 		return w, err
 	}
 	// The runtime profile is declared in the project document.
 	source := ir.Source{File: relative(gen.project.Root, gen.projectPath)}
-	if err := add(likec4.RuntimeView("runtime", gen.profile, source)); err != nil {
-		return w, err
+	for _, o := range gen.controllers {
+		process, runtime := "process", "runtime"
+		if len(gen.controllers) > 1 {
+			process, runtime = process+"_"+o.name(), runtime+"_"+o.name()
+		}
+		if err := add(likec4.ProcessView(process, "Process: "+o.controller.Name+"."+reconcileMethod, o.process)); err != nil {
+			return w, err
+		}
+		if err := add(likec4.RuntimeView(runtime, o.profile, source)); err != nil {
+			return w, err
+		}
 	}
 	return w, w.Validate()
+}
+
+// components presents the controllers as composition components with
+// their derived resource ports, with the evidence and source of each.
+func (gen generated) components() ([]composition.Component, map[string]ir.Evidence, map[string]ir.Source) {
+	var components []composition.Component
+	evidence := map[string]ir.Evidence{}
+	sources := map[string]ir.Source{}
+	for _, o := range gen.controllers {
+		var watches []ir.Watch
+		for _, w := range gen.doc.Watches {
+			if w.Controller == o.controller.ID {
+				watches = append(watches, w)
+			}
+		}
+		c := composition.Component{Name: o.name(), Model: o.spec, Evidence: ir.Extracted, Watches: watches, Effects: o.irEffects}
+		c.Ports = composition.PortsFromIR(c.Name, watches, o.irEffects)
+		components = append(components, c)
+		evidence[c.Name] = ir.Extracted
+		sources[c.Name] = o.controller.Provenance.Source
+	}
+	return components, evidence, sources
+}
+
+// processFileOf names the process document of a controller: process.yaml
+// for the only controller, process-<name>.yaml for one of several.
+func (gen generated) processFileOf(o controllerOutput) string {
+	if len(gen.controllers) == 1 {
+		return processFile
+	}
+	return "process-" + o.name() + ".yaml"
 }
 
 // write stores the outputs under out. Without a model it removes stale
@@ -316,8 +391,17 @@ func (gen generated) write(out string) error {
 		if err := krm.Write(filepath.Join(out, specFile), "TransitionModel", gen.project.Name, *gen.spec); err != nil {
 			return err
 		}
-		if err := krm.WriteResult(filepath.Join(out, processFile), processKind, gen.project.Name, gen.process); err != nil {
-			return err
+		// A process document of an earlier run is stale.
+		stale, _ := filepath.Glob(filepath.Join(out, "process*.yaml"))
+		for _, f := range stale {
+			if err := os.Remove(f); err != nil {
+				return err
+			}
+		}
+		for _, o := range gen.controllers {
+			if err := krm.WriteResult(filepath.Join(out, gen.processFileOf(o)), processKind, gen.project.Name, o.process); err != nil {
+				return err
+			}
 		}
 		if err := os.WriteFile(filepath.Join(out, modelFile), []byte(m.Quint()), 0o644); err != nil {
 			return err

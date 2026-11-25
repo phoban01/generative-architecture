@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"github.com/phoban01/generative-architecture/pkg/composition"
+	"maps"
 	"slices"
 	"sort"
 	"strconv"
@@ -417,4 +419,145 @@ func changeValueEvent(r abstraction.Resource, id string, f abstraction.Field, li
 		return adaptergen.ChangeValueEvent(id, literal, index)
 	}
 	return adaptergen.ChangeValueEvent(id+"_"+strings.ReplaceAll(f.Key(), ".", "_"), literal, index)
+}
+
+// compose joins the controllers' models into the project's model. One
+// controller keeps its model, with the authored properties added. Several
+// controllers are composed: each controller's resource ports derive from
+// its watches and effects, JoinByResource binds every in port to the
+// provider of its resource (ADR-0010) and fails closed on an unresolved or
+// ambiguous provider, and the models merge over the shared abstraction
+// state. The abstraction's variables keep their names and exist once;
+// each controller's process, runtime and cache state and its actions are
+// prefixed with the controller's name. An environment action that only
+// changes shared state exists once.
+func (gen generated) compose(properties []model.Property) (model.Spec, []composition.Link, error) {
+	if len(gen.controllers) == 1 {
+		spec := gen.controllers[0].spec
+		spec.Properties = append(spec.Properties, properties...)
+		return spec, nil, nil
+	}
+	components, _, _ := gen.components()
+	links, diags, err := composition.JoinByResource(components, nil, nil)
+	if err != nil {
+		return model.Spec{}, nil, fmt.Errorf("composition: %w", err)
+	}
+	if len(diags) > 0 {
+		lines := make([]string, 0, len(diags))
+		for _, d := range diags {
+			lines = append(lines, d.String())
+		}
+		return model.Spec{}, nil, fmt.Errorf("composition: %d port findings; %s", len(diags), strings.Join(lines, "; "))
+	}
+	shared := map[string]bool{}
+	for name := range gen.abs.StateVariables() {
+		shared[name] = true
+	}
+	for _, o := range objectsOf(*gen.abs) {
+		shared[o.version] = true
+	}
+	spec := model.Spec{Name: modelName(gen.project.Name), State: map[string]model.Variable{}, Domains: gen.abs.Spec.Populations(), Properties: append([]model.Property(nil), properties...)}
+	effects := map[string]effect.Descriptor{}
+	seenActions := map[string]bool{}
+	for _, o := range gen.controllers {
+		prefix := o.name() + "_"
+		renames := map[string]expr.Expression{}
+		for name, v := range o.spec.State {
+			if shared[name] {
+				if prior, ok := spec.State[name]; ok && prior != v {
+					return model.Spec{}, nil, fmt.Errorf("composition: shared state %s differs between controllers", name)
+				}
+				spec.State[name] = v
+				continue
+			}
+			renames[name] = expr.Expression(prefix + name)
+			spec.State[prefix+name] = v
+		}
+		rename := func(e expr.Expression) (expr.Expression, error) {
+			if len(renames) == 0 {
+				return e, nil
+			}
+			return expr.Rewrite(e, renames)
+		}
+		for _, a := range o.spec.Actions {
+			name := prefix + a.Name
+			if private := privateAction(a, renames); !private {
+				// An environment action over shared state alone exists
+				// once under its own name.
+				name = a.Name
+				if seenActions[name] {
+					continue
+				}
+			}
+			seenActions[name] = true
+			guard, err := rename(a.Guard)
+			if err != nil {
+				return model.Spec{}, nil, err
+			}
+			updates := map[string]expr.Expression{}
+			for target, value := range a.Updates {
+				v, err := rename(value)
+				if err != nil {
+					return model.Spec{}, nil, err
+				}
+				if r, ok := renames[target]; ok {
+					target = string(r)
+				}
+				updates[target] = v
+			}
+			spec.Actions = append(spec.Actions, model.Action{Name: name, Guard: guard, Updates: updates, Effect: a.Effect})
+		}
+		for _, p := range o.spec.Properties {
+			e, err := rename(p.Expression)
+			if err != nil {
+				return model.Spec{}, nil, err
+			}
+			spec.Properties = append(spec.Properties, model.Property{Name: prefix + p.Name, Expression: e})
+		}
+		for _, d := range o.effects {
+			// Two controllers may perform the same operation on one
+			// resource; the actor keeps the effects apart.
+			d.Actor = o.name()
+			if prior, ok := effects[d.ID]; ok && prior != d {
+				return model.Spec{}, nil, fmt.Errorf("composition: effect %s is declared by two controllers with different operations", d.ID)
+			}
+			effects[d.ID] = d
+		}
+	}
+	for _, id := range slices.Sorted(maps.Keys(effects)) {
+		spec.Effects = append(spec.Effects, effects[id])
+	}
+	if _, err := model.Compile(spec); err != nil {
+		return model.Spec{}, nil, fmt.Errorf("composition: %w", err)
+	}
+	return spec, links, nil
+}
+
+// privateAction reports whether an action reads or writes a controller's
+// private state, in which case it belongs to that controller. An action
+// over shared state alone is an environment action.
+func privateAction(a model.Action, renames map[string]expr.Expression) bool {
+	if len(renames) == 0 {
+		return false
+	}
+	free, err := expr.FreeIdentifiers(a.Guard)
+	if err != nil {
+		return true
+	}
+	for target, value := range a.Updates {
+		if _, ok := renames[target]; ok {
+			return true
+		}
+		ids, err := expr.FreeIdentifiers(value)
+		if err != nil {
+			return true
+		}
+		free = append(free, ids...)
+	}
+	for _, id := range free {
+		if _, ok := renames[id]; ok {
+			return true
+		}
+	}
+	return false
 }

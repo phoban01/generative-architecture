@@ -90,12 +90,13 @@ func TestGenerateConfigMirror(t *testing.T) {
 	likec4Validate(t, filepath.Join(out, likec4Dir))
 }
 
-// TestGenerateReferenceSystem checks that arch generate refuses the three
-// reference controllers, which it cannot compose into one model yet.
+// TestGenerateReferenceSystem checks that arch generate composes several
+// controllers only from their declarations: the reference system declares
+// none yet, so generation stops at its first controller.
 func TestGenerateReferenceSystem(t *testing.T) {
 	_, err := generateTo(t, "../../examples/refsystem/project.yaml")
-	if !errors.Is(err, errors.ErrUnsupported) || !strings.Contains(err.Error(), "has 3 controllers") {
-		t.Fatalf("expected a refusal to compose three controllers, got %v", err)
+	if err == nil || !strings.Contains(err.Error(), "BackupReconciler has no declaration; add one with receiver BackupReconciler under spec.controllers of ../../examples/refsystem/project.yaml") {
+		t.Fatalf("expected the missing declaration, got %v", err)
 	}
 }
 
@@ -352,6 +353,68 @@ func TestGenerateSeveralFields(t *testing.T) {
 	for _, name := range []string{"changeSource_data_value_a", "changeSource_data_mode_fast"} {
 		if _, ok := actions[name]; !ok {
 			t.Errorf("no environment action %s: %v", name, slices.Sorted(maps.Keys(actions)))
+		}
+	}
+}
+
+// Two declared controllers compose into one model: the abstraction's state
+// exists once under its own names, each controller's process and runtime
+// state carries its name, the environment actions over shared state exist
+// once, the copy's ConfigMap port binds Exporter to Mirror, and the
+// workspace draws the binding with one process view per controller.
+func TestGenerateComposesControllers(t *testing.T) {
+	out, err := generateTo(t, "testdata/pair/project.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var spec model.Spec
+	if _, err := krm.Read(filepath.Join(out, specFile), "TransitionModel", &spec); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"ConfigMap_source_data_value", "ConfigMap_copy_data_value", "Secret_export_stringData_value", "mirror_pc", "exporter_pc", "mirror_source_data_value", "exporter_copied_data_value", "mirror_cached_ConfigMap_source_data_value"} {
+		if _, ok := spec.State[name]; !ok {
+			t.Errorf("composed model lacks %s: %v", name, slices.Sorted(maps.Keys(spec.State)))
+		}
+	}
+	actions := map[string]model.Action{}
+	for _, a := range spec.Actions {
+		actions[a.Name] = a
+	}
+	for _, name := range []string{"mirror_writeTarget_ok", "exporter_writeSecret_ok", "mirror_begin", "exporter_begin", "changeSource_a", "mirror_deliverCache", "exporter_deliverCache"} {
+		if _, ok := actions[name]; !ok {
+			t.Errorf("composed model lacks action %s: %v", name, slices.Sorted(maps.Keys(actions)))
+		}
+	}
+	if _, ok := actions["changeSource_a"]; ok {
+		if c := 0; c == 0 {
+			for name := range actions {
+				if strings.HasSuffix(name, "changeSource_a") {
+					c++
+				}
+			}
+			if c != 1 {
+				t.Errorf("the environment action exists %d times", c)
+			}
+		}
+	}
+	if actions["exporter_writeSecret_ok"].Updates["Secret_export_stringData_value"] != "exporter_secret_stringData_value" {
+		t.Errorf("the Exporter write does not reach the shared Secret state: %+v", actions["exporter_writeSecret_ok"])
+	}
+	for _, f := range []string{"process-mirror.yaml", "process-exporter.yaml"} {
+		if _, err := os.Stat(filepath.Join(out, f)); err != nil {
+			t.Errorf("process document: %v", err)
+		}
+	}
+	views, err := os.ReadFile(filepath.Join(out, likec4Dir, "model.c4"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(views), "component_mirror -> component_exporter") {
+		t.Errorf("context view lacks the binding from mirror to exporter:\n%s", views)
+	}
+	for _, f := range []string{"views/process_mirror.c4", "views/process_exporter.c4", "views/runtime_mirror.c4", "views/runtime_exporter.c4"} {
+		if _, err := os.Stat(filepath.Join(out, likec4Dir, f)); err != nil {
+			t.Errorf("view: %v", err)
 		}
 	}
 }

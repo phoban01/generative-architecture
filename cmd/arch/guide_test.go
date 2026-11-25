@@ -246,7 +246,7 @@ func TestOwnedProjectGuideWalk(t *testing.T) {
 
 	// Section 9: generate refuses three controllers.
 	_, _, err = w.arch("arch --project examples/refsystem/project.yaml --out examples/refsystem/generated generate")
-	wantErr(err, "arch generate: unsupported operation: "+filepath.Join(refOut, irFile)+" has 3 controllers; composing more than one controller into one model is not supported yet")
+	wantErr(err, "arch generate: controller github.com/phoban01/generative-architecture/examples/refsystem/controllers/backup.BackupReconciler has no declaration; add one with receiver BackupReconciler under spec.controllers of examples/refsystem/project.yaml")
 
 	// Section 9: the ConfigMirror pipeline.
 	const cm = "arch --project examples/configmirror/project.yaml --out /tmp/configmirror "
