@@ -40,7 +40,9 @@ jobs:
       - name: Test
         # -p 2 caps the packages under test at two at a time, as make test
         # does; a full parallel run needs more memory than a small machine has.
-        run: go test -p 2 ./...
+        # cmd/arch runs for several minutes; the default ten-minute timeout
+        # is too short on a shared runner.
+        run: go test -p 2 -timeout 30m ./...
       - name: Consumer module
         run: make consumer-test
 

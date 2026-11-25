@@ -30,7 +30,7 @@ consumer-test:
 # adaptergen and the configmirror tests each load packages with go/packages,
 # and a full parallel run is killed for lack of memory on a 12 GiB machine.
 test:
-	go test -p 2 ./...
+	go test -p 2 -timeout 30m ./...
 
 # Envtest: install kube-apiserver and etcd with setup-envtest from the
 # controller-runtime release branch in go.mod, for the Kubernetes minor of
@@ -65,7 +65,7 @@ verify:
 	go run ./cmd/walkthrough --refresh
 	go run ./cmd/general-demo
 	go run ./cmd/library-demo --refresh
-	go test -p 2 ./...
+	go test -p 2 -timeout 30m ./...
 	$(MAKE) consumer-test
 
 # Build the ConfigMirror sample's diagrams into site/ through arch: extract

@@ -204,7 +204,7 @@ func TestEnvtestJob(t *testing.T) {
 // packages under test at two at a time. A full parallel run loads too many
 // packages with go/packages for a 12 GiB machine.
 func TestTestParallelismCap(t *testing.T) {
-	const want = "go test -p 2 ./..."
+	const want = "go test -p 2 -timeout 30m ./..."
 	w := readWorkflow(t, filepath.Join(root, ".github", "workflows", "ci.yml"))
 	j, ok := w.Jobs["go"]
 	if !ok {
