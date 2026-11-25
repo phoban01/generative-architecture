@@ -373,6 +373,11 @@ contract fail until a `links` entry picks one. The boundary component has
 evidence `assumed`. In the composed model the consumer's `reconcile` stays
 disabled until Flux has applied and marked the Kustomization ready.
 
+The verification report of a composed run lists each boundary's assumptions
+in an `assumptions` section, with their evidence and conformance hooks, and
+the context view draws the boundary as an assumed component. No run checks
+an assumption.
+
 A binding establishes connectivity only. Protocol conformance is a
 separate check (`ProtocolContract`, `composition.ComposeWithProtocols`).
 Clusters stay apart: a join never crosses clusters without an explicit

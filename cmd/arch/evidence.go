@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"sort"
 
+	"github.com/phoban01/generative-architecture/pkg/boundary"
 	"github.com/phoban01/generative-architecture/pkg/composition"
 	"github.com/phoban01/generative-architecture/pkg/conformance"
 	"github.com/phoban01/generative-architecture/pkg/ir"
@@ -37,6 +38,9 @@ type evidence struct {
 	// links are the resource bindings of a composed model, from the
 	// composition document arch generate writes; empty for one controller.
 	links []composition.Link
+	// assumptions are the boundary assumptions the project document names;
+	// the report lists them because no run checks them.
+	assumptions []report.AssumptionResult
 	// warnings lists the library inputs that drifted (ADR-0009).
 	warnings []string
 }
@@ -81,6 +85,9 @@ func loadEvidence(g globals) (evidence, []report.Finding, error) {
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return ev, nil, err
 	}
+	if ev.assumptions, err = boundaryAssumptions(p); err != nil {
+		return ev, nil, err
+	}
 	if ev.receipt, err = readReceipt(filepath.Join(g.out, receiptsFile)); err != nil {
 		return ev, nil, err
 	}
@@ -121,7 +128,7 @@ func (ev evidence) verification(scope string, tools map[string]string) report.Ve
 	for name, version := range tools {
 		r.Tools[name] = version
 	}
-	return report.Verification{Name: ev.project.Name, Scope: scope, Model: modelFile, ModelSHA256: ev.modelSHA, Coverage: map[string]int{}, TraceHashes: map[string]string{}, Receipt: r, Generated: ev.receipt.Generated, Warnings: ev.warnings}
+	return report.Verification{Name: ev.project.Name, Scope: scope, Model: modelFile, ModelSHA256: ev.modelSHA, Coverage: map[string]int{}, TraceHashes: map[string]string{}, Receipt: r, Generated: ev.receipt.Generated, Warnings: ev.warnings, Assumptions: ev.assumptions}
 }
 
 // replayModel replays one trace through the original CEL of m. A state
@@ -219,4 +226,20 @@ func violatedProperty(err error) string {
 		return v.Property
 	}
 	return ""
+}
+
+// boundaryAssumptions lists the assumptions of every boundary the project
+// document names, in document order, under the boundary's component name.
+func boundaryAssumptions(p project.Project) ([]report.AssumptionResult, error) {
+	var out []report.AssumptionResult
+	for _, decl := range p.Spec.Boundaries {
+		b, err := boundary.Load(filepath.Join(p.Dir, decl.Path))
+		if err != nil {
+			return nil, err
+		}
+		for _, a := range b.Spec.Assumptions {
+			out = append(out, report.AssumptionResult{Component: decl.ComponentName(), ID: a.ID, Statement: a.Statement, Evidence: string(a.Evidence), Conformance: a.Conformance.Kind, Reference: a.Conformance.Reference})
+		}
+	}
+	return out, nil
 }

@@ -102,6 +102,9 @@ type Verification struct {
 	// of protocol conformance (CON-10).
 	Bindings  []BindingResult  `yaml:"bindings,omitempty"`
 	Protocols []ProtocolResult `yaml:"protocols,omitempty"`
+	// Assumptions lists what the composed model takes for granted about
+	// its boundary components (EXT-1). A run never checks them.
+	Assumptions []AssumptionResult `yaml:"assumptions,omitempty"`
 	// Temporal lists the liveness properties with their status (CON-6).
 	Temporal []TemporalResult `yaml:"temporal,omitempty"`
 	// Receipt is the input closure of the run. A run without one may

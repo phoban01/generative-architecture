@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/phoban01/generative-architecture/pkg/model"
+	"github.com/phoban01/generative-architecture/pkg/project"
 	"github.com/phoban01/generative-architecture/pkg/report"
 )
 
@@ -45,5 +46,21 @@ func TestViolatedProperty(t *testing.T) {
 		if got := violatedProperty(tc.err); got != tc.want {
 			t.Errorf("%v: got %q, want %q", tc.err, got, tc.want)
 		}
+	}
+}
+
+// The assumptions of the boundaries a project document names enter the
+// report under the boundary's component name.
+func TestBoundaryAssumptionsOfReferenceSystem(t *testing.T) {
+	p, err := project.Load("../../examples/refsystem/project.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assumptions, err := boundaryAssumptions(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(assumptions) != 5 || assumptions[0].Component != "flux" || assumptions[0].ID != "interval" || assumptions[0].Conformance != "documentation" || assumptions[4].ID != "readyAfterApply" || assumptions[4].Evidence != "assumed" {
+		t.Fatalf("assumptions %+v", assumptions)
 	}
 }

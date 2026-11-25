@@ -97,4 +97,5 @@ generates the system in its tests. `spec.boundaries` adds the Flux
 Kustomization boundary (`boundaries/flux`, a copy of the library's) as an
 assumed component that applies the Tenant, Database and Backup manifests,
 so each owned kind binds to it as well. The boundary's own model, the
-periodic apply and the Ready condition, runs beside the controllers.
+periodic apply and the Ready condition, runs beside the controllers, and
+`arch check` lists its five assumptions in the report.

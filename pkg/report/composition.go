@@ -50,6 +50,18 @@ type ProtocolResult struct {
 	Violations []string `yaml:"violations,omitempty"`
 }
 
+// AssumptionResult is one assumption of a boundary component: what the
+// composed model takes for granted about an upstream project. A run
+// never checks it; the conformance hook says how it could be checked.
+type AssumptionResult struct {
+	Component   string `yaml:"component"`
+	ID          string `yaml:"id"`
+	Statement   string `yaml:"statement"`
+	Evidence    string `yaml:"evidence"`
+	Conformance string `yaml:"conformance"`
+	Reference   string `yaml:"reference,omitempty"`
+}
+
 // LinkName is the Link of a bound link.
 func LinkName(from, to string) string { return from + " -> " + to }
 
@@ -98,6 +110,11 @@ func (v Verification) validateComposition() error {
 			return fmt.Errorf("verification report: binding %s has unknown status %q", b.Link, b.Status)
 		}
 	}
+	for _, a := range v.Assumptions {
+		if a.Component == "" || a.ID == "" || (a.Evidence != "assumed" && a.Evidence != "declared") {
+			return fmt.Errorf("verification report: assumption %s.%s must name its component and id with assumed or declared evidence, got %q", a.Component, a.ID, a.Evidence)
+		}
+	}
 	for _, p := range v.Protocols {
 		if !bound[p.Link] {
 			return fmt.Errorf("verification report: protocol %s/%s is on link %s, which is not a bound binding", p.Protocol, p.Version, p.Link)
@@ -113,7 +130,7 @@ func (v Verification) validateComposition() error {
 	return nil
 }
 
-// WriteSections writes the binding, protocol and warning sections as
+// WriteSections writes the assumption, binding, protocol and warning sections as
 // text, each under its own heading. A bound link without a protocol is
 // listed under protocols as unchecked, so a binding never reads as
 // conformance. It writes nothing when the report has no bindings, no
@@ -129,6 +146,7 @@ func (v Verification) WriteSections(w io.Writer) {
 }
 
 func (v Verification) writeComposition(w io.Writer) {
+	v.writeAssumptions(w)
 	if len(v.Bindings) == 0 && len(v.Protocols) == 0 {
 		return
 	}
@@ -154,5 +172,21 @@ func (v Verification) writeComposition(w io.Writer) {
 		if b.Status == BindingBound && !covered[b.Link] {
 			fmt.Fprintf(w, "  %s: no protocol contract; conformance not checked\n", b.Link)
 		}
+	}
+}
+
+// writeAssumptions lists the boundary assumptions the composed model
+// rests on. None of them is checked by the run.
+func (v Verification) writeAssumptions(w io.Writer) {
+	if len(v.Assumptions) == 0 {
+		return
+	}
+	fmt.Fprintln(w, "assumptions (boundary facts; not checked by this run):")
+	for _, a := range v.Assumptions {
+		line := fmt.Sprintf("  %s.%s: %s (%s; conformance: %s", a.Component, a.ID, a.Statement, a.Evidence, a.Conformance)
+		if a.Reference != "" {
+			line += " " + a.Reference
+		}
+		fmt.Fprintln(w, line+")")
 	}
 }
