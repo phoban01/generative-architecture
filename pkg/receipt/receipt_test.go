@@ -73,7 +73,7 @@ func TestCollectClosure(t *testing.T) {
 			t.Errorf("unexpected entry %+v", f)
 		}
 	}
-	if has(r, "examples/database/controller.go") || has(r, "pkg/project/project.go") {
+	if has(r, "examples/database/controller.go") || has(r, "cmd/arch/main.go") {
 		t.Fatalf("closure includes packages the example does not import")
 	}
 	if !reflect.DeepEqual(r.Tools, tools) || !reflect.DeepEqual(r.Packages, patterns) {

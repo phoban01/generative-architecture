@@ -1,0 +1,21 @@
+apiVersion: architecture.local/v1alpha1
+kind: Project
+metadata:
+  name: config-mirror-inventory
+spec:
+  # ConfigMirror without an abstraction or a controller declaration, for
+  # inventory extraction: the map fields Reconcile touches stay unresolved.
+  module: github.com/phoban01/generative-architecture
+  packages:
+    - ./examples/configmirror
+  catalog:
+    discovery:
+      - discovery.json
+  constraints:
+    - constraints.yaml
+  runtime:
+    profile: controller-runtime
+    maxTicks: 20
+  bounds:
+    maxObjectsPerResource: 2
+    maxInvocations: 3

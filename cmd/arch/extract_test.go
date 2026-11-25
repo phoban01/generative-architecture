@@ -119,7 +119,7 @@ func TestExtractReferenceSystem(t *testing.T) {
 }
 
 func TestExtractControllerWithoutSetup(t *testing.T) {
-	out, err := extractTo(t, "../../examples/configmirror/project.yaml")
+	out, err := extractTo(t, "testdata/configmirror/inventory.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,7 +132,7 @@ func TestExtractControllerWithoutSetup(t *testing.T) {
 	}
 	// The missing setup is reported, not silently dropped. Reconcile
 	// extracts, and without an abstraction both map fields it touches are
-	// unresolved. With the abstraction of testdata/configmirror they
+	// unresolved. With the abstraction of the sample project they
 	// resolve.
 	s := readSupport(t, out)
 	if len(s.Included) != 2 || s.Included[1].Kind != "reconcile" || len(s.Summarized) != 1 || s.Summarized[0].Kind != "setup" || s.Summarized[0].Location.File != "examples/configmirror/controller.go" || len(s.Unsupported) != 0 {

@@ -41,7 +41,7 @@ status:
     - path: examples/configmirror/evidence.go
       sha256: caa5a9a803ffb54b3b61f32b75083cb6ad41055f7dcaae7452209f1e0191f631
     - path: examples/configmirror/generate.go
-      sha256: 48b028011b1cf2d0396852b2d2240e27b73db8b65a557b2134ee35af5c22f05f
+      sha256: 2e2f329546d88517b9fdfd64d1cd120c5f421d3881774557e6bb7d7555bdded7
     - path: examples/configmirror/generated/environment_generated.go
       sha256: 89c807e758ae5c150fbf7351455ce4ffe06c8f008ad31bb2540d34e17ab6519f
     - path: examples/configmirror/generated/gating_generated.go
