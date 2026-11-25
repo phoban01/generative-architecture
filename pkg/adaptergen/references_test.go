@@ -73,3 +73,30 @@ func TestGenerateReferenceCheckRejects(t *testing.T) {
 		})
 	}
 }
+
+// The reader variant emits the same checks for a typed client.Reader.
+func TestGenerateReaderReferenceCheck(t *testing.T) {
+	a, err := fixture.Abstraction()
+	if err != nil {
+		t.Fatal(err)
+	}
+	src, err := adaptergen.GenerateReaderReferenceCheck(fixture.Package, a.Spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	golden(t, "reader_references", src)
+	p := typecheck(t, src)
+	assertNoModelState(t, p)
+	params, results := signature(t, p, "CheckReferences")
+	wantParams := []string{"context.Context", "sigs.k8s.io/controller-runtime/pkg/client.Reader"}
+	if !reflect.DeepEqual(params, wantParams) || !reflect.DeepEqual(results, []string{"error"}) {
+		t.Errorf("CheckReferences(%v) %v", params, results)
+	}
+	want := `"demo", "instance-for-db-1", []string{"spec", "databaseName"}, "Database", []string{"db-1"}, false)`
+	if !strings.Contains(string(src), want) {
+		t.Errorf("generated check lacks %q:\n%s", want, src)
+	}
+	if _, err := adaptergen.GenerateReaderReferenceCheck("p", abstraction.Spec{}); err == nil || !strings.Contains(err.Error(), "no references") {
+		t.Errorf("empty spec accepted: %v", err)
+	}
+}

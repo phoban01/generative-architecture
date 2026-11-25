@@ -167,3 +167,79 @@ func referenceCheck(ctx context.Context, api dynamic.Interface, mapper meta.REST
 	return fmt.Errorf("%s %s/%s: %s %q names no declared %s", gvk.Kind, namespace, name, strings.Join(path, "."), v, target)
 }
 `
+
+// GenerateReaderReferenceCheck emits a file of package pkg defining
+//
+//	func CheckReferences(ctx context.Context, api client.Reader) error
+//
+// with the checks GenerateReferenceCheck emits, read through a typed
+// controller-runtime reader instead of the dynamic client, for controllers
+// that use the typed client. The function takes only an API reader: it
+// never reads expected model state.
+func GenerateReaderReferenceCheck(pkg string, spec abstraction.Spec) ([]byte, error) {
+	if err := validPackage(pkg); err != nil {
+		return nil, err
+	}
+	checks, err := referenceChecks(spec)
+	if err != nil {
+		return nil, err
+	}
+	return render("reader_references", readerReferencesTemplate, struct {
+		Header  string
+		Package string
+		Checks  []referenceCheck
+	}{Header, pkg, checks})
+}
+
+const readerReferencesTemplate = `{{.Header}}
+
+package {{.Package}}
+
+import (
+	"context"
+	"fmt"
+	"slices"
+	"strings"
+
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+)
+
+// CheckReferences reads every object that declares a reference through api
+// and fails when the reference names no declared object of its target.
+// An absent referring object passes. It observes implementation state only
+// and never consults expected model state.
+func CheckReferences(ctx context.Context, api client.Reader) error {
+{{- range .Checks}}
+	// {{.Key}}: {{.Field}} names a {{.Target}}
+	if err := referenceCheck(ctx, api, {{gvk .Key.GVK}}, {{q .Key.Namespace}}, {{q .Key.Name}}, []string{ {{- path .Path -}} }, {{q .Target}}, []string{ {{- path .Names -}} }, {{.Empty}}); err != nil {
+		return err
+	}
+{{- end}}
+	return nil
+}
+
+// referenceCheck gets one object and checks that the string at path is one
+// of names, or empty when empty is allowed.
+func referenceCheck(ctx context.Context, api client.Reader, gvk schema.GroupVersionKind, namespace, name string, path []string, target string, names []string, empty bool) error {
+	obj := &unstructured.Unstructured{}
+	obj.SetGroupVersionKind(gvk)
+	err := api.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, obj)
+	if apierrors.IsNotFound(err) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("%s %s/%s: %w", gvk.Kind, namespace, name, err)
+	}
+	v, _, err := unstructured.NestedString(obj.Object, path...)
+	if err != nil {
+		return fmt.Errorf("%s %s/%s: %s: %w", gvk.Kind, namespace, name, strings.Join(path, "."), err)
+	}
+	if v == "" && empty || v != "" && slices.Contains(names, v) {
+		return nil
+	}
+	return fmt.Errorf("%s %s/%s: %s %q names no declared %s", gvk.Kind, namespace, name, strings.Join(path, "."), v, target)
+}
+`
