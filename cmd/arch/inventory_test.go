@@ -136,3 +136,42 @@ func TestIRProcessCopiesRequeue(t *testing.T) {
 		t.Fatalf("requeues %q and %q", p.Nodes[0].Requeue, p.Nodes[1].Requeue)
 	}
 }
+
+// The inventory records the namespace and field selector of a List on the
+// node and fails closed on any other option.
+func TestInventoryRecordsListOptions(t *testing.T) {
+	p, err := project.Load("testdata/listing/project.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cat, err := p.LoadCatalog()
+	if err != nil {
+		t.Fatal(err)
+	}
+	load := func(receiver string) goflow.Loaded {
+		l, err := goflow.Load(p.Root, goflow.Selector{Package: "./cmd/arch/testdata/listing", Receiver: receiver, Method: reconcileMethod})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return l
+	}
+	c := ir.Controller{ID: "lister", Package: "./cmd/arch/testdata/listing", Receiver: "Lister"}
+	program, unsupported, _ := extractReconcile(p.Root, c, load("Lister"), nil, cat)
+	if program == nil || len(unsupported) != 0 {
+		t.Fatalf("unsupported %+v", unsupported)
+	}
+	var list *goflow.Node
+	for i := range program.Nodes {
+		if program.Nodes[i].Kind == ir.OpList {
+			list = &program.Nodes[i]
+		}
+	}
+	if list == nil || list.Options["namespace"] != "req.Namespace" || list.Options["fieldSelector"] != "ownerKey=req.Name" || len(list.Options) != 2 {
+		t.Fatalf("list node %+v", list)
+	}
+	c = ir.Controller{ID: "limited", Package: "./cmd/arch/testdata/listing", Receiver: "Limited"}
+	program, unsupported, _ = extractReconcile(p.Root, c, load("Limited"), nil, cat)
+	if program != nil || len(unsupported) != 1 || unsupported[0].Kind != "option" || unsupported[0].Location.Line != 37 || !strings.Contains(unsupported[0].Reason, "unsupported List option") {
+		t.Fatalf("limited: program %v unsupported %+v", program, unsupported)
+	}
+}

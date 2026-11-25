@@ -47,6 +47,7 @@ type inventory struct {
 	scope map[string]expr.Symbol
 	// keys lists the map keys the body names under a map field.
 	keys map[string][]string
+	info *types.Info
 	// first is the first appearance of each field symbol, and names its
 	// name as root.json.path.
 	first map[string]token.Pos
@@ -73,7 +74,7 @@ type inventory struct {
 // unresolved.
 func extractReconcile(root string, c ir.Controller, l goflow.Loaded, abs *abstraction.Abstraction, cat *catalog.Catalog) (*goflow.Program, []report.Item, []report.Item) {
 	inv := &inventory{
-		fset: l.Package.Fset, file: relative(root, l.Path),
+		fset: l.Package.Fset, info: l.Package.TypesInfo, file: relative(root, l.Path),
 		scope: map[string]expr.Symbol{}, keys: map[string][]string{},
 		first: map[string]token.Pos{}, names: map[string]string{}, unresolved: map[string]bool{},
 	}
@@ -85,7 +86,7 @@ func extractReconcile(root string, c ir.Controller, l goflow.Loaded, abs *abstra
 		File:    l.Path,
 		Scope:   inv.scope,
 		Returns: []goflow.Return{{Zero: true, Requeue: true}, {Error: true}},
-		Call:    clientCall,
+		Call:    inv.clientCall,
 		Field:   inv.field,
 		MapKeys: inv.mapKeys,
 	}
@@ -110,7 +111,7 @@ func extractReconcile(root string, c ir.Controller, l goflow.Loaded, abs *abstra
 // embedded in the reconciler has the reconciler as its receiver; it is
 // read as a call through client.Client, which the kubebuilder scaffold
 // embeds.
-func clientCall(c goflow.Callee, _ *ast.CallExpr, _ goflow.Convert) (goflow.Node, bool, error) {
+func (inv *inventory) clientCall(c goflow.Callee, call *ast.CallExpr, _ goflow.Convert) (goflow.Node, bool, error) {
 	if c.Package != clientPackage || c.Receiver == "" {
 		return goflow.Node{}, false, nil
 	}
@@ -128,7 +129,52 @@ func clientCall(c goflow.Callee, _ *ast.CallExpr, _ goflow.Convert) (goflow.Node
 	if op == ir.OpGet || op == ir.OpList {
 		consistency = ir.ConsistencyCached
 	}
-	return goflow.Node{Kind: op, Effect: "client" + c.Method, Consistency: consistency}, true, nil
+	n := goflow.Node{Kind: op, Effect: "client" + c.Method, Consistency: consistency}
+	if op == ir.OpList && len(call.Args) > 2 {
+		options, err := inv.listOptions(call.Args[2:])
+		if err != nil {
+			return goflow.Node{}, false, err
+		}
+		n.Options = options
+	}
+	return n, true, nil
+}
+
+// listOptions records the options of a List call: client.InNamespace(x) as
+// namespace and client.MatchingFields{k: v} as fieldSelector, both with
+// their Go source. The namespace and the index selector decide which
+// objects the reconciler sees, so dropping them would be a silent loss. Any
+// other option is a located diagnostic.
+func (inv *inventory) listOptions(args []ast.Expr) (map[string]string, error) {
+	out := map[string]string{}
+	for _, arg := range args {
+		t := inv.info.TypeOf(arg)
+		name := ""
+		if t != nil {
+			name = types.TypeString(t, nil)
+		}
+		switch name {
+		case clientPackage + ".InNamespace":
+			call, ok := ast.Unparen(arg).(*ast.CallExpr)
+			if !ok || len(call.Args) != 1 {
+				return nil, goflow.NewDiagnostic(inv.fset, arg, "option", "InNamespace must be a conversion of one expression")
+			}
+			out["namespace"] = goflow.Code(call.Args[0])
+		case clientPackage + ".MatchingFields":
+			lit, ok := ast.Unparen(arg).(*ast.CompositeLit)
+			if !ok || len(lit.Elts) != 1 {
+				return nil, goflow.NewDiagnostic(inv.fset, arg, "option", "MatchingFields must be a literal with one field")
+			}
+			kv, ok := lit.Elts[0].(*ast.KeyValueExpr)
+			if !ok {
+				return nil, goflow.NewDiagnostic(inv.fset, arg, "option", "MatchingFields must be a literal with one field")
+			}
+			out["fieldSelector"] = goflow.Code(kv.Key) + "=" + goflow.Code(kv.Value)
+		default:
+			return nil, goflow.NewDiagnostic(inv.fset, arg, "option", "unsupported List option; only InNamespace and MatchingFields are recorded")
+		}
+	}
+	return out, nil
 }
 
 // symbolOf names the model symbol of a field path on a variable.

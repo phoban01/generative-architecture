@@ -238,7 +238,7 @@ smallest extension that would support it.
   `append` to a status slice and the map writes in a loop are list and map
   constructs, not helpers, and stay open.
 
-### 15. List options are not in the effect
+### 15. List options are not in the effect (closed by #149)
 
 - Construct: `r.List(ctx, &childJobs, client.InNamespace(req.Namespace), client.MatchingFields{jobOwnerKey: req.Name})`.
 - Location: line 132.
@@ -249,6 +249,10 @@ smallest extension that would support it.
   gap.
 - Smallest extension: record `InNamespace` and `MatchingFields` on the List
   node. Fail with a located diagnostic on other options.
+- Resolution: since #149, the inventory records `InNamespace` as the
+  `namespace` option and `MatchingFields` as the `fieldSelector` option of
+  the List node, with their Go source, and fails with a located diagnostic
+  on any other List option.
 
 ## Gaps in the abstraction and in arch generate (#133)
 

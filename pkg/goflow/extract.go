@@ -24,12 +24,15 @@ import (
 // performs, Consistency the read consistency of a client operation, and
 // Bindings map the $placeholders of its summary to model expressions.
 type Node struct {
-	Callee      string                     `yaml:"callee,omitempty"`
-	ID          int                        `yaml:"id"`
-	Kind        string                     `yaml:"kind"`
-	Effect      string                     `yaml:"effect,omitempty"`
-	Consistency string                     `yaml:"consistency,omitempty"`
-	Bindings    map[string]string          `yaml:"bindings,omitempty"`
+	Callee      string            `yaml:"callee,omitempty"`
+	ID          int               `yaml:"id"`
+	Kind        string            `yaml:"kind"`
+	Effect      string            `yaml:"effect,omitempty"`
+	Consistency string            `yaml:"consistency,omitempty"`
+	Bindings    map[string]string `yaml:"bindings,omitempty"`
+	// Options records the call options a summary keeps, such as the
+	// namespace and field selector of a List.
+	Options     map[string]string          `yaml:"options,omitempty"`
 	Source      string                     `yaml:"go"`
 	Line        int                        `yaml:"line"`
 	Expression  expr.Expression            `yaml:"expression,omitempty"`
