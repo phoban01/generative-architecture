@@ -3,9 +3,11 @@ package main
 import (
 	"fmt"
 	"go/ast"
+	"go/constant"
 	"go/types"
 	"path"
 	"sort"
+	"strconv"
 	"strings"
 
 	"golang.org/x/tools/go/packages"
@@ -35,6 +37,7 @@ var versionPath = []string{"metadata", "resourceVersion"}
 // clientEffect is what a call of one client method means: the effect it
 // performs, its operation key in the summary library and its consistency.
 type clientEffect struct {
+	Kind                           string
 	Effect, Operation, Consistency string
 }
 
@@ -51,8 +54,8 @@ var statusWriters = map[string]bool{"SubResourceWriter": true, "StatusWriter": t
 // through the manager's client (receiver Client) is served by the informer
 // cache, any other call goes to the API server. A call through
 // Client.Status() is the status subresource operation, status.update.
-func clientEffects(decl project.Controller) (map[goflow.Callee]clientEffect, error) {
-	out := map[goflow.Callee]clientEffect{}
+func clientEffects(decl project.Controller) (map[goflow.Callee][]clientEffect, error) {
+	out := map[goflow.Callee][]clientEffect{}
 	for _, e := range decl.Effects {
 		pkg, receiver, method, err := e.Symbol()
 		if err != nil {
@@ -75,7 +78,8 @@ func clientEffects(decl project.Controller) (map[goflow.Callee]clientEffect, err
 				consistency = ir.ConsistencyCached
 			}
 		}
-		out[goflow.Callee{Package: pkg, Receiver: receiver, Method: method}] = clientEffect{Effect: e.Effect, Operation: op, Consistency: consistency}
+		callee := goflow.Callee{Package: pkg, Receiver: receiver, Method: method}
+		out[callee] = append(out[callee], clientEffect{Kind: e.Kind, Effect: e.Effect, Operation: op, Consistency: consistency})
 	}
 	return out, nil
 }
@@ -83,7 +87,7 @@ func clientEffects(decl project.Controller) (map[goflow.Callee]clientEffect, err
 // extraction holds the model names extraction binds Go objects to.
 type extraction struct {
 	decl     project.Controller
-	effects  map[goflow.Callee]clientEffect
+	effects  map[goflow.Callee][]clientEffect
 	keys     map[string]string // key field symbol -> abstraction object
 	cat      *catalog.Catalog
 	info     *types.Info
@@ -231,7 +235,7 @@ func (x *extraction) field(root string, fieldPath []string) (expr.Expression, bo
 // the bindings of the summary placeholders to the addressed object's
 // variables and the Go local the object is read into or written from.
 func (x *extraction) call(c goflow.Callee, call *ast.CallExpr, _ goflow.Convert) (goflow.Node, bool, error) {
-	e, ok := x.effects[c]
+	declared, ok := x.effects[c]
 	if !ok {
 		return goflow.Node{}, false, nil
 	}
@@ -243,10 +247,14 @@ func (x *extraction) call(c goflow.Callee, call *ast.CallExpr, _ goflow.Convert)
 	if err != nil {
 		return goflow.Node{}, false, err
 	}
+	e, ok := effectFor(declared, r.GVK.Kind)
+	if !ok {
+		return goflow.Node{}, false, fmt.Errorf("%s is called with a %s, but no effect is declared for that kind", c, r.GVK.Kind)
+	}
 	var object string
 	switch e.Operation {
 	case ir.OpGet:
-		if object, err = x.key(call.Args[1]); err != nil {
+		if object, err = x.key(call.Args[1], r); err != nil {
 			return goflow.Node{}, false, err
 		}
 	default:
@@ -331,10 +339,21 @@ func (x *extraction) local(arg ast.Expr) (string, abstraction.Resource, error) {
 
 // key resolves a key argument, a field selection, to an abstraction object
 // through the symbol of the selected field.
-func (x *extraction) key(arg ast.Expr) (string, error) {
+// objectKeyType is the type of client.ObjectKey.
+const objectKeyType = "k8s.io/apimachinery/pkg/types.NamespacedName"
+
+// key resolves the key argument of a read to the abstraction object it
+// addresses: a key field declared under objectKeys (the reconcile
+// request's key addresses the controller's key), or a client.ObjectKey
+// literal whose Name and Namespace the abstraction fixes (see keyValue),
+// matched against the objects of resource r.
+func (x *extraction) key(arg ast.Expr, r abstraction.Resource) (string, error) {
+	if lit, ok := ast.Unparen(arg).(*ast.CompositeLit); ok {
+		return x.keyLiteral(lit, r)
+	}
 	sel, ok := ast.Unparen(arg).(*ast.SelectorExpr)
 	if !ok {
-		return "", fmt.Errorf("object key must be a field selection, got %s", goflow.Code(arg))
+		return "", fmt.Errorf("object key must be a field selection or a client.ObjectKey literal, got %s", goflow.Code(arg))
 	}
 	s, ok := x.info.Selections[sel]
 	if !ok || s.Kind() != types.FieldVal {
@@ -354,6 +373,101 @@ func (x *extraction) key(arg ast.Expr) (string, error) {
 		return "", fmt.Errorf("object key %s addresses no declared object; declare it under objectKeys", symbol)
 	}
 	return object, nil
+}
+
+// keyLiteral resolves a client.ObjectKey literal to the one object of r
+// with the literal's name, and namespace when the literal sets one.
+func (x *extraction) keyLiteral(lit *ast.CompositeLit, r abstraction.Resource) (string, error) {
+	code := goflow.Code(lit)
+	if t := x.info.TypeOf(lit); t == nil || types.TypeString(types.Unalias(t), nil) != objectKeyType {
+		return "", fmt.Errorf("object key %s is not a client.ObjectKey literal", code)
+	}
+	var name, namespace string
+	for _, elt := range lit.Elts {
+		kv, ok := elt.(*ast.KeyValueExpr)
+		if !ok {
+			return "", fmt.Errorf("object key %s must set its fields by name", code)
+		}
+		value, err := x.keyValue(kv.Value)
+		if err != nil {
+			return "", fmt.Errorf("object key %s: %v", code, err)
+		}
+		switch goflow.Code(kv.Key) {
+		case "Name":
+			name = value
+		case "Namespace":
+			namespace = value
+		default:
+			return "", fmt.Errorf("object key %s sets %s; only Name and Namespace are object key fields", code, goflow.Code(kv.Key))
+		}
+	}
+	if name == "" {
+		return "", fmt.Errorf("object key %s sets no Name", code)
+	}
+	var found []string
+	for _, o := range r.Objects {
+		if o.Name == name && (namespace == "" || o.Namespace == namespace) {
+			found = append(found, o.ID)
+		}
+	}
+	if len(found) != 1 {
+		return "", fmt.Errorf("object key %s addresses %d %s objects %v; expected exactly one", code, len(found), r.GVK.Kind, found)
+	}
+	return found[0], nil
+}
+
+// keyValue resolves one field of an object key literal to a string the
+// abstraction fixes: a constant, or a field of a Go local that was read
+// from an abstraction object. The object's name and namespace come from
+// the object; any other field must have a value domain of one value.
+func (x *extraction) keyValue(v ast.Expr) (string, error) {
+	if tv, ok := x.info.Types[v]; ok && tv.Value != nil && tv.Value.Kind() == constant.String {
+		return constant.StringVal(tv.Value), nil
+	}
+	root, path, err := goflow.FieldPath(x.info, v)
+	if err != nil {
+		return "", err
+	}
+	r, ok := x.locals[root]
+	if !ok {
+		return "", fmt.Errorf("%s is not a local of an abstracted type", root)
+	}
+	id, err := x.readInto(root)
+	if err != nil {
+		return "", err
+	}
+	o := objectOf(r, id)
+	switch abstraction.PathKey(path) {
+	case "metadata.name":
+		return o.Name, nil
+	case "metadata.namespace":
+		return o.Namespace, nil
+	}
+	for _, f := range r.Fields {
+		if abstraction.PathKey(abstraction.JSONPath(f.Path)) != abstraction.PathKey(path) {
+			continue
+		}
+		domain := r.ValueDomains[f.Key()]
+		if len(domain) != 1 {
+			return "", fmt.Errorf("%s has %d values in the abstraction; a key field needs exactly one", goflow.Code(v), len(domain))
+		}
+		value, err := strconv.Unquote(domain[0])
+		if err != nil {
+			return "", fmt.Errorf("%s: value %s is not a string literal", goflow.Code(v), domain[0])
+		}
+		return value, nil
+	}
+	return "", fmt.Errorf("the abstraction does not select %s", goflow.Code(v))
+}
+
+// objectOf returns the object of r with the given id.
+func objectOf(r abstraction.Resource, id string) abstraction.Object {
+	for _, o := range r.Objects {
+		if o.ID == id {
+			return o
+		}
+	}
+	return abstraction.Object{}
 }
 
 // readInto finds the object a Go local was read into: the key of the
@@ -381,14 +495,15 @@ func (x *extraction) readInto(local string) (string, error) {
 		if !ok {
 			return true
 		}
-		e, ok := x.effects[goflow.Callee{Package: s.Obj().Pkg().Path(), Receiver: named.Obj().Name(), Method: s.Obj().Name()}]
-		if !ok || e.Operation != ir.OpGet {
+		declared, ok := x.effects[goflow.Callee{Package: s.Obj().Pkg().Path(), Receiver: named.Obj().Name(), Method: s.Obj().Name()}]
+		if !ok || declared[0].Operation != ir.OpGet {
 			return true
 		}
-		if l, _, err := x.local(call.Args[2]); err != nil || l != local {
+		l, r, err := x.local(call.Args[2])
+		if err != nil || l != local {
 			return true
 		}
-		if object, err := x.key(call.Args[1]); err == nil {
+		if object, err := x.key(call.Args[1], r); err == nil {
 			found = append(found, object)
 		}
 		return true
@@ -430,4 +545,20 @@ func statusFields(r abstraction.Resource, object, local string, x *extraction) (
 		}
 	}
 	return status, values
+}
+
+// effectFor picks the declaration for a call made with an object of kind:
+// the one declared for that kind, else the one declared for every kind.
+func effectFor(declared []clientEffect, kind string) (clientEffect, bool) {
+	var any clientEffect
+	var found bool
+	for _, e := range declared {
+		switch e.Kind {
+		case kind:
+			return e, true
+		case "":
+			any, found = e, true
+		}
+	}
+	return any, found
 }

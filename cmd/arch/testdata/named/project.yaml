@@ -1,0 +1,39 @@
+apiVersion: architecture.local/v1alpha1
+kind: Project
+metadata:
+  name: named
+spec:
+  # A reconciler that reads a Namespace by a key literal named after the
+  # ConfigMap it reconciles, and creates it when absent.
+  module: github.com/phoban01/generative-architecture
+  packages:
+    - ./cmd/arch/testdata/named
+  catalog:
+    discovery:
+      - discovery.json
+  abstraction: abstraction.yaml
+  runtime:
+    profile: controller-runtime
+    maxTicks: 20
+  bounds:
+    maxObjectsPerResource: 1
+    maxInvocations: 3
+  controllers:
+    - receiver: Reconciler
+      name: named
+      workers: 1
+      retryTicks: 2
+      key: source
+      effects:
+        - call: sigs.k8s.io/controller-runtime/pkg/client.Client.Get
+          kind: ConfigMap
+          effect: readConfigMap
+        - call: sigs.k8s.io/controller-runtime/pkg/client.Client.Get
+          kind: Namespace
+          effect: readNamespace
+        - call: sigs.k8s.io/controller-runtime/pkg/client.Client.Create
+          effect: createNamespace
+  initial:
+    source: '"acme"'
+    acme: '""'
+    acme.exists: 'false'

@@ -512,3 +512,25 @@ func TestGenerateStatusUpdate(t *testing.T) {
 		t.Fatalf("the resource view does not record the status subresource:\n%s", c4)
 	}
 }
+
+// A read keyed by a client.ObjectKey literal built from another object's
+// name addresses the object with that name.
+func TestGenerateResolvesObjectKeyLiteral(t *testing.T) {
+	out, err := generateTo(t, "testdata/named/project.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var spec model.Spec
+	if _, err := krm.Read(filepath.Join(out, specFile), "TransitionModel", &spec); err != nil {
+		t.Fatal(err)
+	}
+	guards := map[string]string{}
+	for _, a := range spec.Actions {
+		guards[a.Name] = string(a.Guard)
+	}
+	for action, exists := range map[string]string{"readConfigMap_found": "ConfigMap_source_exists", "readNamespace_notFound": "!Namespace_acme_exists"} {
+		if !strings.Contains(guards[action], exists) {
+			t.Fatalf("%s guards %q, want %s: %v", action, guards[action], exists, slices.Sorted(maps.Keys(guards)))
+		}
+	}
+}

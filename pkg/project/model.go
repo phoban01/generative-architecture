@@ -31,7 +31,10 @@ type Controller struct {
 	Effects []ClientEffect `yaml:"effects"`
 	// ObjectKeys maps the symbol of a key field (package.Type.Field) to the
 	// abstraction object it addresses. The reconcile request's key maps to
-	// Key without a declaration.
+	// Key without a declaration. A client.ObjectKey literal needs no
+	// declaration: its Name and Namespace resolve to constants through the
+	// abstraction (a constant, an object's name or namespace, or a field
+	// with one value) and address the object with that name.
 	ObjectKeys map[string]string `yaml:"objectKeys,omitempty"`
 	// Locals keeps a selected field of a Go object local in a declared
 	// abstraction local: "<go local>.<json path>" maps to the local's name.
@@ -42,6 +45,11 @@ type Controller struct {
 // symbol, <package path>.<Receiver>.<Method>. Consistency overrides the
 // consistency the runtime profile derives from the receiver.
 type ClientEffect struct {
+	// Kind restricts the declaration to calls made with an object of that
+	// kind; a declaration without a kind applies to every other kind the
+	// call is made with. A call that reads several kinds declares one
+	// effect per kind.
+	Kind        string `yaml:"kind,omitempty"`
 	Call        string `yaml:"call"`
 	Effect      string `yaml:"effect"`
 	Consistency string `yaml:"consistency,omitempty"`
@@ -99,10 +107,10 @@ func (s Spec) validateModel() error {
 			if _, _, _, err := e.Symbol(); err != nil {
 				return fmt.Errorf("%s: %w", at, err)
 			}
-			if calls[e.Call] {
-				return fmt.Errorf("%s: call %s declared twice", at, e.Call)
+			if calls[e.Call+" "+e.Kind] {
+				return fmt.Errorf("%s: call %s declared twice for kind %q", at, e.Call, e.Kind)
 			}
-			calls[e.Call] = true
+			calls[e.Call+" "+e.Kind] = true
 			if !identifier.MatchString(e.Effect) {
 				return fmt.Errorf("%s: effect %q of %s must be an identifier", at, e.Effect, e.Call)
 			}

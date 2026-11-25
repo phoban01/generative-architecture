@@ -277,8 +277,12 @@ spec:
 - `key` is the abstraction object the reconcile request addresses.
 - `effects` names the effect of each client method the reconciler calls,
   as `<package path>.<interface>.<method>`.
+- `kind` restricts an effect to calls made with that kind, so a method that
+  reads several kinds declares one effect per kind.
 - `objectKeys` and `locals` map Go key fields and locals to abstraction
-  objects and locals.
+  objects and locals. A `client.ObjectKey{...}` literal needs no
+  declaration when its fields resolve to constants through the
+  abstraction, such as another object's name.
 - `initial` sets the initial value of each object's field.
 
 Write the properties the model must keep in the `constraints.yaml` that

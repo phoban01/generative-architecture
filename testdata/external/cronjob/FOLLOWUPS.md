@@ -277,7 +277,10 @@ documents keep what an adopter would write.
 - Remaining: `List` binds a filtered catalog list and `Status().Patch`
   binds patch options; both stay unsupported by generate. `Status().Update`
   generates through the status.update summary over the selected status
-  fields.
+  fields. A read keyed by a `client.ObjectKey` literal resolves through
+  the abstraction, and `kind` on an effect declaration lets one method
+  serve several kinds; the reference system's tenant controller generates
+  and samples with a declaration.
 
 ### 17. arch generate takes one field per resource (closed by #151)
 

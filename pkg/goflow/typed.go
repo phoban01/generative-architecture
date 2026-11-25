@@ -363,3 +363,38 @@ func aliasOf(obj types.Object) (Callee, bool) {
 	c, ok := funcAliases[Callee{Package: v.Pkg().Path(), Method: v.Name()}]
 	return c, ok
 }
+
+// FieldPath resolves a field selection rooted at a variable, such as
+// obj.Spec.Name, to the variable's name and the JSON path of the selection
+// (see jsonPath). It reports an error for any other expression.
+func FieldPath(info *types.Info, x ast.Expr) (root string, path []string, err error) {
+	var hops []*ast.SelectorExpr
+	n := x
+	for {
+		s, ok := ast.Unparen(n).(*ast.SelectorExpr)
+		if !ok {
+			break
+		}
+		sel, ok := info.Selections[s]
+		if !ok || sel.Kind() != types.FieldVal {
+			return "", nil, fmt.Errorf("%s is not a field selection", Code(s))
+		}
+		hops = append(hops, s)
+		n = s.X
+	}
+	id, ok := ast.Unparen(n).(*ast.Ident)
+	if !ok {
+		return "", nil, fmt.Errorf("%s is not rooted at a variable", Code(x))
+	}
+	if _, ok := info.Uses[id].(*types.Var); !ok {
+		return "", nil, fmt.Errorf("%s is not rooted at a variable", Code(x))
+	}
+	for i := len(hops) - 1; i >= 0; i-- {
+		segment, err := jsonPath(info.Selections[hops[i]])
+		if err != nil {
+			return "", nil, err
+		}
+		path = append(path, segment...)
+	}
+	return id.Name, path, nil
+}
