@@ -9,10 +9,10 @@ import (
 	"github.com/phoban01/generative-architecture/pkg/effect"
 	"github.com/phoban01/generative-architecture/pkg/ir"
 	"github.com/phoban01/generative-architecture/pkg/watchgen"
-	"github.com/phoban01/generative-architecture/pkg/watchmodel"
 
 	"k8s.io/apimachinery/pkg/api/meta"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -26,10 +26,10 @@ type Adapter struct {
 	dynamicStore *DynamicStore
 	mapper       meta.RESTMapper
 	api          *dynamicfake.FakeDynamicClient
-	watches      watchgen.Result
 	queue        *eventQueue
-	objects      map[string]*watchedObject
-	deliveries   map[string]string
+	watches      watchgen.Result
+	delivery     *generated.Watches
+	handlers     map[string]handler.EventHandler
 	emits        map[string]watchEvent
 	observed     []string
 	ctx          context.Context
@@ -51,10 +51,7 @@ type Adapter struct {
 // runs Reconcile through the proxy. A mutant Store writes a wrong endpoint.
 func New(ctx context.Context, e Example, mutant bool) *Adapter {
 	ctx, cancel := context.WithCancel(ctx)
-	a := &Adapter{watches: e.Watches, ctx: ctx, cancel: cancel, gate: effect.NewGate(), result: make(chan string, 1), objects: newWatchedObjects(), deliveries: map[string]string{}, emits: e.emits, observed: e.Observed, nodes: map[string]ir.Node{}, invocation: generated.NewInvocation()}
-	for _, o := range a.objects {
-		a.deliveries[watchmodel.DeliverAction(o.gvk)] = o.gvk.Kind
-	}
+	a := &Adapter{watches: e.Watches, ctx: ctx, cancel: cancel, gate: effect.NewGate(), result: make(chan string, 1), delivery: generated.NewWatches(), handlers: watchHandlers(), emits: e.emits, observed: e.Observed, nodes: map[string]ir.Node{}, invocation: generated.NewInvocation()}
 	for _, n := range e.ReconcileProcess.Nodes {
 		a.nodes[n.ID] = n
 	}
@@ -100,8 +97,8 @@ func (a *Adapter) Apply(ctx context.Context, event string) error {
 		a.emit(event)
 		return nil
 	}
-	if kind, ok := a.deliveries[event]; ok {
-		return a.deliver(kind)
+	if kind, ok := generated.WatchKindOf(event); ok {
+		return a.delivery.Deliver(a.ctx, kind, watchRules(a.watches, kind), a.queue, a.handlers, watchTypes())
 	}
 	if ok, err := a.invocation.Apply(event, a.begin); ok {
 		return err
@@ -154,8 +151,8 @@ func (a *Adapter) observe(id string, r effect.Result) {
 
 // emit records the watch event an applied action raises.
 func (a *Adapter) emit(event string) {
-	if e, ok := a.emits[event]; ok && a.objects[e.kind] != nil {
-		a.record(e.kind, e.event, e.generation)
+	if e, ok := a.emits[event]; ok {
+		a.delivery.Record(e.kind, e.event, e.generation)
 	}
 }
 
@@ -178,7 +175,7 @@ func (a *Adapter) Project(context.Context) (map[string]any, error) {
 		return nil, err
 	}
 	all := a.invocation.Project()
-	a.observeWatches(all)
+	a.delivery.Observe(all, a.queue)
 	for name, v := range apiState {
 		if _, dup := all[name]; dup {
 			return nil, fmt.Errorf("projected %s collides with an observed local", name)

@@ -1,29 +1,21 @@
 package database
 
 import (
-	"fmt"
-	"strconv"
-
 	apiv1 "github.com/phoban01/generative-architecture/examples/database/api/v1alpha1"
+	"github.com/phoban01/generative-architecture/examples/database/generated"
 	cr "github.com/phoban01/generative-architecture/pkg/controllerruntime"
 	"github.com/phoban01/generative-architecture/pkg/ir"
 	"github.com/phoban01/generative-architecture/pkg/watchgen"
 	"github.com/phoban01/generative-architecture/pkg/watchmodel"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/util/workqueue"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-// This file is the adapter's side of the watch model: it passes each event
-// through the native controller-runtime predicates and handlers into a
-// native FIFO. Adapter generation (M5) replaces it.
+// This file is the adapter's side of the watch model: the native FIFO the
+// generated delivery feeds and the native handlers of the extracted
+// mapping functions. The delivery itself is generated (watches_generated.go).
 
 var databaseKey = client.ObjectKey{Namespace: "demo", Name: "db-1"}
 
@@ -62,172 +54,32 @@ func (q *eventQueue) Deliver(deliver func(workqueue.TypedRateLimitingInterface[r
 	}
 }
 
-// watchedObject is the informer's view of one object: its undelivered
-// event, and the generation, resource version and reference of the object
-// now and when it was last delivered. The last delivered copy is the
-// ObjectOld of the next update.
-type watchedObject struct {
-	gvk                                 ir.GVK
-	event                               string
-	pending                             bool
-	generation, resourceVersion         int64
-	generationSeen, resourceVersionSeen int64
-	// reference and referenceSeen hold an instance's spec.databaseName.
-	reference, referenceSeen string
+// Queued reports whether a delivery queued the key since the last begin.
+func (q *eventQueue) Queued() bool { return q.queued }
+
+// Err is the first delivery outside the declared keys.
+func (q *eventQueue) Err() error { return q.err }
+
+// watchHandlers supplies the native handler of each mapping function the
+// extracted rules name, for the generated delivery.
+func watchHandlers() map[string]handler.EventHandler {
+	return map[string]handler.EventHandler{"InstanceToDatabase": handler.EnqueueRequestsFromMapFunc(InstanceToDatabase)}
 }
 
-// newWatchedObjects returns the informer view of the Database and of its
-// instance. The instance always names db-1: CreateDatabaseInstance writes
-// that reference and nothing changes it.
-func newWatchedObjects() map[string]*watchedObject {
-	return map[string]*watchedObject{
-		"Database":         {gvk: gvk("Database")},
-		"DatabaseInstance": {gvk: gvk("DatabaseInstance"), reference: databaseKey.Name, referenceSeen: databaseKey.Name},
-	}
+// watchTypes supplies the empty typed object of each kind a typed rule
+// delivers, for the generated delivery.
+func watchTypes() map[string]func() client.Object {
+	return map[string]func() client.Object{"DatabaseInstance": func() client.Object { return &apiv1.DatabaseInstance{} }}
 }
 
-// record notes a change of the object of kind, as the API server moves its
-// resource version and, on a create or a spec change, its generation. An
-// update behind an undelivered create waits; other events coalesce.
-func (a *Adapter) record(kind, ev string, generation bool) {
-	o := a.objects[kind]
-	o.resourceVersion++
-	switch ev {
-	case watchmodel.Create:
-		o.event, o.pending = ev, false
-		o.generation++
-		o.generationSeen, o.resourceVersionSeen = o.generation, o.resourceVersion
-	case watchmodel.Delete:
-		o.event, o.pending = ev, false
-	case watchmodel.Update:
-		o.pending = o.pending || o.event == watchmodel.Create
-		if o.event == "" {
-			o.event = ev
-		}
-		if generation {
-			o.generation++
+// watchRules converts the extracted rules on kind to the generated
+// delivery's rules, so a changed wiring is delivered as extracted.
+func watchRules(w watchgen.Result, kind string) []generated.WatchRule {
+	var out []generated.WatchRule
+	for _, rule := range w.Rules {
+		if rule.Resource.Kind == kind {
+			out = append(out, generated.WatchRule{Mapping: rule.Mapping, Unstructured: rule.Unstructured, Predicates: rule.Predicates})
 		}
 	}
-}
-
-// observeWatches returns the watch state under the model's names.
-func (a *Adapter) observeWatches(into map[string]any) {
-	key := ir.ObjectRef{GVK: a.objects["Database"].gvk, Namespace: databaseKey.Namespace, Name: databaseKey.Name}
-	into[watchmodel.QueuedVar(key)] = a.queue.queued
-	into[watchmodel.WrongKeyVar] = a.queue.err != nil
-	for _, o := range a.objects {
-		into[watchmodel.EventVar(o.gvk)] = o.event
-		into[watchmodel.PendingVar(o.gvk)] = o.pending
-		into[watchmodel.GenerationVar(o.gvk)] = o.generation
-		into[watchmodel.SeenVar(watchmodel.GenerationVar(o.gvk))] = o.generationSeen
-		into[watchmodel.ResourceVersionVar(o.gvk)] = o.resourceVersion
-		into[watchmodel.SeenVar(watchmodel.ResourceVersionVar(o.gvk))] = o.resourceVersionSeen
-	}
-	instance := a.objects["DatabaseInstance"]
-	reference := watchmodel.FieldVar(instance.gvk, []string{"Spec", "DatabaseName"})
-	into[reference] = instance.reference
-	into[watchmodel.SeenVar(reference)] = instance.referenceSeen
-}
-
-// deliver hands the event of the object of kind to every extracted watch
-// rule on kind, through the native predicates and handlers.
-func (a *Adapter) deliver(kind string) error {
-	o := a.objects[kind]
-	if o.event == "" {
-		return fmt.Errorf("no %s event to deliver", kind)
-	}
-	for _, rule := range a.watches.Rules {
-		if rule.Resource.Kind != kind {
-			continue
-		}
-		obj, old, err := o.objects(rule)
-		if err != nil {
-			return err
-		}
-		h := handler.EventHandler(&handler.EnqueueRequestForObject{})
-		if kind == "DatabaseInstance" {
-			h = handler.EnqueueRequestsFromMapFunc(InstanceToDatabase)
-		}
-		allow := true
-		for _, name := range rule.Predicates {
-			var p predicate.Predicate
-			switch name {
-			case "generationChanged":
-				p = predicate.GenerationChangedPredicate{}
-			case "resourceVersionChanged":
-				p = predicate.ResourceVersionChangedPredicate{}
-			default:
-				return fmt.Errorf("unsupported predicate %s", name)
-			}
-			switch o.event {
-			case watchmodel.Create:
-				allow = allow && p.Create(event.CreateEvent{Object: obj})
-			case watchmodel.Update:
-				allow = allow && p.Update(event.UpdateEvent{ObjectOld: old, ObjectNew: obj})
-			case watchmodel.Delete:
-				allow = allow && p.Delete(event.DeleteEvent{Object: obj})
-			}
-		}
-		if !allow {
-			continue
-		}
-		switch o.event {
-		case watchmodel.Create:
-			a.queue.Deliver(func(q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-				h.Create(a.ctx, event.CreateEvent{Object: obj}, q)
-			})
-		case watchmodel.Update:
-			a.queue.Deliver(func(q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-				h.Update(a.ctx, event.UpdateEvent{ObjectOld: old, ObjectNew: obj}, q)
-			})
-		case watchmodel.Delete:
-			a.queue.Deliver(func(q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
-				h.Delete(a.ctx, event.DeleteEvent{Object: obj}, q)
-			})
-		default:
-			return fmt.Errorf("unsupported event %s", o.event)
-		}
-	}
-	// A delivered create keeps the copy taken at creation, so that an
-	// update behind it compares against the created object.
-	if o.event != watchmodel.Create {
-		o.generationSeen, o.resourceVersionSeen, o.referenceSeen = o.generation, o.resourceVersion, o.reference
-	}
-	o.event = ""
-	if o.pending {
-		o.event = watchmodel.Update
-	}
-	o.pending = false
-	return a.queue.err
-}
-
-// objects builds the object an event carries and the last delivered copy,
-// typed or unstructured as rule watches them.
-func (o *watchedObject) objects(rule watchgen.Rule) (client.Object, client.Object, error) {
-	build := func(generation, resourceVersion int64, reference string) (client.Object, error) {
-		var obj client.Object
-		if o.gvk.Kind == "Database" {
-			obj = &apiv1.Database{ObjectMeta: metav1.ObjectMeta{Namespace: databaseKey.Namespace, Name: databaseKey.Name}}
-		} else {
-			obj = &apiv1.DatabaseInstance{ObjectMeta: metav1.ObjectMeta{Namespace: databaseKey.Namespace, Name: "instance-for-" + databaseKey.Name}, Spec: apiv1.DatabaseInstanceSpec{DatabaseName: reference}}
-		}
-		obj.SetGeneration(generation)
-		obj.SetResourceVersion(strconv.FormatInt(resourceVersion, 10))
-		if !rule.Unstructured {
-			return obj, nil
-		}
-		fields, err := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
-		if err != nil {
-			return nil, err
-		}
-		u := &unstructured.Unstructured{Object: fields}
-		u.SetGroupVersionKind(schema.GroupVersionKind{Group: rule.Resource.Group, Version: rule.Resource.Version, Kind: rule.Resource.Kind})
-		return u, nil
-	}
-	obj, err := build(o.generation, o.resourceVersion, o.reference)
-	if err != nil {
-		return nil, nil, err
-	}
-	old, err := build(o.generationSeen, o.resourceVersionSeen, o.referenceSeen)
-	return obj, old, err
+	return out
 }

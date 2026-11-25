@@ -143,6 +143,7 @@ func TestAdapterGeneratedFilesUpToDate(t *testing.T) {
 		"generated/environment_generated.go": adapterEnvironment,
 		"generated/gating_generated.go":      adapterGating,
 		"generated/invocation_generated.go":  adapterInvocation,
+		"generated/watches_generated.go":     adapterWatches,
 		"store_proxy_generated.go":           storeProxy,
 	} {
 		t.Run(file, func(t *testing.T) {
@@ -232,4 +233,56 @@ func adapterInvocation() ([]byte, error) {
 		Reconcile: "reconcile", Idle: "idle", Counter: invocationCounter, Outcome: config.Results[0],
 		Locals: e.Results, Types: e.Locals, Counters: counters,
 	})
+}
+
+// adapterWatches generates the native watch delivery from the extracted
+// rules and the abstraction: each watched kind with its fixture object and
+// the mapping fields with the one value the abstraction gives them. The
+// rules themselves reach the delivery at run time.
+func adapterWatches() ([]byte, error) {
+	e, err := Load(".")
+	if err != nil {
+		return nil, err
+	}
+	a, err := abstraction.Load("abstraction.yaml")
+	if err != nil {
+		return nil, err
+	}
+	database := gvk("Database")
+	d := adaptergen.WatchDelivery{Key: ir.ObjectRef{GVK: database, Namespace: databaseKey.Namespace, Name: databaseKey.Name}}
+	kinds := map[string]*adaptergen.WatchKind{}
+	var order []string
+	for _, rule := range e.Watches.Rules {
+		res := ir.GVK{Group: rule.Resource.Group, Version: rule.Resource.Version, Kind: rule.Resource.Kind}
+		k, ok := kinds[res.Kind]
+		if !ok {
+			k = &adaptergen.WatchKind{Resource: res}
+			for _, r := range a.Spec.Resources {
+				if r.GVK == res && len(r.Objects) == 1 {
+					k.Namespace, k.Name = r.Objects[0].Namespace, r.Objects[0].Name
+				}
+			}
+			kinds[res.Kind] = k
+			order = append(order, res.Kind)
+		}
+		if rule.Mapping == "self" || rule.Mapping == "owner" {
+			continue
+		}
+		// A mapping function reads the field the rule names; the abstraction
+		// gives it one value.
+		for _, r := range a.Spec.Resources {
+			if r.GVK != res {
+				continue
+			}
+			for _, f := range r.Fields {
+				if domain := r.ValueDomains[f.Key()]; goPath(abstraction.JSONPath(f.Path), rule.NamePath) && len(domain) == 1 {
+					k.Fields = append(k.Fields, adaptergen.WatchField{GoPath: rule.NamePath, JSONPath: abstraction.JSONPath(f.Path), Initial: domain[0]})
+				}
+			}
+		}
+	}
+	for _, kind := range order {
+		d.Kinds = append(d.Kinds, *kinds[kind])
+	}
+	return adaptergen.GenerateWatchDelivery("generated", d)
 }
