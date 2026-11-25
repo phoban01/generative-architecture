@@ -34,7 +34,11 @@ func extractReconcile(t *testing.T) (goflow.Options, *goflow.Program) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	opts, err := ExtractOptions(l, abs)
+	s, err := NewSettings(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	opts, err := ExtractOptions(l, abs, s)
 	if err != nil {
 		t.Fatal(err)
 	}

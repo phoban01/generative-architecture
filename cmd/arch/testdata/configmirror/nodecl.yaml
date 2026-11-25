@@ -1,0 +1,21 @@
+apiVersion: architecture.local/v1alpha1
+kind: Project
+metadata:
+  name: config-mirror-undeclared-controller
+spec:
+  # ConfigMirror without a controller declaration: arch generate refuses it.
+  module: github.com/phoban01/generative-architecture
+  packages:
+    - ./examples/configmirror
+  catalog:
+    discovery:
+      - discovery.json
+  constraints:
+    - constraints.yaml
+  abstraction: abstraction.yaml
+  runtime:
+    profile: controller-runtime
+    maxTicks: 20
+  bounds:
+    maxObjectsPerResource: 2
+    maxInvocations: 3

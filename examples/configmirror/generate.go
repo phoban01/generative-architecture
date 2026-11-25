@@ -21,13 +21,14 @@ import (
 	"github.com/phoban01/generative-architecture/pkg/krm"
 	"github.com/phoban01/generative-architecture/pkg/model"
 	"github.com/phoban01/generative-architecture/pkg/process"
+	"github.com/phoban01/generative-architecture/pkg/project"
 	"github.com/phoban01/generative-architecture/pkg/summaries"
 )
 
 // This file derives the ConfigMirror model from its authored inputs. The
-// declarations below are the only facts about the controller that are not
-// read from its source, the Abstraction document or the summary library;
-// each is stated by symbol, never by source text.
+// facts about the controller that are not read from its source, the
+// Abstraction document or the summary library come from project.yaml (see
+// Settings); each is stated by symbol, never by source text.
 
 // clientPackage declares the controller-runtime client interfaces.
 const clientPackage = "sigs.k8s.io/controller-runtime/pkg/client"
@@ -41,25 +42,70 @@ type clientEffect struct {
 	Effect, Operation, Consistency string
 }
 
-var reconcileEffects = map[goflow.Callee]clientEffect{
-	{Package: clientPackage, Receiver: "Client", Method: "Get"}:    {"readSource", ir.OpGet, ir.ConsistencyCached},
-	{Package: clientPackage, Receiver: "Reader", Method: "Get"}:    {"readTarget", ir.OpGet, ir.ConsistencyDirect},
-	{Package: clientPackage, Receiver: "Client", Method: "Update"}: {"writeTarget", ir.OpUpdate, ir.ConsistencyDirect},
+// requestKey is the symbol of the reconcile request's key field.
+const requestKey = "sigs.k8s.io/controller-runtime/pkg/reconcile.Request.NamespacedName"
+
+// Settings are the facts about the controller that neither its source, the
+// Abstraction document nor the summary library carries. The project
+// document declares them under spec.controllers, spec.initial and
+// spec.runtime, as it does for arch generate.
+type Settings struct {
+	// Effects is what a call of each client method means.
+	Effects map[goflow.Callee]clientEffect
+	// KeyObjects names, by field symbol, the abstraction object each key
+	// expression addresses. The reconcile request's key maps to the
+	// controller's key object.
+	KeyObjects map[string]string
+	// Locals keeps a selected field of a Go object local in a declared
+	// abstraction local, by "<local>.<path>".
+	Locals map[string]string
+	// Initial is the initial value of each object's selected field.
+	Initial map[string]string
+	// Runtime is the controller's runtime profile.
+	Runtime struct {
+		Name                          string
+		Workers, RetryTicks, MaxTicks int
+	}
 }
 
-// keyObjects names, by field symbol, the abstraction object each key
-// expression addresses: the reconcile request carries the source object's
-// key (the controller is driven by that object), and the reconciler's
-// Target field holds the copy's key.
-var keyObjects = map[string]string{
-	"sigs.k8s.io/controller-runtime/pkg/reconcile.Request.NamespacedName":                 "source",
-	"github.com/phoban01/generative-architecture/examples/configmirror.Reconciler.Target": "copy",
-}
+// clientOperations maps a client method to its summary operation.
+var clientOperations = map[string]string{"Get": ir.OpGet, "Update": ir.OpUpdate}
 
-// localFields keeps a selected field of a Go object local in a declared
-// abstraction local instead of a generated one: the value read from the
-// source is the snapshot the controller copies.
-var localFields = map[string]string{"source.data.value": "snapshot"}
+// NewSettings reads the settings of the sample's one controller from its
+// project document. The consistency of an effect follows the injection
+// pattern unless declared: a read through the manager's client (receiver
+// Client) is served by the informer cache, any other call goes to the API
+// server.
+func NewSettings(p project.Project) (Settings, error) {
+	if len(p.Spec.Controllers) != 1 {
+		return Settings{}, fmt.Errorf("project %s declares %d controllers, want one", p.Name, len(p.Spec.Controllers))
+	}
+	decl := p.Spec.Controllers[0]
+	s := Settings{Effects: map[goflow.Callee]clientEffect{}, KeyObjects: map[string]string{requestKey: decl.Key}, Locals: decl.Locals, Initial: p.Spec.Initial}
+	for _, e := range decl.Effects {
+		pkg, receiver, method, err := e.Symbol()
+		if err != nil {
+			return Settings{}, err
+		}
+		op, ok := clientOperations[method]
+		if !ok {
+			return Settings{}, fmt.Errorf("%s: method %s is not supported; supported methods are Get and Update", e.Call, method)
+		}
+		consistency := e.Consistency
+		if consistency == "" {
+			consistency = ir.ConsistencyDirect
+			if op == ir.OpGet && receiver == "Client" {
+				consistency = ir.ConsistencyCached
+			}
+		}
+		s.Effects[goflow.Callee{Package: pkg, Receiver: receiver, Method: method}] = clientEffect{e.Effect, op, consistency}
+	}
+	for symbol, object := range decl.ObjectKeys {
+		s.KeyObjects[symbol] = object
+	}
+	s.Runtime.Name, s.Runtime.Workers, s.Runtime.RetryTicks, s.Runtime.MaxTicks = decl.Name, decl.Workers, decl.RetryTicks, p.Spec.Runtime.MaxTicks
+	return s, nil
+}
 
 // versionPath is the JSON path of the object version the summaries compare.
 var versionPath = []string{"metadata", "resourceVersion"}
@@ -71,12 +117,13 @@ type extraction struct {
 	body     *ast.BlockStmt
 	locals   map[string]abstraction.Resource // Go object local -> its resource
 	resource map[ir.GVK]abstraction.Resource
+	settings Settings
 }
 
 // localVariable is the model variable holding a selected field of a Go
 // object local.
-func localVariable(local string, fieldPath []string) string {
-	if v, ok := localFields[local+"."+abstraction.PathKey(fieldPath)]; ok {
+func (x *extraction) localVariable(local string, fieldPath []string) string {
+	if v, ok := x.settings.Locals[local+"."+abstraction.PathKey(fieldPath)]; ok {
 		return v
 	}
 	return local + "_" + strings.Join(fieldPath, "_")
@@ -90,8 +137,8 @@ func cacheVariable(v string) string { return adaptergen.CachedVariable(v) }
 // calls resolve by callee symbol to their effects and summary bindings, and
 // fields of object locals resolve by JSON path to model variables. It uses
 // no statement callback and no source-text map.
-func ExtractOptions(l goflow.Loaded, abs abstraction.Abstraction) (goflow.Options, error) {
-	x := &extraction{abs: abs, info: l.Package.TypesInfo, body: l.Func.Body, locals: map[string]abstraction.Resource{}, resource: map[ir.GVK]abstraction.Resource{}}
+func ExtractOptions(l goflow.Loaded, abs abstraction.Abstraction, s Settings) (goflow.Options, error) {
+	x := &extraction{abs: abs, info: l.Package.TypesInfo, body: l.Func.Body, locals: map[string]abstraction.Resource{}, resource: map[ir.GVK]abstraction.Resource{}, settings: s}
 	for _, r := range abs.Spec.Resources {
 		if len(r.Fields) != 1 {
 			return goflow.Options{}, fmt.Errorf("resource %s: generation supports exactly one selected field, got %d", r.GVK, len(r.Fields))
@@ -124,7 +171,7 @@ func ExtractOptions(l goflow.Loaded, abs abstraction.Abstraction) (goflow.Option
 		}
 		x.locals[id.Name] = r
 		f := r.Fields[0]
-		scope[localVariable(id.Name, f.Path)] = expr.Symbol{Type: f.Type, Quint: localVariable(id.Name, f.Path)}
+		scope[x.localVariable(id.Name, f.Path)] = expr.Symbol{Type: f.Type, Quint: x.localVariable(id.Name, f.Path)}
 		return true
 	})
 	if err != nil {
@@ -165,14 +212,14 @@ func (x *extraction) field(root string, fieldPath []string) (expr.Expression, bo
 	if !ok || abstraction.PathKey(fieldPath) != abstraction.PathKey(r.Fields[0].Path) {
 		return "", false
 	}
-	return expr.Expression(localVariable(root, fieldPath)), true
+	return expr.Expression(x.localVariable(root, fieldPath)), true
 }
 
 // call summarizes a client call: its effect, operation, consistency and
 // the bindings of the summary placeholders to the addressed object's
 // variables and the Go local the object is read into or written from.
 func (x *extraction) call(c goflow.Callee, call *ast.CallExpr, _ goflow.Convert) (goflow.Node, bool, error) {
-	e, ok := reconcileEffects[c]
+	e, ok := x.settings.Effects[c]
 	if !ok {
 		return goflow.Node{}, false, nil
 	}
@@ -201,17 +248,17 @@ func (x *extraction) call(c goflow.Callee, call *ast.CallExpr, _ goflow.Convert)
 	version := abstraction.VariableName(r.GVK.Kind, object, versionPath)
 	b := map[string]string{
 		"$exists":          abstraction.ExistsVariable(r.GVK.Kind, object),
-		"$snapshotVersion": localVariable(local, versionPath),
+		"$snapshotVersion": x.localVariable(local, versionPath),
 	}
 	switch {
 	case e.Operation == ir.OpGet && e.Consistency == ir.ConsistencyCached:
 		// Objects are neither created nor deleted while the model runs, so
 		// the cache's view of existence is the API server's.
-		b["$cache"], b["$cacheVersion"], b["$snapshot"] = cacheVariable(value), cacheVariable(version), localVariable(local, f.Path)
+		b["$cache"], b["$cacheVersion"], b["$snapshot"] = cacheVariable(value), cacheVariable(version), x.localVariable(local, f.Path)
 	case e.Operation == ir.OpGet:
-		b["$object"], b["$resourceVersion"], b["$snapshot"] = value, version, localVariable(local, f.Path)
+		b["$object"], b["$resourceVersion"], b["$snapshot"] = value, version, x.localVariable(local, f.Path)
 	case e.Operation == ir.OpUpdate:
-		b["$object"], b["$resourceVersion"], b["$value"] = value, version, localVariable(local, f.Path)
+		b["$object"], b["$resourceVersion"], b["$value"] = value, version, x.localVariable(local, f.Path)
 	default:
 		return goflow.Node{}, false, fmt.Errorf("%s: no bindings for operation %s", c, e.Operation)
 	}
@@ -254,7 +301,7 @@ func (x *extraction) key(arg ast.Expr) (string, error) {
 		return "", fmt.Errorf("object key %s is not a field of a named type", goflow.Code(arg))
 	}
 	symbol := n.Obj().Pkg().Path() + "." + n.Obj().Name() + "." + s.Obj().Name()
-	object, ok := keyObjects[symbol]
+	object, ok := x.settings.KeyObjects[symbol]
 	if !ok {
 		return "", fmt.Errorf("object key %s addresses no declared object", symbol)
 	}
@@ -286,7 +333,7 @@ func (x *extraction) readInto(local string) (string, error) {
 		if !ok {
 			return true
 		}
-		e, ok := reconcileEffects[goflow.Callee{Package: s.Obj().Pkg().Path(), Receiver: named.Obj().Name(), Method: s.Obj().Name()}]
+		e, ok := x.settings.Effects[goflow.Callee{Package: s.Obj().Pkg().Path(), Receiver: named.Obj().Name(), Method: s.Obj().Name()}]
 		if !ok || e.Operation != ir.OpGet {
 			return true
 		}
@@ -304,21 +351,6 @@ func (x *extraction) readInto(local string) (string, error) {
 	}
 	return found[0], nil
 }
-
-// Declarations for the model that are neither in the Abstraction document
-// nor derivable from the source: the fixtures the replay creates and the
-// runtime profile the adapter's worker runs with.
-var (
-	// initialValues are the fixtures' selected field values; every
-	// abstracted object exists before the controller runs.
-	initialValues = map[string]string{"source": `"a"`, "copy": `""`}
-	// The runtime profile: one controller with one worker and one key,
-	// the object the reconcile request addresses.
-	runtimeController = "mirror"
-	runtimeWorkers    = 1
-	runtimeRetryTicks = 2
-	runtimeMaxTicks   = 20
-)
 
 // Runtime events: the actions of the controller-runtime profile the model
 // composes with the process, which replay drives through the worker.
@@ -365,6 +397,14 @@ func Generate(root string) (model.Spec, error) {
 // (see goflow.LoadOptions), so a mutated controller rebuilds the model
 // without being written to disk.
 func GenerateOverlay(root string, overlay map[string][]byte) (model.Spec, error) {
+	p, err := project.Load(filepath.Join(root, "project.yaml"))
+	if err != nil {
+		return model.Spec{}, err
+	}
+	s, err := NewSettings(p)
+	if err != nil {
+		return model.Spec{}, err
+	}
 	abs, err := abstraction.Load(filepath.Join(root, "abstraction.yaml"))
 	if err != nil {
 		return model.Spec{}, err
@@ -373,7 +413,7 @@ func GenerateOverlay(root string, overlay map[string][]byte) (model.Spec, error)
 	if err != nil {
 		return model.Spec{}, err
 	}
-	opts, err := ExtractOptions(l, abs)
+	opts, err := ExtractOptions(l, abs, s)
 	if err != nil {
 		return model.Spec{}, err
 	}
@@ -387,7 +427,7 @@ func GenerateOverlay(root string, overlay map[string][]byte) (model.Spec, error)
 	if _, err = krm.Read(filepath.Join(root, "constraints.yaml"), "ModelConstraints", &constraints); err != nil {
 		return model.Spec{}, err
 	}
-	return compose(abs, *program, constraints.Properties)
+	return compose(s, abs, *program, constraints.Properties)
 }
 
 // objectInfo is an abstracted object and its model variables.
@@ -411,11 +451,11 @@ func objectsOf(abs abstraction.Abstraction) map[string]objectInfo {
 	return out
 }
 
-func compose(abs abstraction.Abstraction, program goflow.Program, constraints []model.Property) (model.Spec, error) {
+func compose(s Settings, abs abstraction.Abstraction, program goflow.Program, constraints []model.Property) (model.Spec, error) {
 	objects := objectsOf(abs)
 	state := abs.StateVariables()
 	for _, o := range objects {
-		initial, ok := initialValues[o.object.ID]
+		initial, ok := s.Initial[o.object.ID]
 		if !ok || !slices.Contains(o.resource.ValueDomains[o.resource.Fields[0].Key()], initial) {
 			return model.Spec{}, fmt.Errorf("object %s: initial value %q is not in its value domain", o.object.ID, initial)
 		}
@@ -497,7 +537,7 @@ func compose(abs abstraction.Abstraction, program goflow.Program, constraints []
 	spec.State[finishedVariable] = model.Variable{Type: abstraction.TypeBool, Initial: "true"}
 	renameEffectActions(&spec, program)
 
-	runtime, err := runtimeActions(abs, program, reset)
+	runtime, err := runtimeActions(s, abs, program, reset)
 	if err != nil {
 		return model.Spec{}, err
 	}
@@ -545,12 +585,12 @@ func renameEffectActions(spec *model.Spec, program goflow.Program) {
 // cannot occur, and the client errors it returns are never terminal. With
 // a single key the queue order variables carry no information and are
 // dropped; the abstraction's invocation bound limits consecutive retries.
-func runtimeActions(abs abstraction.Abstraction, program goflow.Program, reset map[string]expr.Expression) (model.Spec, error) {
-	g, binding, err := RuntimeModel(abs)
+func runtimeActions(s Settings, abs abstraction.Abstraction, program goflow.Program, reset map[string]expr.Expression) (model.Spec, error) {
+	g, binding, err := RuntimeModel(abs, s)
 	if err != nil {
 		return model.Spec{}, err
 	}
-	prefix := runtimeController + "_" + g.Profile.Controllers[0].Keys[0].ID + "_"
+	prefix := s.Runtime.Name + "_" + g.Profile.Controllers[0].Keys[0].ID + "_"
 	names := map[string]expr.Expression{}
 	out := model.Spec{State: map[string]model.Variable{}}
 	for name, short := range binding.Variables {
@@ -598,7 +638,7 @@ func runtimeActions(abs abstraction.Abstraction, program goflow.Program, reset m
 		if err != nil {
 			return model.Spec{}, err
 		}
-		out.Properties = append(out.Properties, model.Property{Name: strings.TrimPrefix(strings.TrimPrefix(p.Name, prefix), runtimeController+"_"), Expression: e})
+		out.Properties = append(out.Properties, model.Property{Name: strings.TrimPrefix(strings.TrimPrefix(p.Name, prefix), s.Runtime.Name+"_"), Expression: e})
 	}
 	return out, nil
 }
@@ -609,11 +649,11 @@ func runtimeActions(abs abstraction.Abstraction, program goflow.Program, reset m
 // and every state variable but the queue order loses the controller and key
 // prefix. The adapter's worker routing and projection are generated from
 // both (see gen_test.go).
-func RuntimeModel(abs abstraction.Abstraction) (cr.GroupModel, adaptergen.RuntimeBinding, error) {
+func RuntimeModel(abs abstraction.Abstraction, s Settings) (cr.GroupModel, adaptergen.RuntimeBinding, error) {
 	var key abstraction.Object
 	for _, r := range abs.Spec.Resources {
 		for _, o := range r.Objects {
-			if o.ID == keyObjects["sigs.k8s.io/controller-runtime/pkg/reconcile.Request.NamespacedName"] {
+			if o.ID == s.KeyObjects[requestKey] {
 				key = o
 			}
 		}
@@ -621,15 +661,15 @@ func RuntimeModel(abs abstraction.Abstraction) (cr.GroupModel, adaptergen.Runtim
 	if key.ID == "" {
 		return cr.GroupModel{}, adaptergen.RuntimeBinding{}, fmt.Errorf("the reconcile key addresses no abstracted object")
 	}
-	g, err := cr.BuildGroupModel(cr.GroupProfile{Name: "ConfigMirror", MaxTicks: runtimeMaxTicks, Controllers: []cr.ModelController{{
-		Name: runtimeController, Workers: runtimeWorkers, RetryTicks: runtimeRetryTicks, AfterTicks: runtimeRetryTicks,
+	g, err := cr.BuildGroupModel(cr.GroupProfile{Name: "ConfigMirror", MaxTicks: s.Runtime.MaxTicks, Controllers: []cr.ModelController{{
+		Name: s.Runtime.Name, Workers: s.Runtime.Workers, RetryTicks: s.Runtime.RetryTicks, AfterTicks: s.Runtime.RetryTicks,
 		Keys: []cr.ModelKey{{ID: key.ID, Namespace: key.Namespace, Name: key.Name}},
 	}}})
 	if err != nil {
 		return cr.GroupModel{}, adaptergen.RuntimeBinding{}, err
 	}
-	prefix := runtimeController + "_" + key.ID + "_"
-	dropped := map[string]bool{runtimeController + "_next": true, prefix + "order": true}
+	prefix := s.Runtime.Name + "_" + key.ID + "_"
+	dropped := map[string]bool{s.Runtime.Name + "_next": true, prefix + "order": true}
 	b := adaptergen.RuntimeBinding{
 		Events:    map[string]string{"advance": EventAdvance, prefix + "enqueue": EventEnqueue, prefix + "start": EventBegin, prefix + "fire": EventFire, prefix + "success": EventFinish, prefix + "error": EventFinishError, prefix + "requeue": EventFinishRequeue, prefix + "after": EventFinishAfter, prefix + "errorAfter": EventFinishErrorAfter},
 		Variables: map[string]string{},

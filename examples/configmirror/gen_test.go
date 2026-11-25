@@ -24,6 +24,7 @@ import (
 	"github.com/phoban01/generative-architecture/pkg/goflow"
 	"github.com/phoban01/generative-architecture/pkg/ir"
 	"github.com/phoban01/generative-architecture/pkg/model"
+	"github.com/phoban01/generative-architecture/pkg/project"
 	"github.com/phoban01/generative-architecture/pkg/summaries"
 )
 
@@ -467,7 +468,15 @@ func adapterRuntime() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	g, binding, err := RuntimeModel(a)
+	p, err := project.Load("project.yaml")
+	if err != nil {
+		return nil, err
+	}
+	s, err := NewSettings(p)
+	if err != nil {
+		return nil, err
+	}
+	g, binding, err := RuntimeModel(a, s)
 	if err != nil {
 		return nil, err
 	}

@@ -22,7 +22,7 @@ import (
 
 // configMirror is the ConfigMirror sample with its model declarations in
 // the project document.
-const configMirror = "testdata/configmirror/project.yaml"
+const configMirror = "../../examples/configmirror/project.yaml"
 
 // generateTo runs arch extract and arch generate into a temporary
 // directory and returns the directory and generate's error.
@@ -76,12 +76,12 @@ func TestGenerateConfigMirror(t *testing.T) {
 	for _, f := range r.Files {
 		recorded[f.Path] = true
 	}
-	for _, want := range []string{"examples/configmirror/controller.go", "cmd/arch/testdata/configmirror/project.yaml", "cmd/arch/testdata/configmirror/abstraction.yaml", "cmd/arch/testdata/configmirror/constraints.yaml", "go.mod"} {
+	for _, want := range []string{"examples/configmirror/controller.go", "examples/configmirror/project.yaml", "examples/configmirror/abstraction.yaml", "examples/configmirror/constraints.yaml", "examples/configmirror/hints.yaml", "go.mod"} {
 		if !recorded[want] {
 			t.Errorf("receipt does not record %s", want)
 		}
 	}
-	if !r.Owns("examples/configmirror/controller.go") || !r.Owns("cmd/arch/testdata/configmirror/project.yaml") || r.Owns("pkg/model/model.go") || r.Owns("go.mod") {
+	if !r.Owns("examples/configmirror/controller.go") || !r.Owns("examples/configmirror/project.yaml") || r.Owns("pkg/model/model.go") || r.Owns("go.mod") {
 		t.Errorf("receipt owned entries %v", r.Owned)
 	}
 	if r.Bounds["maxInvocations"] != 3 || r.Tools["go"] == "" {
@@ -142,7 +142,7 @@ func TestGenerateFailsClosed(t *testing.T) {
 		}
 	})
 	t.Run("no declaration", func(t *testing.T) {
-		_, err := generateTo(t, "../../examples/configmirror/project.yaml")
+		_, err := generateTo(t, "testdata/configmirror/nodecl.yaml")
 		if err == nil || !strings.Contains(err.Error(), "has no declaration") {
 			t.Fatalf("got %v", err)
 		}

@@ -249,7 +249,7 @@ func TestOwnedProjectGuideWalk(t *testing.T) {
 	wantErr(err, "arch generate: unsupported operation: "+filepath.Join(refOut, irFile)+" has 3 controllers; composing more than one controller into one model is not supported yet")
 
 	// Section 9: the ConfigMirror pipeline.
-	const cm = "arch --project cmd/arch/testdata/configmirror/project.yaml --out /tmp/configmirror "
+	const cm = "arch --project examples/configmirror/project.yaml --out /tmp/configmirror "
 	for _, c := range []string{"extract", "generate"} {
 		if _, _, err := w.arch(cm + c); err != nil {
 			t.Fatalf("arch %s: %v", c, err)

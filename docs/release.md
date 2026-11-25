@@ -74,7 +74,7 @@ make envtest
 ## 5. Architecture pipeline job
 
 The `architecture` job calls `.github/workflows/arch.yml` on
-`cmd/arch/testdata/configmirror/project.yaml` with tools from `hack/tools`.
+`examples/configmirror/project.yaml` with tools from `hack/tools`.
 It runs `extract`, `generate`, `check`, `replay`, `render` and `diff`.
 Locally:
 

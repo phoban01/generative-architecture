@@ -240,7 +240,7 @@ With an abstraction, the fields it selects are no longer unresolved.
 
 `arch generate` needs facts that neither the source nor the abstraction
 carries. Declare them under `spec.controllers`, and set `runtime.maxTicks`.
-`cmd/arch/testdata/configmirror/project.yaml` does this for ConfigMirror:
+`examples/configmirror/project.yaml` does this for ConfigMirror:
 
 ```yaml
 spec:
@@ -304,11 +304,11 @@ arch generate: unsupported operation: examples/refsystem/generated/ir.yaml has 3
 ConfigMirror has one controller, so the whole pipeline runs on it:
 
 ```sh
-arch --project cmd/arch/testdata/configmirror/project.yaml --out /tmp/configmirror extract
-arch --project cmd/arch/testdata/configmirror/project.yaml --out /tmp/configmirror generate
-arch --project cmd/arch/testdata/configmirror/project.yaml --out /tmp/configmirror check
-arch --project cmd/arch/testdata/configmirror/project.yaml --out /tmp/configmirror replay
-arch --project cmd/arch/testdata/configmirror/project.yaml --out /tmp/configmirror render
+arch --project examples/configmirror/project.yaml --out /tmp/configmirror extract
+arch --project examples/configmirror/project.yaml --out /tmp/configmirror generate
+arch --project examples/configmirror/project.yaml --out /tmp/configmirror check
+arch --project examples/configmirror/project.yaml --out /tmp/configmirror replay
+arch --project examples/configmirror/project.yaml --out /tmp/configmirror render
 ```
 
 - `arch generate` writes `model.yaml`, `Model.qnt`, the LikeC4 workspace

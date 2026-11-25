@@ -88,7 +88,7 @@ func TestClientEffectSymbol(t *testing.T) {
 }
 
 func TestLoadHashesAbstraction(t *testing.T) {
-	p, err := Load("../../cmd/arch/testdata/configmirror/project.yaml")
+	p, err := Load("../../examples/configmirror/project.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}

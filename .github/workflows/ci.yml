@@ -75,7 +75,7 @@ jobs:
     needs: go
     uses: ./.github/workflows/arch.yml
     with:
-      project: cmd/arch/testdata/configmirror/project.yaml
+      project: examples/configmirror/project.yaml
       arch-package: ./cmd/arch
       tools-dir: hack/tools
       seed: 20261013
