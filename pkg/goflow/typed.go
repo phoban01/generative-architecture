@@ -30,7 +30,8 @@ func ExtractTyped(l Loaded, opts Options) (*Program, error) {
 	if opts.File == "" {
 		opts.File = l.Path
 	}
-	e := &extractor{opts: opts, fset: l.Package.Fset, info: l.Package.TypesInfo}
+	e := &extractor{opts: opts, fset: l.Package.Fset, info: l.Package.TypesInfo, method: l.Func.Body}
+	e.collectClosures()
 	return e.run(source, l.Func)
 }
 
@@ -219,6 +220,9 @@ func (e *extractor) fieldPath(x *ast.SelectorExpr) (string, []string, error) {
 			return "", nil, e.diagnose(hops[i], "field", err.Error())
 		}
 		path = append(path, segment...)
+	}
+	if bound, ok := e.boundRoot(root); ok {
+		return bound, path, nil
 	}
 	return root.Name, path, nil
 }

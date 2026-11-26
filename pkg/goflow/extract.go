@@ -152,6 +152,12 @@ type extractor struct {
 	// results maps each local that holds a reconcile result literal for
 	// good to that literal (see resultLocals).
 	results map[types.Object]*ast.CompositeLit
+	// method is the body of the extracted method; closures are the
+	// function literals bound once to its locals, and frames the inlined
+	// closure calls in progress (see closures.go).
+	method   *ast.BlockStmt
+	closures map[*types.Var]*ast.FuncLit
+	frames   []inlineFrame
 }
 
 func (e *extractor) expression(n ast.Expr, want string) (expr.Expression, error) {
@@ -174,6 +180,9 @@ func (e *extractor) translate(n ast.Expr) (expr.Expression, error) {
 		return "(" + v + ")", err
 	case *ast.Ident:
 		if e.info != nil {
+			if arg, ok := e.boundArgument(e.info.Uses[x]); ok {
+				return e.translate(arg)
+			}
 			if v, ok, err := e.typedIdent(x); ok || err != nil {
 				return v, err
 			}
@@ -329,6 +338,14 @@ func (e *extractor) statement(s ast.Stmt, next int) (int, error) {
 		}
 	}
 	if e.info != nil {
+		if len(e.frames) > 0 {
+			if ret, ok := s.(*ast.ReturnStmt); ok {
+				return e.inlineReturn(ret, e.frames[len(e.frames)-1])
+			}
+		}
+		if id, ok, err := e.closureStatement(s, next); ok || err != nil {
+			return id, err
+		}
 		if id, ok, err := e.typedStatement(s, next); ok || err != nil {
 			return id, err
 		}

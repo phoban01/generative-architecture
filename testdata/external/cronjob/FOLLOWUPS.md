@@ -144,7 +144,7 @@ smallest extension that would support it.
 - Remaining: the delay keeps its Go source and the model uses its own
   delay, as for a literal in the return.
 
-### 8. Calls of function literals bound to locals
+### 8. Calls of function literals bound to locals (closed by #159)
 
 - Construct: helper closures `isJobFinished` (173),
   `getScheduledTimeForJob` (188), `getNextSchedule` (344) and
@@ -155,6 +155,12 @@ smallest extension that would support it.
   local and never reassigned like a function declaration. Extract its body
   at the call, or let the author summarize it by name in the Project
   document.
+- Resolution: since #159 a function literal bound once to a local extracts
+  like a function declaration: each call inlines the body with the
+  parameters bound to the arguments, and a return assigns the locals the
+  call assigns. The four closures no longer appear; the calls at lines 400
+  and 504 now report that their result locals (`missedRun`, a time, and
+  `job`, an object) are not model symbols, which gaps 11 and 18 cover.
 
 ### 9. range loops
 

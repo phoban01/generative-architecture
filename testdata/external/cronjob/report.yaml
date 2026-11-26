@@ -9,7 +9,7 @@ status:
     conformance: 0
     safety: 0
     tool: 0
-    unsupported: 32
+    unsupported: 28
   scope: 'no model: arch extract failed closed on the unmodified controller, so arch generate, check and replay did not run; no tool sampled or replayed anything'
   traces: 0
   transitions: 0
@@ -22,10 +22,6 @@ status:
       message: 'arch extract: internal/controller/cronjob_controller.go:165: declaration "var failedJobs []*kbatch.Job": unsupported Go statement'
     - category: unsupported
       message: 'arch extract: internal/controller/cronjob_controller.go:166: declaration "var mostRecentTime *time.Time // find the last run so we can update the status": unsupported Go statement'
-    - category: unsupported
-      message: 'arch extract: internal/controller/cronjob_controller.go:173: assign "isJobFinished := func(job *kbatch.Job) (bool, kbatch.JobConditionType) {": unsupported Go statement'
-    - category: unsupported
-      message: 'arch extract: internal/controller/cronjob_controller.go:188: assign "getScheduledTimeForJob := func(job *kbatch.Job) (*time.Time, error) {": unsupported Go statement'
     - category: unsupported
       message: 'arch extract: internal/controller/cronjob_controller.go:202: range "for i, job := range childJobs.Items {": unsupported Go statement'
     - category: unsupported
@@ -49,9 +45,7 @@ status:
     - category: unsupported
       message: 'arch extract: internal/controller/cronjob_controller.go:321: expression "nil": unsupported Go expression'
     - category: unsupported
-      message: 'arch extract: internal/controller/cronjob_controller.go:344: assign "getNextSchedule := func(cronJob *batchv1.CronJob, now time.Time) (lastMissed time.Time, next time.Time, err error) {": unsupported Go statement'
-    - category: unsupported
-      message: 'arch extract: internal/controller/cronjob_controller.go:400: assign "missedRun, nextRun, err := getNextSchedule(&cronJob, r.Now())": unsupported Go statement'
+      message: 'arch extract: internal/controller/cronjob_controller.go:400: closure "missedRun": closure result local missedRun is not a model symbol'
     - category: unsupported
       message: 'arch extract: internal/controller/cronjob_controller.go:413: call "r.Now()": call to tutorial.kubebuilder.io/project/internal/controller.CronJobReconciler.Now inside a logging call; dropping the log would drop it'
     - category: unsupported
@@ -69,9 +63,7 @@ status:
     - category: unsupported
       message: 'arch extract: internal/controller/cronjob_controller.go:451: range "for _, activeJob := range activeJobs {": unsupported Go statement'
     - category: unsupported
-      message: 'arch extract: internal/controller/cronjob_controller.go:475: assign "constructJobForCronJob := func(cronJob *batchv1.CronJob, scheduledTime time.Time) (*kbatch.Job, error) {": unsupported Go statement'
-    - category: unsupported
-      message: 'arch extract: internal/controller/cronjob_controller.go:504: assign "job, err := constructJobForCronJob(&cronJob, missedRun)": unsupported Go statement'
+      message: 'arch extract: internal/controller/cronjob_controller.go:504: closure "job": closure result local job is not a model symbol'
     - category: unsupported
       message: 'arch generate: not run: arch extract wrote no ir.yaml'
     - category: unsupported
@@ -83,6 +75,6 @@ status:
     catalog/batch-v1.json: a972f6b207e83e52f80baf5821e20d7b154c788b092a412945c2254566159d15
     config/crd/bases/batch.tutorial.kubebuilder.io_cronjobs.yaml: 4016e4984192bbd6ae9e460e5b39bda35a7fac44ed19a63efa60c16018e83630
     constraints.yaml: d65c2cebdb865f0f4234cfdd8470927640fb9aacf68e7d5f51e7ac7cc57657a4
-    generated/support.yaml: c8f640b93bd8e134f124c2b64439a732de4a6bbe645f817615f36150b69899e2
+    generated/support.yaml: f65747ba99fff7a1ae3270b4f9e15f38395a83634b80e02b94165dacde4be229
     internal/controller/cronjob_controller.go: b9bde9f751609f2661062c88b86e73e70125e4fd136475bb6e1eec37686db5aa
     project.yaml: b964264e5f1f239bef530a8ed965b19c33baddd4f79e39dcae057b03f84dc2f5

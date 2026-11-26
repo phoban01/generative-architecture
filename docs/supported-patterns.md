@@ -116,6 +116,7 @@ branches, assignments, `switch` and early returns, the frontend reads:
 | `apierrors.IsNotFound(err)` and the other error idioms | an outcome of the call that set `err` |
 | `controllerutil.SetControllerReference(owner, obj, scheme)` and `SetOwnerReference` | an in-memory write of the owner reference fields; options are not summarized |
 | `return reconcile.Result{Requeue: true}, nil` or `{RequeueAfter: d}` | a return that asks for a requeue; `Requeue` must be a constant, `d` may be any expression |
+| A function literal bound once to a local, called as a statement or assigned to locals | the call inlines the body with the parameters bound to the arguments; a return assigns the locals the call assigns and continues after the call |
 | `resource.MustParse("10")` and `resource.NewQuantity` with constant arguments | an opaque quantity value |
 | `"db" + "-credentials"` with constant operands | a string constant |
 | A slice or struct literal assigned to a field that no abstraction selects, such as a Job's containers | a write without a model value |
