@@ -48,6 +48,9 @@ func (compiler Compiler) QuintType(t string) (string, error) {
 	if t == "string" {
 		return "str", nil
 	}
+	if t == ListOfString {
+		return "List[str]", nil
+	}
 	if t == "int" || t == "bool" || compiler.Records[t] != nil {
 		return t, nil
 	}
@@ -146,6 +149,20 @@ func (compiler Compiler) lowerCEL(e *exprpb.Expr, scope map[string]Symbol) (Symb
 		}
 		return Symbol{Type: t, Quint: v.Quint + "." + s.Field}, nil
 	}
+	if l := e.GetListExpr(); l != nil {
+		elements := make([]string, 0, len(l.Elements))
+		for _, el := range l.Elements {
+			v, err := compiler.lowerCEL(el, scope)
+			if err != nil {
+				return v, err
+			}
+			if v.Type != "string" {
+				return located(el, fmt.Errorf("list elements must be strings, got %s", v.Type))
+			}
+			elements = append(elements, v.Quint)
+		}
+		return Symbol{Type: ListOfString, Quint: "List(" + strings.Join(elements, ", ") + ")"}, nil
+	}
 	if s := e.GetStructExpr(); s != nil {
 		if s.MessageName != "" {
 			return bad("message literals unsupported; use declared record shapes")
@@ -217,11 +234,19 @@ func (compiler Compiler) lowerCEL(e *exprpb.Expr, scope map[string]Symbol) (Symb
 		if err != nil {
 			return r, err
 		}
-		if r.Type != Domain {
-			return located(c.IterRange, fmt.Errorf("%s() requires a declared string domain, got %s", q.name, r.Type))
+		element := Symbol{Type: "string", Quint: c.IterVar}
+		binder := c.IterVar
+		if r.Type == ListOfString {
+			// A list quantifies over its indices; the binder names the
+			// element at each index.
+			binder = c.IterVar + "_i"
+			element.Quint = r.Quint + "[" + binder + "]"
+			r.Quint = r.Quint + ".indices()"
+		} else if r.Type != Domain {
+			return located(c.IterRange, fmt.Errorf("%s() requires a declared string domain or a list, got %s", q.name, r.Type))
 		}
 		nested := copyScope(scope)
-		nested[c.IterVar] = Symbol{Type: "string", Quint: c.IterVar}
+		nested[c.IterVar] = element
 		b, err := compiler.lowerCEL(q.predicate, nested)
 		if err != nil {
 			return b, err
@@ -229,7 +254,7 @@ func (compiler Compiler) lowerCEL(e *exprpb.Expr, scope map[string]Symbol) (Symb
 		if b.Type != "bool" {
 			return bad("%s() predicate must be bool", q.name)
 		}
-		return Symbol{Type: "bool", Quint: r.Quint + "." + q.quint + "(" + c.IterVar + " => " + b.Quint + ")"}, nil
+		return Symbol{Type: "bool", Quint: r.Quint + "." + q.quint + "(" + binder + " => " + b.Quint + ")"}, nil
 	}
 	if c := e.GetCallExpr(); c != nil {
 		if c.Target != nil {
@@ -242,6 +267,24 @@ func (compiler Compiler) lowerCEL(e *exprpb.Expr, scope map[string]Symbol) (Symb
 				return s, err
 			}
 			a = append(a, s)
+		}
+		if c.Function == "size" && len(a) == 1 && a[0].Type == ListOfString {
+			return Symbol{Type: "int", Quint: "length(" + a[0].Quint + ")"}, nil
+		}
+		if c.Function == "_[_]" && len(a) == 2 && a[0].Type == ListOfString {
+			if a[1].Type != "int" {
+				return bad("CEL list index must be int")
+			}
+			return Symbol{Type: "string", Quint: a[0].Quint + "[" + a[1].Quint + "]"}, nil
+		}
+		if c.Function == "_+_" && len(a) == 2 && a[0].Type == ListOfString && a[1].Type == ListOfString {
+			return Symbol{Type: ListOfString, Quint: a[0].Quint + ".concat(" + a[1].Quint + ")"}, nil
+		}
+		if c.Function == "@in" && len(a) == 2 && a[1].Type == ListOfString {
+			if a[0].Type != "string" {
+				return bad("CEL list membership needs a string, got %s", a[0].Type)
+			}
+			return Symbol{Type: "bool", Quint: a[1].Quint + ".indices().exists(_i => (" + a[1].Quint + "[_i] == " + a[0].Quint + "))"}, nil
 		}
 		if c.Function == "_+_" && len(a) == 2 && a[0].Type == "string" && a[1].Type == "string" {
 			v, err := compiler.concatenation(e, scope)
@@ -294,7 +337,7 @@ func (compiler Compiler) lowerCEL(e *exprpb.Expr, scope map[string]Symbol) (Symb
 					out = "int"
 				}
 			default:
-				if !slices.Contains([]string{"string", "int", "bool"}, t) && compiler.Records[t] == nil {
+				if !slices.Contains([]string{"string", "int", "bool", ListOfString}, t) && compiler.Records[t] == nil {
 					return bad("unsupported equality type")
 				}
 			}
@@ -304,6 +347,11 @@ func (compiler Compiler) lowerCEL(e *exprpb.Expr, scope map[string]Symbol) (Symb
 	}
 	return bad("unsupported CEL syntax")
 }
+
+// ListOfString is the type of an ordered list of strings: the collection a
+// controller holds, such as the identities of the objects a List returned
+// (ADR-0011). It lowers to Quint's List[str].
+const ListOfString = "list(string)"
 
 // Domain is the type of a declared finite string domain. all() and
 // exists() range only over symbols of this type.
@@ -401,6 +449,20 @@ func native(v ref.Val) (any, error) {
 		return string(x), nil
 	case types.Int:
 		return int64(x), nil
+	case traits.Lister:
+		var list []any
+		iter := x.Iterator()
+		for iter.HasNext() == types.True {
+			value, err := native(iter.Next())
+			if err != nil {
+				return nil, err
+			}
+			list = append(list, value)
+		}
+		if list == nil {
+			list = []any{}
+		}
+		return list, nil
 	case traits.Mapper:
 		m := map[string]any{}
 		iter := x.Iterator()

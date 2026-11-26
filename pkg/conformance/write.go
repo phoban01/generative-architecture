@@ -7,7 +7,8 @@ import (
 )
 
 // WriteITF encodes a trace in the Informal Trace Format as ReadITF reads it:
-// integers as #bigint objects, strings and booleans as JSON values, and
+// integers as #bigint objects, strings and booleans as JSON values, lists
+// of strings as JSON arrays, and
 // the event of each state under "event". The variables are the sorted
 // union of the state variables and "event". A trace needs a status and at
 // least one state.
@@ -35,6 +36,16 @@ func WriteITF(t Trace) ([]byte, error) {
 				state[k] = map[string]string{"#bigint": fmt.Sprintf("%d", x)}
 			case int:
 				state[k] = map[string]string{"#bigint": fmt.Sprintf("%d", x)}
+			case []any:
+				list := make([]any, 0, len(x))
+				for _, el := range x {
+					s, ok := el.(string)
+					if !ok {
+						return nil, fmt.Errorf("itf: state %d: %s holds a %T element; lists hold strings", i, k, el)
+					}
+					list = append(list, s)
+				}
+				state[k] = list
 			case string, bool:
 				state[k] = x
 			default:

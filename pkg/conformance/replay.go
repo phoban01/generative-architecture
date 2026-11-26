@@ -127,6 +127,16 @@ func decode(v any) (any, error) {
 	switch x := v.(type) {
 	case json.Number:
 		return strconv.ParseInt(string(x), 10, 64)
+	case []any:
+		out := make([]any, 0, len(x))
+		for _, v := range x {
+			d, err := decode(v)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, d)
+		}
+		return out, nil
 	case map[string]any:
 		if n, ok := x["#bigint"]; ok {
 			s, ok := n.(string)

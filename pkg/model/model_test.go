@@ -93,3 +93,26 @@ func TestIndependentReplayRejectsMutantAndAlteredTrace(t *testing.T) {
 		t.Fatalf("%v", err)
 	}
 }
+
+// A list variable compiles to Quint's List and starts empty.
+func TestListVariable(t *testing.T) {
+	m, err := model.Compile(model.Spec{Name: "L", State: map[string]model.Variable{"items": {Type: "list(string)", Initial: "[]"}},
+		Actions: []model.Action{{Name: "add", Guard: `!("a" in items)`, Updates: map[string]expr.Expression{"items": `items + ["a"]`}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(m.Quint(), "var items: List[str]") || !strings.Contains(m.Quint(), `items' = items.concat(List("a"))`) {
+		t.Fatalf("quint:\n%s", m.Quint())
+	}
+	state, err := m.Initial()
+	if err != nil {
+		t.Fatal(err)
+	}
+	next, err := m.Next(state, "add")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if items, ok := next["items"].([]any); !ok || len(items) != 1 || items[0] != "a" {
+		t.Fatalf("items %v", next["items"])
+	}
+}

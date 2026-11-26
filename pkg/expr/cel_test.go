@@ -83,9 +83,8 @@ func TestQuantifierTruthTable(t *testing.T) {
 func TestQuantifiersRejectUndeclaredCollections(t *testing.T) {
 	for _, tc := range []struct{ source, message string }{
 		{`Keys.exists(k, k == chosen) && Pods.exists(p, p == chosen)`, `line 1, column 32: exists() ranges over Pods, which is not a declared domain`},
-		{"enabled &&\n  counts.exists(k, k == chosen)", `line 2, column 3: exists() requires a declared string domain, got map(string, int)`},
-		{`["a", "b"].exists(k, k == chosen)`, `line 1, column 1: unsupported CEL syntax`},
-		{`chosen.all(k, k == "a")`, `line 1, column 1: all() requires a declared string domain, got string`},
+		{"enabled &&\n  counts.exists(k, k == chosen)", `line 2, column 3: exists() requires a declared string domain or a list, got map(string, int)`},
+		{`chosen.all(k, k == "a")`, `line 1, column 1: all() requires a declared string domain or a list, got string`},
 		{`Keys.exists_one(k, k == chosen)`, `line 1, column 16: only CEL all() and exists() comprehensions are supported`},
 		{`Keys.exists(chosen, chosen == "a")`, `CEL binder shadows existing symbol`},
 		{`Keys.exists(k, k)`, `exists() predicate must be bool`},
