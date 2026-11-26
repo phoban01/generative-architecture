@@ -85,6 +85,11 @@ func extractReconcile(root string, c ir.Controller, l goflow.Loaded, abs *abstra
 	inv.scan(l.Package.TypesInfo, l.Func.Body)
 	if abs != nil {
 		inv.selectFields(l.Package.TypesInfo, l.Func.Body, *abs, cat)
+		// A declared abstraction local is the symbol of the Go local of the
+		// same name, as in extractOptions.
+		for _, local := range abs.Spec.Locals {
+			inv.scope[local.Name] = expr.Symbol{Type: local.Type, Quint: local.Name}
+		}
 	}
 	opts := goflow.Options{
 		File:    l.Path,

@@ -595,3 +595,45 @@ func TestGenerateReferenceSystem(t *testing.T) {
 		}
 	}
 }
+
+// A range over a list local the abstraction declares generates a loop: the
+// index the frontend introduces is a process local, the head tests it
+// against the list's size, and the model type-checks in Quint (ADR-0011).
+func TestGenerateRangeLoop(t *testing.T) {
+	out, err := generateTo(t, "testdata/loops/project.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var spec model.Spec
+	if _, err := krm.Read(filepath.Join(out, specFile), "TransitionModel", &spec); err != nil {
+		t.Fatal(err)
+	}
+	if v := spec.State["active"]; v.Type != "list(string)" || v.Initial != "[]" {
+		t.Fatalf("list local %+v", v)
+	}
+	if v := spec.State["id_index"]; v.Type != "int" || v.Initial != "0" {
+		t.Fatalf("the loop index is not a process local: %+v; state %v", v, slices.Sorted(maps.Keys(spec.State)))
+	}
+	var appended, head, bound bool
+	for _, a := range spec.Actions {
+		if strings.Contains(string(a.Updates["active"]), `active + ["source"]`) {
+			appended = true
+		}
+		if strings.Contains(string(a.Updates[pcVariable]), "(id_index < size(active))") {
+			head = true
+		}
+		if a.Updates["id"] == "active[id_index]" {
+			bound = true
+		}
+	}
+	if !appended || !head || !bound {
+		t.Fatalf("appended=%v head=%v bound=%v", appended, head, bound)
+	}
+	quint := os.Getenv("QUINT_BIN")
+	if quint == "" {
+		t.Skip("QUINT_BIN not set; skipping Quint typecheck")
+	}
+	if out, err := exec.Command(quint, "typecheck", filepath.Join(out, "Model.qnt")).CombinedOutput(); err != nil {
+		t.Fatalf("quint typecheck: %v\n%s", err, out)
+	}
+}

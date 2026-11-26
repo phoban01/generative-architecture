@@ -28,7 +28,10 @@ const (
 )
 
 var (
-	types = map[string]bool{TypeString: true, TypeBool: true, TypeInt: true}
+	// TypeList is the ordered list of object identities a controller
+	// holds (ADR-0011); only locals take it.
+	TypeList = expr.ListOfString
+	types    = map[string]bool{TypeString: true, TypeBool: true, TypeInt: true}
 	// Object ids and path elements carry no underscore so derived names
 	// split back unambiguously; locals are ordinary model identifiers.
 	identifier = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9]*$`)
@@ -244,7 +247,7 @@ func (a Abstraction) Validate() error {
 		if !localName.MatchString(l.Name) {
 			return fmt.Errorf("abstraction %s: local %q must be an identifier", a.Name, l.Name)
 		}
-		if !types[l.Type] {
+		if !types[l.Type] && l.Type != TypeList {
 			return fmt.Errorf("abstraction %s: local %s has unknown type %q", a.Name, l.Name, l.Type)
 		}
 		if seenVars[l.Name] {
@@ -394,6 +397,8 @@ func Initial(typ string) string {
 		return "false"
 	case TypeInt:
 		return "0"
+	case TypeList:
+		return "[]"
 	}
 	return `""`
 }

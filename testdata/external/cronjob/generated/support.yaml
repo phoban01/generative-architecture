@@ -60,30 +60,9 @@ status:
       location:
         file: internal/controller/cronjob_controller.go
         line: 166
-    - kind: range
-      construct: |-
-        for i, job := range childJobs.Items {
-        	_, finishedType := isJobFinished(&job)
-        	switch finishedType {
-        	case "":
-        		activeJobs = append(activeJobs, &childJobs.Items[i])
-        	case kbatch.JobFailed:
-        		failedJobs = append(failedJobs, &childJobs.Items[i])
-        	case kbatch.JobComplete:
-        		successfulJobs = append(successfulJobs, &childJobs.Items[i])
-        	}
-        	scheduledTimeForJob, err := getScheduledTimeForJob(&job)
-        	if err != nil {
-        		log.Error(err, "unable to parse schedule time for child job", "job", &job)
-        		continue
-        	}
-        	if scheduledTimeForJob != nil {
-        		if mostRecentTime == nil || mostRecentTime.Before(*scheduledTimeForJob) {
-        			mostRecentTime = scheduledTimeForJob
-        		}
-        	}
-        }
-      reason: unsupported Go statement
+    - kind: field
+      construct: childJobs.Items
+      reason: unmapped field childJobs.items
       location:
         file: internal/controller/cronjob_controller.go
         line: 202
@@ -111,17 +90,9 @@ status:
       location:
         file: internal/controller/cronjob_controller.go
         line: 232
-    - kind: range
-      construct: |-
-        for _, activeJob := range activeJobs {
-        	jobRef, err := ref.GetReference(r.Scheme, activeJob)
-        	if err != nil {
-        		log.Error(err, "unable to make reference to active job", "job", activeJob)
-        		continue
-        	}
-        	cronJob.Status.Active = append(cronJob.Status.Active, *jobRef)
-        }
-      reason: unsupported Go statement
+    - kind: identifier
+      construct: activeJobs
+      reason: unbound local variable activeJobs
       location:
         file: internal/controller/cronjob_controller.go
         line: 233
@@ -131,19 +102,9 @@ status:
       location:
         file: internal/controller/cronjob_controller.go
         line: 276
-    - kind: range
-      construct: |-
-        for i, job := range failedJobs {
-        	if int32(i) >= int32(len(failedJobs))-*cronJob.Spec.FailedJobsHistoryLimit {
-        		break
-        	}
-        	if err := r.Delete(ctx, job, client.PropagationPolicy(metav1.DeletePropagationBackground)); client.IgnoreNotFound(err) != nil {
-        		log.Error(err, "unable to delete old failed job", "job", job)
-        	} else {
-        		log.V(0).Info("deleted old failed job", "job", job)
-        	}
-        }
-      reason: unsupported Go statement
+    - kind: identifier
+      construct: failedJobs
+      reason: unbound local variable failedJobs
       location:
         file: internal/controller/cronjob_controller.go
         line: 283
@@ -153,19 +114,9 @@ status:
       location:
         file: internal/controller/cronjob_controller.go
         line: 295
-    - kind: range
-      construct: |-
-        for i, job := range successfulJobs {
-        	if int32(i) >= int32(len(successfulJobs))-*cronJob.Spec.SuccessfulJobsHistoryLimit {
-        		break
-        	}
-        	if err := r.Delete(ctx, job, client.PropagationPolicy(metav1.DeletePropagationBackground)); err != nil {
-        		log.Error(err, "unable to delete old successful job", "job", job)
-        	} else {
-        		log.V(0).Info("deleted old successful job", "job", job)
-        	}
-        }
-      reason: unsupported Go statement
+    - kind: identifier
+      construct: successfulJobs
+      reason: unbound local variable successfulJobs
       location:
         file: internal/controller/cronjob_controller.go
         line: 302
@@ -217,21 +168,15 @@ status:
       location:
         file: internal/controller/cronjob_controller.go
         line: 431
-    - kind: expression
-      construct: len(activeJobs)
-      reason: unsupported Go expression
+    - kind: identifier
+      construct: activeJobs
+      reason: unbound local variable activeJobs
       location:
         file: internal/controller/cronjob_controller.go
         line: 444
-    - kind: range
-      construct: |-
-        for _, activeJob := range activeJobs {
-        	if err := r.Delete(ctx, activeJob, client.PropagationPolicy(metav1.DeletePropagationBackground)); client.IgnoreNotFound(err) != nil {
-        		log.Error(err, "unable to delete active job", "job", activeJob)
-        		return ctrl.Result{}, err
-        	}
-        }
-      reason: unsupported Go statement
+    - kind: identifier
+      construct: activeJobs
+      reason: unbound local variable activeJobs
       location:
         file: internal/controller/cronjob_controller.go
         line: 451

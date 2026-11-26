@@ -73,6 +73,10 @@ type Program struct {
 	// err_notFound, that the error idioms declared. A generator declares a
 	// process local for each of those.
 	Symbols map[string]expr.Symbol `yaml:"-"`
+	// Locals are the locals the frontend introduced, such as loop indices
+	// and elements the abstraction did not declare. A generator declares
+	// each as a process local reset at every invocation.
+	Locals map[string]expr.Symbol `yaml:"locals,omitempty"`
 }
 
 // Return describes one result of the extracted method. Error marks the
@@ -158,6 +162,8 @@ type extractor struct {
 	method   *ast.BlockStmt
 	closures map[*types.Var]*ast.FuncLit
 	frames   []inlineFrame
+	// loops are the range loops being lowered, innermost last.
+	loops []loopFrame
 }
 
 func (e *extractor) expression(n ast.Expr, want string) (expr.Expression, error) {
@@ -217,9 +223,15 @@ func (e *extractor) translate(n ast.Expr) (expr.Expression, error) {
 			if v, ok := e.mapEntry(x); ok {
 				return v, nil
 			}
+			if v, ok, err := e.listIndex(x); ok || err != nil {
+				return v, err
+			}
 		}
 	case *ast.CallExpr:
 		if e.info != nil {
+			if v, ok, err := e.builtinCall(x); ok || err != nil {
+				return v, err
+			}
 			if v, ok, err := e.idiom(x); ok || err != nil {
 				return v, err
 			}
@@ -343,11 +355,27 @@ func (e *extractor) statement(s ast.Stmt, next int) (int, error) {
 				return e.inlineReturn(ret, e.frames[len(e.frames)-1])
 			}
 		}
+		if e.localDecl(s) {
+			return next, nil
+		}
+		if x, ok := s.(*ast.RangeStmt); ok {
+			return e.rangeStmt(x, next)
+		}
+		if x, ok := s.(*ast.BranchStmt); ok {
+			if id, ok, err := e.branchStmt(x); ok || err != nil {
+				return id, err
+			}
+		}
 		if id, ok, err := e.closureStatement(s, next); ok || err != nil {
 			return id, err
 		}
 		if id, ok, err := e.typedStatement(s, next); ok || err != nil {
 			return id, err
+		}
+		if x, ok := s.(*ast.AssignStmt); ok {
+			if id, ok, err := e.localAssign(x, next); ok || err != nil {
+				return id, err
+			}
 		}
 	}
 	switch x := s.(type) {

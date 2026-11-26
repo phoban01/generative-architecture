@@ -199,6 +199,13 @@ func (c controllerModel) build() (model.Spec, []effect.Descriptor, error) {
 		}
 	}
 	sort.Slice(effects, func(i, j int) bool { return effects[i].ID < effects[j].ID })
+	// Locals the frontend introduced, such as loop indices and elements,
+	// are process locals too.
+	for name, s := range c.program.Locals {
+		if _, declared := state[name]; !declared {
+			locals[name] = model.Variable{Type: s.Type, Initial: expr.Expression(abstraction.Initial(s.Type))}
+		}
+	}
 	reset := map[string]expr.Expression{}
 	for name, v := range locals {
 		state[name] = v

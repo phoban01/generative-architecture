@@ -23,7 +23,7 @@ status:
     - category: unsupported
       message: 'arch extract: internal/controller/cronjob_controller.go:166: declaration "var mostRecentTime *time.Time // find the last run so we can update the status": unsupported Go statement'
     - category: unsupported
-      message: 'arch extract: internal/controller/cronjob_controller.go:202: range "for i, job := range childJobs.Items {": unsupported Go statement'
+      message: 'arch extract: internal/controller/cronjob_controller.go:202: field "childJobs.Items": unmapped field childJobs.items'
     - category: unsupported
       message: 'arch extract: internal/controller/cronjob_controller.go:227: identifier "mostRecentTime": unbound local variable mostRecentTime'
     - category: unsupported
@@ -33,15 +33,15 @@ status:
     - category: unsupported
       message: 'arch extract: internal/controller/cronjob_controller.go:232: field "cronJob.Status.Active": unmapped field cronJob.status.active'
     - category: unsupported
-      message: 'arch extract: internal/controller/cronjob_controller.go:233: range "for _, activeJob := range activeJobs {": unsupported Go statement'
+      message: 'arch extract: internal/controller/cronjob_controller.go:233: identifier "activeJobs": unbound local variable activeJobs'
     - category: unsupported
       message: 'arch extract: internal/controller/cronjob_controller.go:276: field "cronJob.Spec.FailedJobsHistoryLimit": unmapped field cronJob.spec.failedJobsHistoryLimit'
     - category: unsupported
-      message: 'arch extract: internal/controller/cronjob_controller.go:283: range "for i, job := range failedJobs {": unsupported Go statement'
+      message: 'arch extract: internal/controller/cronjob_controller.go:283: identifier "failedJobs": unbound local variable failedJobs'
     - category: unsupported
       message: 'arch extract: internal/controller/cronjob_controller.go:295: field "cronJob.Spec.SuccessfulJobsHistoryLimit": unmapped field cronJob.spec.successfulJobsHistoryLimit'
     - category: unsupported
-      message: 'arch extract: internal/controller/cronjob_controller.go:302: range "for i, job := range successfulJobs {": unsupported Go statement'
+      message: 'arch extract: internal/controller/cronjob_controller.go:302: identifier "successfulJobs": unbound local variable successfulJobs'
     - category: unsupported
       message: 'arch extract: internal/controller/cronjob_controller.go:321: expression "nil": unsupported Go expression'
     - category: unsupported
@@ -59,9 +59,9 @@ status:
     - category: unsupported
       message: 'arch extract: internal/controller/cronjob_controller.go:431: identifier "tooLate": unbound local variable tooLate'
     - category: unsupported
-      message: 'arch extract: internal/controller/cronjob_controller.go:444: expression "len(activeJobs)": unsupported Go expression'
+      message: 'arch extract: internal/controller/cronjob_controller.go:444: identifier "activeJobs": unbound local variable activeJobs'
     - category: unsupported
-      message: 'arch extract: internal/controller/cronjob_controller.go:451: range "for _, activeJob := range activeJobs {": unsupported Go statement'
+      message: 'arch extract: internal/controller/cronjob_controller.go:451: identifier "activeJobs": unbound local variable activeJobs'
     - category: unsupported
       message: 'arch extract: internal/controller/cronjob_controller.go:504: closure "job": closure result local job is not a model symbol'
     - category: unsupported
@@ -75,6 +75,6 @@ status:
     catalog/batch-v1.json: a972f6b207e83e52f80baf5821e20d7b154c788b092a412945c2254566159d15
     config/crd/bases/batch.tutorial.kubebuilder.io_cronjobs.yaml: 4016e4984192bbd6ae9e460e5b39bda35a7fac44ed19a63efa60c16018e83630
     constraints.yaml: d65c2cebdb865f0f4234cfdd8470927640fb9aacf68e7d5f51e7ac7cc57657a4
-    generated/support.yaml: f65747ba99fff7a1ae3270b4f9e15f38395a83634b80e02b94165dacde4be229
+    generated/support.yaml: ee76c57d8bded5647a7dd3eea7abd2302403fcf811a5ba510bd44fc1594f9d42
     internal/controller/cronjob_controller.go: b9bde9f751609f2661062c88b86e73e70125e4fd136475bb6e1eec37686db5aa
     project.yaml: b964264e5f1f239bef530a8ed965b19c33baddd4f79e39dcae057b03f84dc2f5

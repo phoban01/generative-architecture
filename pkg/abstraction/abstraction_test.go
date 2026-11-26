@@ -176,3 +176,19 @@ func TestOwnerReferenceValidates(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// A local of list type is accepted and starts empty; fields never take it.
+func TestListLocal(t *testing.T) {
+	a := valid()
+	a.Spec.Locals = append(a.Spec.Locals, Local{Name: "active", Type: TypeList})
+	if err := a.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if v := a.StateVariables()["active"]; v.Type != "list(string)" || v.Initial != "[]" {
+		t.Fatalf("list local %+v", v)
+	}
+	a.Spec.Resources[0].Fields[0].Type = TypeList
+	if err := a.Validate(); err == nil || !strings.Contains(err.Error(), "unknown type") {
+		t.Fatalf("list field accepted: %v", err)
+	}
+}

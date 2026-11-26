@@ -132,6 +132,11 @@ func extractOptions(l goflow.Loaded, abs abstraction.Abstraction, decl project.C
 		x.resource[r.GVK] = r
 	}
 	scope := map[string]expr.Symbol{}
+	// A declared abstraction local is the model symbol of the Go local of
+	// the same name: a counter, or a list of identities a loop builds.
+	for _, local := range abs.Spec.Locals {
+		scope[local.Name] = expr.Symbol{Type: local.Type, Quint: local.Name}
+	}
 	ast.Inspect(l.Func.Body, func(n ast.Node) bool {
 		a, ok := n.(*ast.AssignStmt)
 		if !ok || err != nil || len(a.Lhs) != 1 {

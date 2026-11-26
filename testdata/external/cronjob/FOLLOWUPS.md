@@ -162,7 +162,7 @@ smallest extension that would support it.
   and 504 now report that their result locals (`missedRun`, a time, and
   `job`, an object) are not model symbols, which gaps 11 and 18 cover.
 
-### 9. range loops
+### 9. range loops (closed by #160)
 
 - Construct: `for i, job := range childJobs.Items`,
   `for _, activeJob := range activeJobs` and similar.
@@ -171,6 +171,17 @@ smallest extension that would support it.
 - Smallest extension: support `range` over the `Items` of a listed object
   when the loop body holds only client operations and branches. Bound the
   iterations by `maxObjectsPerResource`.
+- Resolution: since #160 the model has a list type (ADR-0011) and a
+  `range` over a list local lowers to a loop in the process graph: an
+  index local the frontend introduces, a head that tests it against the
+  list's size, the element bound at the index, the body and an increment
+  back to the head. `continue`, `break`, `len` and `append` lower too. The
+  abstraction declares the list locals as `locals` of type `list(string)`.
+  The five loops no longer appear. What remains at their lines is the
+  list each loop ranges over: `childJobs.Items` (202) waits for the List
+  summary to bind `$items` to a list local, and `activeJobs`, `failedJobs`
+  and `successfulJobs` (233, 283, 302, 444, 451) are lists of `*Job`,
+  which gap 18 covers.
 
 ### 10. len() of a local slice
 
@@ -179,6 +190,8 @@ smallest extension that would support it.
 - Diagnostic: `expression: unsupported Go expression`.
 - Smallest extension: model the length of a list result as a bounded
   integer. This depends on gap 9, because `activeJobs` is built in a loop.
+- Note: since #160 `len` of a list local lowers to its size. The line now
+  reports `activeJobs` itself, which gap 18 covers.
 
 ### 11. Time values and time arithmetic
 

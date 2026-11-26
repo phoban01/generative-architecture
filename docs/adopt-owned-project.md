@@ -195,7 +195,8 @@ For each resource, declare:
 
 - `gvk`: it must be in the catalog.
 - `objects`: a fixed, small population with fixed names.
-- `fields`: JSON paths of type `string`, `bool` or `int`. Path elements are
+- `fields`: JSON paths of type `string`, `bool` or `int` (`list(string)` is
+  for `locals` only). Path elements are
   identifiers. Only the key after `metadata.annotations` or
   `metadata.labels` may be any string, and such a field needs a `name`.
 - `valueDomains`: the values each field may take, as model literals.
@@ -281,8 +282,12 @@ spec:
   as `<package path>.<interface>.<method>`.
 - `kind` restricts an effect to calls made with that kind, so a method that
   reads several kinds declares one effect per kind.
-- `objectKeys` and `locals` map Go key fields and locals to abstraction
-  objects and locals. A `client.ObjectKey{...}` literal needs no
+- `objectKeys` and `locals` map Go key fields and object locals to
+  abstraction objects and locals. A Go local of basic type with the name
+  of a declared abstraction local is that local: a counter of type `int`,
+  or a list of object identities of type `list(string)` that a `range`
+  loop walks (ADR-0011). Both are process locals, reset at each
+  invocation. A `client.ObjectKey{...}` literal needs no
   declaration when its fields resolve to constants through the
   abstraction, such as another object's name.
 - `initial` sets the initial value of each object's field.

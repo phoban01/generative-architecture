@@ -1,0 +1,26 @@
+apiVersion: architecture.local/v1alpha1
+kind: Abstraction
+metadata:
+  name: loops
+spec:
+  resources:
+    - gvk: {group: "", version: v1, kind: ConfigMap}
+      objects:
+        - {id: source, namespace: demo, name: source}
+        - {id: copy, namespace: demo, name: copy}
+      fields:
+        - {path: [data, value], type: string}
+      valueDomains:
+        data.value: ['"a"', '""']
+      identity:
+        - [metadata, name]
+  locals:
+    - {name: active, type: list(string)}
+    - {name: n, type: int}
+    - {name: id, type: string}
+  bounds:
+    maxObjectsPerResource: 2
+    maxInvocations: 3
+  excludes:
+    - delete
+    - list
