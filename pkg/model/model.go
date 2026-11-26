@@ -15,6 +15,9 @@ import (
 type Variable struct {
 	Type    string          `yaml:"type"`
 	Initial expr.Expression `yaml:"initial"`
+	// Domain lists the values a string variable takes, when declared; a
+	// concatenation with the variable lowers over them.
+	Domain []string `yaml:"domain,omitempty"`
 }
 type Action struct {
 	Name    string                     `yaml:"name"`
@@ -130,7 +133,7 @@ func Compile(s Spec) (*Compiled, error) {
 		if err != nil {
 			return nil, err
 		}
-		scope[name] = expr.Symbol{Type: v.Type, Quint: name}
+		scope[name] = expr.Symbol{Type: v.Type, Quint: name, Domain: v.Domain}
 		fmt.Fprintf(&b, " var %s: %s\n", name, qt)
 	}
 	fmt.Fprintln(&b, " var event: str")

@@ -140,7 +140,7 @@ them.
 | `mgr.GetClient()`, `mgr.GetAPIReader()` or `mgr.GetEventRecorderFor()` called inside `SetupWithManager`, including captured in closures | `setup-client` at the call |
 | A client built inside `Reconcile`, or obtained through reflection or a global registry | `injection`, since no field carries it |
 | Setup promoted from an embedded helper type | error from discovery |
-| A string concatenation with a field or variable, such as `name + "-credentials"` | `expression` at the concatenation |
+| A string concatenation with a field whose value domain the abstraction does not declare, such as `name + "-credentials"` with no values for `name`; a field with declared values concatenates to one constant per value | `expression` at the concatenation |
 | A call in `Reconcile` that no summary covers, such as a logger | `call` at the statement |
 | A map function in another shape than the three above | `mapper` at the function |
 

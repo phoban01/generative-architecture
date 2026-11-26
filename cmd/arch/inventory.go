@@ -299,8 +299,10 @@ func (inv *inventory) selectFields(info *types.Info, body *ast.BlockStmt, abs ab
 		for _, f := range r.Fields {
 			path := abstraction.JSONPath(f.Path)
 			name := symbolOf(id.Name, path)
-			if _, seen := inv.scope[name]; !seen {
-				inv.scope[name] = expr.Symbol{Type: f.Type, Quint: name}
+			// A selected field keeps the abstraction's type and value domain even
+			// when the body declared it first.
+			{
+				inv.scope[name] = expr.Symbol{Type: f.Type, Quint: name, Domain: r.Domain(f)}
 			}
 			inv.selected[name] = true
 			if len(path) > 1 {

@@ -12,6 +12,10 @@ spec:
     ConfigMap_copy_data_value:
       type: string
       initial: '""'
+      domain:
+        - a
+        - b
+        - ""
     ConfigMap_copy_exists:
       type: bool
       initial: "true"
@@ -21,6 +25,10 @@ spec:
     ConfigMap_source_data_value:
       type: string
       initial: '"a"'
+      domain:
+        - a
+        - b
+        - ""
     ConfigMap_source_exists:
       type: bool
       initial: "true"
@@ -30,6 +38,10 @@ spec:
     cached_ConfigMap_source_data_value:
       type: string
       initial: '"a"'
+      domain:
+        - a
+        - b
+        - ""
     cached_ConfigMap_source_metadata_resourceVersion:
       type: int
       initial: "0"
@@ -78,6 +90,10 @@ spec:
     target_data_value:
       type: string
       initial: '""'
+      domain:
+        - a
+        - b
+        - ""
     target_metadata_resourceVersion:
       type: int
       initial: "0"

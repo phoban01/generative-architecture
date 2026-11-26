@@ -49,13 +49,26 @@ func choice(condition string, then, els *stringValue) *stringValue {
 }
 
 // concatenation lowers a CEL string expression built from constant
-// strings, + and conditionals. A string symbol or any other operand is an
-// error located at that operand: its value is not known, and Quint cannot
+// strings, string symbols with a declared value domain, + and
+// conditionals. A symbol with a domain is an opaque value tied to its
+// variable: it lowers to a choice over the domain, one constant per value,
+// so a concatenation with it yields one constant per value of the input.
+// A string symbol without a domain or any other operand is an error
+// located at that operand: its value is not known, and Quint cannot
 // concatenate it.
 func (compiler Compiler) concatenation(e *exprpb.Expr, scope map[string]Symbol) (*stringValue, error) {
 	if c := e.GetConstExpr(); c != nil {
 		if s, ok := c.ConstantKind.(*exprpb.Constant_StringValue); ok {
 			return constantString(s.StringValue), nil
+		}
+	}
+	if id := e.GetIdentExpr(); id != nil {
+		if sym, ok := scope[id.Name]; ok && sym.Type == "string" {
+			if len(sym.Domain) > 0 {
+				return symbolString(sym), nil
+			}
+			_, err := located(e, fmt.Errorf("unsupported string concatenation: %s has no declared value domain, and Quint cannot concatenate an unknown string; declare its values in the abstraction", id.Name))
+			return nil, err
 		}
 	}
 	if call := e.GetCallExpr(); call != nil && call.Target == nil {
@@ -96,4 +109,14 @@ func (compiler Compiler) concatenation(e *exprpb.Expr, scope map[string]Symbol) 
 	}
 	_, err := located(e, fmt.Errorf("unsupported string concatenation: each operand must be a constant string or a conditional over them, as Quint has no string operations"))
 	return nil, err
+}
+
+// symbolString is the value of a string symbol with a declared domain: a
+// choice over the domain's values, the last value as the fallthrough.
+func symbolString(sym Symbol) *stringValue {
+	v := constantString(sym.Domain[len(sym.Domain)-1])
+	for i := len(sym.Domain) - 2; i >= 0; i-- {
+		v = choice(sym.Quint+" == "+strconv.Quote(sym.Domain[i]), constantString(sym.Domain[i]), v)
+	}
+	return v
 }

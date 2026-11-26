@@ -14,15 +14,23 @@ spec:
     Database_db1_status_endpoint:
       type: string
       initial: '""'
+      domain:
+        - ""
+        - db-1.internal
     DatabaseInstance_inst1_exists:
       type: bool
       initial: "false"
     DatabaseInstance_inst1_spec_databaseName:
       type: string
       initial: '""'
+      domain:
+        - db-1
     DatabaseInstance_inst1_status_endpoint:
       type: string
       initial: '""'
+      domain:
+        - ""
+        - db-1.internal
     compatible:
       type: bool
       initial: "false"

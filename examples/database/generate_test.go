@@ -31,7 +31,7 @@ func TestGenerateModel(t *testing.T) {
 		t.Fatal(err)
 	}
 	for name, v := range abs.StateVariables() {
-		if got, ok := e.Spec.State[name]; !ok || got != v {
+		if got, ok := e.Spec.State[name]; !ok || !reflect.DeepEqual(got, v) {
 			t.Errorf("state %s = %+v, want %+v", name, got, v)
 		}
 	}

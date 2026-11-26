@@ -55,14 +55,13 @@ func (r *DatabaseReconciler) Reconcile(ctx context.Context, req reconcile.Reques
 		return reconcile.Result{}, nil
 	}
 
-	// The Secret has the Database's name. database.Name + "-credentials"
-	// would be clearer, but the extractor cannot yet lower a string
-	// concatenation with a field.
+	// The Secret is named after the Database, with a suffix that tells the
+	// two apart.
 	secret := &corev1.Secret{}
-	err = r.Client.Get(ctx, client.ObjectKey{Namespace: database.Namespace, Name: database.Name}, secret)
+	err = r.Client.Get(ctx, client.ObjectKey{Namespace: database.Namespace, Name: database.Name + "-credentials"}, secret)
 	if apierrors.IsNotFound(err) {
 		secret.Namespace = database.Namespace
-		secret.Name = database.Name
+		secret.Name = database.Name + "-credentials"
 		secret.StringData = map[string]string{"username": database.Name}
 		if err := controllerutil.SetControllerReference(database, secret, r.Scheme); err != nil {
 			return reconcile.Result{}, err
@@ -74,11 +73,11 @@ func (r *DatabaseReconciler) Reconcile(ctx context.Context, req reconcile.Reques
 		return reconcile.Result{}, err
 	}
 
-	if database.Status.Ready && database.Status.SecretName == database.Name {
+	if database.Status.Ready && database.Status.SecretName == secret.Name {
 		return reconcile.Result{}, nil
 	}
 	database.Status.Ready = true
-	database.Status.SecretName = database.Name
+	database.Status.SecretName = secret.Name
 	return reconcile.Result{}, r.Client.Status().Patch(ctx, database, client.Merge)
 }
 

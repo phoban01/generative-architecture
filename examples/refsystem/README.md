@@ -68,14 +68,9 @@ abstraction selects every field the methods read or write, so no field is
 `arch generate` composes the three controllers from their declarations in
 `project.yaml` (see below). `cmd/arch` checks that the committed files match
 a fresh run. [docs/supported-patterns.md](../../docs/supported-patterns.md)
-lists the constructs the controllers use.
-
-## Known extractor gap
-
-The Secret has the Database's name. A name such as
-`database.Name + "-credentials"` reads better, but the extractor cannot yet
-lower a string concatenation with a field. The controller keeps the bare
-name until it can.
+lists the constructs the controllers use. The Secret is named
+`<database>-credentials`: the concatenation lowers over the values the
+abstraction declares for the Database's name, one constant per value.
 
 ## Composed model
 

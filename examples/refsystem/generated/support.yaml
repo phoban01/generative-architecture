@@ -45,17 +45,17 @@ status:
       construct: github.com/phoban01/generative-architecture/examples/refsystem/controllers/database.DatabaseReconciler watches refsystem.example.org/v1alpha1/Database
       location:
         file: examples/refsystem/controllers/database/controller.go
-        line: 88
+        line: 87
     - kind: watch
       construct: github.com/phoban01/generative-architecture/examples/refsystem/controllers/database.DatabaseReconciler watches v1/Secret
       location:
         file: examples/refsystem/controllers/database/controller.go
-        line: 89
+        line: 88
     - kind: watch
       construct: github.com/phoban01/generative-architecture/examples/refsystem/controllers/database.DatabaseReconciler watches refsystem.example.org/v1alpha1/Tenant
       location:
         file: examples/refsystem/controllers/database/controller.go
-        line: 90
+        line: 89
     - kind: controller
       construct: github.com/phoban01/generative-architecture/examples/refsystem/controllers/tenant.TenantReconciler
       location:

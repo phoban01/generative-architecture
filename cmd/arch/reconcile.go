@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"go/ast"
 	"go/constant"
+	"go/token"
 	"go/types"
 	"path"
 	"sort"
@@ -163,7 +164,7 @@ func extractOptions(l goflow.Loaded, abs abstraction.Abstraction, decl project.C
 		}
 		for _, f := range r.Fields {
 			v := x.localVariable(id.Name, f)
-			scope[v] = expr.Symbol{Type: f.Type, Quint: v}
+			scope[v] = expr.Symbol{Type: f.Type, Quint: v, Domain: r.Domain(f)}
 		}
 		return true
 	})
@@ -434,12 +435,24 @@ func (x *extraction) keyLiteral(lit *ast.CompositeLit, r abstraction.Resource) (
 }
 
 // keyValue resolves one field of an object key literal to a string the
-// abstraction fixes: a constant, or a field of a Go local that was read
-// from an abstraction object. The object's name and namespace come from
-// the object; any other field must have a value domain of one value.
+// abstraction fixes: a constant, a field of a Go local that was read from
+// an abstraction object, or a concatenation of those. The object's name
+// and namespace come from the object; any other field must have a value
+// domain of one value.
 func (x *extraction) keyValue(v ast.Expr) (string, error) {
 	if tv, ok := x.info.Types[v]; ok && tv.Value != nil && tv.Value.Kind() == constant.String {
 		return constant.StringVal(tv.Value), nil
+	}
+	if b, ok := ast.Unparen(v).(*ast.BinaryExpr); ok && b.Op == token.ADD {
+		left, err := x.keyValue(b.X)
+		if err != nil {
+			return "", err
+		}
+		right, err := x.keyValue(b.Y)
+		if err != nil {
+			return "", err
+		}
+		return left + right, nil
 	}
 	root, path, err := goflow.FieldPath(x.info, v)
 	if err != nil {

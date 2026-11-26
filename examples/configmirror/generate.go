@@ -503,7 +503,7 @@ func compose(s Settings, abs abstraction.Abstraction, program goflow.Program, sc
 			if !slices.Contains(o.resource.ValueDomains[f.Key()], initial) {
 				return model.Spec{}, fmt.Errorf("object %s: initial value %q of field %s is not in its value domain", o.object.ID, initial, f.Key())
 			}
-			state[o.values[i]] = model.Variable{Type: f.Type, Initial: expr.Expression(initial)}
+			state[o.values[i]] = model.Variable{Type: f.Type, Initial: expr.Expression(initial), Domain: o.resource.Domain(f)}
 		}
 		exists, err := existsInitial(s.Initial, o.object.ID)
 		if err != nil {
@@ -564,7 +564,7 @@ func compose(s Settings, abs abstraction.Abstraction, program goflow.Program, sc
 					}
 					if _, declared := state[name]; !declared {
 						f := o.resource.Fields[i]
-						locals[name] = model.Variable{Type: f.Type, Initial: expr.Expression(abstraction.Initial(f.Type))}
+						locals[name] = model.Variable{Type: f.Type, Initial: expr.Expression(abstraction.Initial(f.Type)), Domain: o.resource.Domain(f)}
 					}
 				case "$statusValue":
 					// The status local takes the type of the status field
@@ -575,7 +575,7 @@ func compose(s Settings, abs abstraction.Abstraction, program goflow.Program, sc
 					}
 					if _, declared := state[name]; !declared {
 						v := state[status[i]]
-						locals[name] = model.Variable{Type: v.Type, Initial: expr.Expression(abstraction.Initial(v.Type))}
+						locals[name] = model.Variable{Type: v.Type, Initial: expr.Expression(abstraction.Initial(v.Type)), Domain: v.Domain}
 					}
 				case "$cache":
 					state[name] = state[o.values[i]]

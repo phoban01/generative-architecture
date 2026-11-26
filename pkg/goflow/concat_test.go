@@ -10,7 +10,7 @@ import (
 // String concatenation of constants extracts; any expression the CEL
 // compiler rejects is a diagnostic at the Go file and line.
 func TestStringConcatenation(t *testing.T) {
-	scope := map[string]expr.Symbol{"name": {Type: "string", Quint: "name"}, "ready": {Type: "bool", Quint: "ready"}, "n": {Type: "int", Quint: "n"}}
+	scope := map[string]expr.Symbol{"name": {Type: "string", Quint: "name"}, "db": {Type: "string", Quint: "db", Domain: []string{"main", "other"}}, "ready": {Type: "bool", Quint: "ready"}, "n": {Type: "int", Quint: "n"}}
 	for _, tc := range []struct {
 		name, body string
 		result     expr.Expression
@@ -18,11 +18,12 @@ func TestStringConcatenation(t *testing.T) {
 		reason     string
 	}{
 		{name: "constants", body: `return "db" + "-credentials"`, result: `("db" + "-credentials")`},
-		{name: "symbol", body: "if ready {\n\t\treturn \"x\"\n\t}\n\treturn name + \"-credentials\"", line: 7, reason: "unsupported string concatenation"},
+		{name: "symbol", body: "if ready {\n\t\treturn \"x\"\n\t}\n\treturn name + \"-credentials\"", line: 7, reason: "no declared value domain"},
+		{name: "symbol with domain", body: `return db + "-credentials"`, result: `(db + "-credentials")`},
 		{name: "type mismatch", body: `return name + n`, line: 4, reason: "CEL type mismatch"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			src := "package p\n\nfunc F(name string, ready bool, n int) string {\n\t" + tc.body + "\n}\n"
+			src := "package p\n\nfunc F(name, db string, ready bool, n int) string {\n\t" + tc.body + "\n}\n"
 			p, err := Extract([]byte(src), Options{File: "controller.go", Method: "F", Scope: scope, Returns: []Return{{Type: "string"}}})
 			if tc.reason != "" {
 				d, ok := AsDiagnostic(err)

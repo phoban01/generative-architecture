@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/phoban01/generative-architecture/pkg/composition"
 	"maps"
+	"reflect"
 	"slices"
 	"sort"
 	"strconv"
@@ -106,7 +107,7 @@ func (c controllerModel) build() (model.Spec, []effect.Descriptor, error) {
 			if !slices.Contains(o.resource.ValueDomains[f.Key()], initial) {
 				return model.Spec{}, nil, fmt.Errorf("object %s: initial value %s of field %s is not in its value domain", o.object.ID, initial, f.Key())
 			}
-			state[o.values[i]] = model.Variable{Type: f.Type, Initial: expr.Expression(initial)}
+			state[o.values[i]] = model.Variable{Type: f.Type, Initial: expr.Expression(initial), Domain: o.resource.Domain(f)}
 		}
 		exists, err := existsInitial(c.initial, o.object.ID)
 		if err != nil {
@@ -170,7 +171,7 @@ func (c controllerModel) build() (model.Spec, []effect.Descriptor, error) {
 					}
 					if _, declared := state[name]; !declared {
 						f := o.resource.Fields[i]
-						locals[name] = model.Variable{Type: f.Type, Initial: expr.Expression(abstraction.Initial(f.Type))}
+						locals[name] = model.Variable{Type: f.Type, Initial: expr.Expression(abstraction.Initial(f.Type)), Domain: o.resource.Domain(f)}
 					}
 				case "$statusValue":
 					// The status local takes the type of the status field
@@ -181,7 +182,7 @@ func (c controllerModel) build() (model.Spec, []effect.Descriptor, error) {
 					}
 					if _, declared := state[name]; !declared {
 						v := state[status[i]]
-						locals[name] = model.Variable{Type: v.Type, Initial: expr.Expression(abstraction.Initial(v.Type))}
+						locals[name] = model.Variable{Type: v.Type, Initial: expr.Expression(abstraction.Initial(v.Type)), Domain: v.Domain}
 					}
 				case "$cache":
 					state[name] = state[o.values[i]]
@@ -496,7 +497,7 @@ func (gen generated) compose(properties []model.Property) (model.Spec, []composi
 		renames := map[string]expr.Expression{}
 		for name, v := range o.spec.State {
 			if shared[name] {
-				if prior, ok := spec.State[name]; ok && prior != v {
+				if prior, ok := spec.State[name]; ok && !reflect.DeepEqual(prior, v) {
 					return model.Spec{}, nil, fmt.Errorf("composition: shared state %s differs between controllers", name)
 				}
 				spec.State[name] = v

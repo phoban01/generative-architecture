@@ -83,11 +83,11 @@ func TestReconcileWaitsForTenant(t *testing.T) {
 func TestReconcileCreatesSecret(t *testing.T) {
 	c := newClient(t, database(), tenant(true))
 	got := reconcileDatabase(t, c)
-	if !got.Status.Ready || got.Status.SecretName != "orders" {
+	if !got.Status.Ready || got.Status.SecretName != "orders-credentials" {
 		t.Fatalf("status %+v", got.Status)
 	}
 	secret := &corev1.Secret{}
-	if err := c.Get(context.Background(), client.ObjectKey{Namespace: "default", Name: "orders"}, secret); err != nil {
+	if err := c.Get(context.Background(), client.ObjectKey{Namespace: "default", Name: "orders-credentials"}, secret); err != nil {
 		t.Fatal(err)
 	}
 	if secret.StringData["username"] != "orders" {
@@ -106,14 +106,14 @@ func TestReconcileCreatesSecret(t *testing.T) {
 }
 
 func TestReconcileKeepsExistingSecret(t *testing.T) {
-	existing := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "orders"}, StringData: map[string]string{"username": "admin"}}
+	existing := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "orders-credentials"}, StringData: map[string]string{"username": "admin"}}
 	c := newClient(t, database(), tenant(true), existing)
 	got := reconcileDatabase(t, c)
 	if !got.Status.Ready {
 		t.Fatalf("status %+v", got.Status)
 	}
 	secret := &corev1.Secret{}
-	if err := c.Get(context.Background(), client.ObjectKey{Namespace: "default", Name: "orders"}, secret); err != nil {
+	if err := c.Get(context.Background(), client.ObjectKey{Namespace: "default", Name: "orders-credentials"}, secret); err != nil {
 		t.Fatal(err)
 	}
 	if secret.StringData["username"] != "admin" {

@@ -29,7 +29,7 @@ status:
       receiver: DatabaseReconciler
       setup:
         file: examples/refsystem/controllers/database/controller.go
-        line: 86
+        line: 85
         sha256: 72235afc821f7c19610cea24f17763d6df3ca61186cb8b8bd295b4ac20659190
       injection:
         - name: Client
@@ -39,7 +39,7 @@ status:
         source:
           file: examples/refsystem/controllers/database/controller.go
           line: 25
-          sha256: 4003303b8594db61f3d0aae6ed3e91521d65d68a9f27ee25ec56f5af587aa118
+          sha256: ac09fbd132fbae7c74022b1a8202b360cb161e53dc4637db2118687fc94df4e3
         generator: sourcegen
     - id: github.com/phoban01/generative-architecture/examples/refsystem/controllers/tenant.TenantReconciler
       name: TenantReconciler
@@ -131,8 +131,8 @@ status:
       provenance:
         source:
           file: examples/refsystem/controllers/database/controller.go
-          line: 88
-          sha256: 4003303b8594db61f3d0aae6ed3e91521d65d68a9f27ee25ec56f5af587aa118
+          line: 87
+          sha256: ac09fbd132fbae7c74022b1a8202b360cb161e53dc4637db2118687fc94df4e3
         generator: watchgen
     - id: 3ef8223d96e94c16
       controller: github.com/phoban01/generative-architecture/examples/refsystem/controllers/database.DatabaseReconciler
@@ -150,8 +150,8 @@ status:
       provenance:
         source:
           file: examples/refsystem/controllers/database/controller.go
-          line: 89
-          sha256: 4003303b8594db61f3d0aae6ed3e91521d65d68a9f27ee25ec56f5af587aa118
+          line: 88
+          sha256: ac09fbd132fbae7c74022b1a8202b360cb161e53dc4637db2118687fc94df4e3
         generator: watchgen
     - id: 0182dbdba817e843
       controller: github.com/phoban01/generative-architecture/examples/refsystem/controllers/database.DatabaseReconciler
@@ -170,8 +170,8 @@ status:
       provenance:
         source:
           file: examples/refsystem/controllers/database/controller.go
-          line: 90
-          sha256: 4003303b8594db61f3d0aae6ed3e91521d65d68a9f27ee25ec56f5af587aa118
+          line: 89
+          sha256: ac09fbd132fbae7c74022b1a8202b360cb161e53dc4637db2118687fc94df4e3
         generator: watchgen
     - id: dba87b4a78932520
       controller: github.com/phoban01/generative-architecture/examples/refsystem/controllers/tenant.TenantReconciler

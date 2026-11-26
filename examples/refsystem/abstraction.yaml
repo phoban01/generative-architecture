@@ -65,23 +65,24 @@ spec:
         metadata.namespace: ['"default"']
         spec.tenant: ['"acme"']
         status.ready: ['false', 'true']
-        status.secretName: ['""', '"main"']
+        status.secretName: ['""', '"main-credentials"']
       identity:
         - [metadata, name]
       references:
         - path: [spec, tenant]
           targetGVK: {group: refsystem.example.org, version: v1alpha1, kind: Tenant}
-    # The database controller creates a Secret named after the Database,
+    # The database controller creates a Secret named after the Database with
+    # a -credentials suffix,
     # beside it. The Database controls it.
     - gvk: {group: "", version: v1, kind: Secret}
       objects:
-        - {id: mainSecret, namespace: default, name: main}
+        - {id: mainSecret, namespace: default, name: main-credentials}
       fields:
         - {path: [metadata, name], type: string}
         - {path: [metadata, namespace], type: string}
         - {path: [stringData, '"username"'], name: username, type: string}
       valueDomains:
-        metadata.name: ['""', '"main"']
+        metadata.name: ['""', '"main-credentials"']
         metadata.namespace: ['""', '"default"']
         username: ['""', '"main"']
       identity:

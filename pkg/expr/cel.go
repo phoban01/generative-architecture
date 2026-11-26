@@ -18,9 +18,14 @@ import (
 	exprpb "google.golang.org/genproto/googleapis/api/expr/v1alpha1"
 )
 
+// Symbol is a model variable or a lowered value: its model type and its
+// Quint expression. Domain, when set on a string symbol, lists the values
+// the variable takes, as the abstraction declares them; a concatenation
+// with the symbol lowers over them (see concatenation).
 type Symbol struct {
-	Type  string `yaml:"type"`
-	Quint string `yaml:"quint"`
+	Type   string   `yaml:"type"`
+	Quint  string   `yaml:"quint"`
+	Domain []string `yaml:"domain,omitempty"`
 }
 
 var identifier = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]*$`)
@@ -115,11 +120,11 @@ func (compiler Compiler) lowerCEL(e *exprpb.Expr, scope map[string]Symbol) (Symb
 	if c := e.GetConstExpr(); c != nil {
 		switch v := c.ConstantKind.(type) {
 		case *exprpb.Constant_StringValue:
-			return Symbol{"string", strconv.Quote(v.StringValue)}, nil
+			return Symbol{Type: "string", Quint: strconv.Quote(v.StringValue)}, nil
 		case *exprpb.Constant_BoolValue:
-			return Symbol{"bool", strconv.FormatBool(v.BoolValue)}, nil
+			return Symbol{Type: "bool", Quint: strconv.FormatBool(v.BoolValue)}, nil
 		case *exprpb.Constant_Int64Value:
-			return Symbol{"int", strconv.FormatInt(v.Int64Value, 10)}, nil
+			return Symbol{Type: "int", Quint: strconv.FormatInt(v.Int64Value, 10)}, nil
 		default:
 			return bad("unsupported CEL literal")
 		}
@@ -139,7 +144,7 @@ func (compiler Compiler) lowerCEL(e *exprpb.Expr, scope map[string]Symbol) (Symb
 		if !ok {
 			return bad("unknown CEL field %s.%s", v.Type, s.Field)
 		}
-		return Symbol{t, v.Quint + "." + s.Field}, nil
+		return Symbol{Type: t, Quint: v.Quint + "." + s.Field}, nil
 	}
 	if s := e.GetStructExpr(); s != nil {
 		if s.MessageName != "" {
@@ -192,7 +197,7 @@ func (compiler Compiler) lowerCEL(e *exprpb.Expr, scope map[string]Symbol) (Symb
 		for _, name := range names {
 			fields = append(fields, name+": "+values[name].Quint)
 		}
-		return Symbol{matches[0], "{ " + strings.Join(fields, ", ") + " }"}, nil
+		return Symbol{Type: matches[0], Quint: "{ " + strings.Join(fields, ", ") + " }"}, nil
 	}
 	if c := e.GetComprehensionExpr(); c != nil {
 		q, ok := quantifier(c)
@@ -216,7 +221,7 @@ func (compiler Compiler) lowerCEL(e *exprpb.Expr, scope map[string]Symbol) (Symb
 			return located(c.IterRange, fmt.Errorf("%s() requires a declared string domain, got %s", q.name, r.Type))
 		}
 		nested := copyScope(scope)
-		nested[c.IterVar] = Symbol{"string", c.IterVar}
+		nested[c.IterVar] = Symbol{Type: "string", Quint: c.IterVar}
 		b, err := compiler.lowerCEL(q.predicate, nested)
 		if err != nil {
 			return b, err
@@ -224,7 +229,7 @@ func (compiler Compiler) lowerCEL(e *exprpb.Expr, scope map[string]Symbol) (Symb
 		if b.Type != "bool" {
 			return bad("%s() predicate must be bool", q.name)
 		}
-		return Symbol{"bool", r.Quint + "." + q.quint + "(" + c.IterVar + " => " + b.Quint + ")"}, nil
+		return Symbol{Type: "bool", Quint: r.Quint + "." + q.quint + "(" + c.IterVar + " => " + b.Quint + ")"}, nil
 	}
 	if c := e.GetCallExpr(); c != nil {
 		if c.Target != nil {
@@ -243,7 +248,7 @@ func (compiler Compiler) lowerCEL(e *exprpb.Expr, scope map[string]Symbol) (Symb
 			if err != nil {
 				return Symbol{}, err
 			}
-			return Symbol{"string", v.quint()}, nil
+			return Symbol{Type: "string", Quint: v.quint()}, nil
 		}
 		if c.Function == "_[_]" && len(a) == 2 {
 			t, err := mapElement(a[0].Type)
@@ -253,21 +258,21 @@ func (compiler Compiler) lowerCEL(e *exprpb.Expr, scope map[string]Symbol) (Symb
 			if a[1].Type != "string" {
 				return bad("CEL map key must be string")
 			}
-			return Symbol{t, a[0].Quint + ".get(" + a[1].Quint + ")"}, nil
+			return Symbol{Type: t, Quint: a[0].Quint + ".get(" + a[1].Quint + ")"}, nil
 		}
 		if len(a) == 1 {
 			if c.Function == "!_" && a[0].Type == "bool" {
-				return Symbol{"bool", "not(" + a[0].Quint + ")"}, nil
+				return Symbol{Type: "bool", Quint: "not(" + a[0].Quint + ")"}, nil
 			}
 			if c.Function == "-_" && a[0].Type == "int" {
-				return Symbol{"int", "(0 - " + a[0].Quint + ")"}, nil
+				return Symbol{Type: "int", Quint: "(0 - " + a[0].Quint + ")"}, nil
 			}
 		}
 		if c.Function == "_?_:_" && len(a) == 3 {
 			if a[0].Type != "bool" || a[1].Type != a[2].Type {
 				return bad("CEL conditional type mismatch")
 			}
-			return Symbol{a[1].Type, "(if (" + a[0].Quint + ") " + a[1].Quint + " else " + a[2].Quint + ")"}, nil
+			return Symbol{Type: a[1].Type, Quint: "(if (" + a[0].Quint + ") " + a[1].Quint + " else " + a[2].Quint + ")"}, nil
 		}
 		ops := map[string]string{"_&&_": "and", "_||_": "or", "_==_": "==", "_!=_": "!=", "_+_": "+", "_-_": "-", "_<_": "<", "_<=_": "<=", "_>_": ">", "_>=_": ">="}
 		if op, ok := ops[c.Function]; ok && len(a) == 2 {
@@ -293,7 +298,7 @@ func (compiler Compiler) lowerCEL(e *exprpb.Expr, scope map[string]Symbol) (Symb
 					return bad("unsupported equality type")
 				}
 			}
-			return Symbol{out, "(" + a[0].Quint + " " + op + " " + a[1].Quint + ")"}, nil
+			return Symbol{Type: out, Quint: "(" + a[0].Quint + " " + op + " " + a[1].Quint + ")"}, nil
 		}
 		return bad("unsupported CEL function %s", c.Function)
 	}

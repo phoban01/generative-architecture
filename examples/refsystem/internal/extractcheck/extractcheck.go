@@ -3,9 +3,10 @@
 // Controller tests use it to prove that each controller stays inside the
 // subset the extractor supports today.
 //
-// The reference system has no abstraction document yet, so the options are
+// The options are
 // deliberately permissive about data: every controller-runtime client call
-// is a client operation and every field of basic type is a model symbol. A
+// is a client operation and every field of basic type is a model symbol,
+// with the value domain the abstraction document declares for it. A
 // diagnostic therefore names a construct the frontends cannot read at all,
 // not a field nobody selected.
 package extractcheck
@@ -21,6 +22,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/phoban01/generative-architecture/pkg/abstraction"
 	"github.com/phoban01/generative-architecture/pkg/effect"
 	"github.com/phoban01/generative-architecture/pkg/expr"
 	"github.com/phoban01/generative-architecture/pkg/goflow"
@@ -136,16 +138,17 @@ func options(l goflow.Loaded) goflow.Options {
 	// mapKeys lists the declared keys of each map field, so a literal
 	// assigned above a map knows which of its keys are model symbols.
 	mapKeys := map[string][]string{}
-	declare := func(name string, t types.Type) {
+	domains := valueDomains()
+	declare := func(name string, t types.Type, root *ast.Ident) {
 		if typ, ok := modelType(t); ok {
-			scope[name] = expr.Symbol{Type: typ, Quint: name}
+			scope[name] = expr.Symbol{Type: typ, Quint: name, Domain: domains(info, root, strings.TrimPrefix(name, root.Name+"_"))}
 		}
 	}
 	ast.Inspect(l.Func.Body, func(n ast.Node) bool {
 		switch x := n.(type) {
 		case *ast.SelectorExpr:
 			if root, path, ok := fieldPath(info, x); ok {
-				declare(symbol(root, path), info.TypeOf(x))
+				declare(symbol(root, path), info.TypeOf(x), rootIdent(x))
 			}
 		case *ast.AssignStmt:
 			// A map literal assigned to a field writes one symbol per key.
@@ -176,7 +179,7 @@ func options(l goflow.Loaded) goflow.Options {
 				if tv, ok := info.Types[kv.Key]; ok && tv.Value != nil {
 					key := strings.Trim(tv.Value.ExactString(), `"`)
 					name := symbol(root, append(slices.Clone(path), key))
-					declare(name, m.Elem())
+					declare(name, m.Elem(), rootIdent(sel))
 					if _, ok := scope[name]; ok {
 						mapKeys[symbol(root, path)] = append(mapKeys[symbol(root, path)], key)
 					}
@@ -313,4 +316,64 @@ func jsonPath(sel *types.Selection) ([]string, bool) {
 		t = f.Type()
 	}
 	return path, true
+}
+
+// rootIdent returns the identifier a field selection is rooted at.
+func rootIdent(x ast.Expr) *ast.Ident {
+	for {
+		switch v := ast.Unparen(x).(type) {
+		case *ast.SelectorExpr:
+			x = v.X
+		case *ast.Ident:
+			return v
+		default:
+			return nil
+		}
+	}
+}
+
+// valueDomains reads the reference system's abstraction document and
+// returns a lookup of the declared value domain of a string field: the
+// field's resource is the Go type of the local the selection is rooted at,
+// the field its JSON path joined by "_", as symbol names it. Without the
+// document every field is a bare symbol, so a concatenation with a field
+// is a diagnostic, as it is for any project without declared values.
+func valueDomains() func(info *types.Info, root *ast.Ident, key string) []string {
+	none := func(*types.Info, *ast.Ident, string) []string { return nil }
+	root, err := moduleRoot()
+	if err != nil {
+		return none
+	}
+	abs, err := abstraction.Load(filepath.Join(root, "examples", "refsystem", "abstraction.yaml"))
+	if err != nil {
+		return none
+	}
+	return func(info *types.Info, root *ast.Ident, key string) []string {
+		if root == nil {
+			return nil
+		}
+		t := types.Unalias(info.TypeOf(root))
+		if p, ok := t.(*types.Pointer); ok {
+			t = types.Unalias(p.Elem())
+		}
+		named, ok := t.(*types.Named)
+		if !ok || named.Obj().Pkg() == nil {
+			return nil
+		}
+		res, ok := resources[named.Obj().Pkg().Path()+"."+named.Obj().Name()]
+		if !ok {
+			return nil
+		}
+		for _, r := range abs.Spec.Resources {
+			if r.GVK.Group != res.Group || r.GVK.Version != res.Version || r.GVK.Kind != res.Kind {
+				continue
+			}
+			for _, f := range r.Fields {
+				if strings.Join(abstraction.JSONPath(f.Path), "_") == key {
+					return r.Domain(f)
+				}
+			}
+		}
+		return nil
+	}
 }

@@ -93,3 +93,20 @@ func TestConcatenationTruthTable(t *testing.T) {
 		}
 	}
 }
+
+// A string symbol with a declared value domain concatenates: the Quint
+// value chooses, per value of the domain, the concatenated constant.
+func TestConcatenationWithDomainSymbol(t *testing.T) {
+	scope := map[string]Symbol{"name": {Type: "string", Quint: "name", Domain: []string{"main", "other"}}, "bare": {Type: "string", Quint: "bare"}}
+	got, err := Compiler{}.Compile(`name + "-credentials"`, scope, "string")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `(if (name == "main") "main-credentials" else "other-credentials")`
+	if got.Quint != want {
+		t.Fatalf("quint %s, want %s", got.Quint, want)
+	}
+	if _, err := (Compiler{}).Compile(`bare + "-credentials"`, scope, "string"); err == nil || !strings.Contains(err.Error(), "no declared value domain") {
+		t.Fatalf("a symbol without a domain concatenated: %v", err)
+	}
+}

@@ -407,7 +407,7 @@ func (a Abstraction) StateVariables() map[string]model.Variable {
 		for _, o := range r.Objects {
 			out[ExistsVariable(r.GVK.Kind, o.ID)] = model.Variable{Type: TypeBool, Initial: expr.Expression("false")}
 			for _, f := range r.Fields {
-				out[FieldVariable(r.GVK.Kind, o.ID, f)] = model.Variable{Type: f.Type, Initial: expr.Expression(Initial(f.Type))}
+				out[FieldVariable(r.GVK.Kind, o.ID, f)] = model.Variable{Type: f.Type, Initial: expr.Expression(Initial(f.Type)), Domain: r.Domain(f)}
 			}
 		}
 	}
@@ -445,6 +445,24 @@ func (s Spec) Populations() map[string][]string {
 			ids = append(ids, o.ID)
 		}
 		out[PopulationDomain(r.GVK.Kind)] = ids
+	}
+	return out
+}
+
+// Domain returns the declared value domain of a string field of r as plain
+// values, so a concatenation with the field lowers over them (see
+// expr.Symbol). It is nil for a field of another type or without a domain.
+func (r Resource) Domain(f Field) []string {
+	if f.Type != TypeString {
+		return nil
+	}
+	var out []string
+	for _, literal := range r.ValueDomains[f.Key()] {
+		v, err := strconv.Unquote(literal)
+		if err != nil {
+			return nil
+		}
+		out = append(out, v)
 	}
 	return out
 }

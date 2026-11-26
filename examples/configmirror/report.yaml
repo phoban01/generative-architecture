@@ -122,7 +122,7 @@ status:
       - path: examples/configmirror/evidence.go
         sha256: caa5a9a803ffb54b3b61f32b75083cb6ad41055f7dcaae7452209f1e0191f631
       - path: examples/configmirror/generate.go
-        sha256: ed53f737224176171e41fc3fc319ad785e528eda77e692da7ba3007d0db57e99
+        sha256: e08ec966fc4adb19da7e31d11fb05a7cdbc1bcd12a2399ec4e5b4ad2a9ce3c34
       - path: examples/configmirror/generated/environment_generated.go
         sha256: 89c807e758ae5c150fbf7351455ce4ffe06c8f008ad31bb2540d34e17ab6519f
       - path: examples/configmirror/generated/gating_generated.go
@@ -140,7 +140,7 @@ status:
       - path: go.sum
         sha256: ed5af2f8d19b41f7406479adef9ab0a7ee5430f55509febeba1c7d3c877d7348
       - path: pkg/abstraction/abstraction.go
-        sha256: 2fd703c2dd4b3d7751478239d95e70365d6794d4fb971365726f18222e076853
+        sha256: 3ece4d49fd3780dd3c6a6d41a802608929bba6e9ab527363374c9ab0200ea86c
       - path: pkg/adaptergen/abstraction.go
         sha256: d4ac2ec54b307bbb84fcca0255803b6cadcd8284ca4a81607fcd2a2479267557
       - path: pkg/adaptergen/environment.go
@@ -149,6 +149,8 @@ status:
         sha256: 961d3679fd9b3d02fe494cfe2129b9708406f0e5057b9034f881c9eb833bf33d
       - path: pkg/adaptergen/generate.go
         sha256: 23ba80818bb0ad6700cfaf1cef2be9861c32ab5ecfdbc08753934efb37907284
+      - path: pkg/adaptergen/invocation.go
+        sha256: 036fd743f7d53b2751c987506353e1aca9d5bd82a5a2fbd949c8e6fbc43babd5
       - path: pkg/adaptergen/projection.go
         sha256: 6b0f3151d9d1e9628d33bc20d5f0356fdde958b892a8e64184b193e7973dc423
       - path: pkg/adaptergen/proxy.go
@@ -159,6 +161,8 @@ status:
         sha256: 776349add8f60619c379b230af7d2c93e9755a9c075871a637f068bdf468175b
       - path: pkg/adaptergen/runtime.go
         sha256: fdbffca3a7f7d055c68c7fbac78e1d86aa123116993bba4237e6a85afc0dc19b
+      - path: pkg/adaptergen/watches.go
+        sha256: 62109746ffdea633803d8d8fbff75558808862401a7f31a43ba12d780cbafe43
       - path: pkg/boundary/boundary.go
         sha256: 8c3b55c18667348fea5b069128184a3e7f06d537e319a1c9432d34d64b485387
       - path: pkg/catalog/catalog.go
@@ -222,9 +226,9 @@ status:
       - path: pkg/effect/effect.go
         sha256: a40cc2aa1c0f3e199312605af3b6acb00eb5f07bb366bb50a6b0cef995fa5bed
       - path: pkg/expr/cel.go
-        sha256: 506571c4dcad117a562329eb17185c1bf142901d9da0897edefd9da37df7f3d0
+        sha256: 700ce7a285a7da5e44b930bb885e5fa77211b22610609e93259cbf2250e09e34
       - path: pkg/expr/concat.go
-        sha256: a215a4bd919642d2962f6fc4d0f7f27682cf451936da6e9618093494a24dc64d
+        sha256: b4c7b207a2265b305bfec7ed07be4ac8355a66d81230a2f42a4bc470e7b4dba6
       - path: pkg/expr/free.go
         sha256: e8d04af7fa37706d35b45189133f8537b45aad82524d51bbf6a3781ff712377b
       - path: pkg/expr/rewrite.go
@@ -294,9 +298,9 @@ status:
       - path: pkg/likec4/workspace.go
         sha256: 94393d3c9b3e41c6e0d3c5d8a1d6655a12a49c9f78b61ae603b4b0d2dc01c5a9
       - path: pkg/model/model.go
-        sha256: 44164cdab9091306e54f53339f3e546a55ff71047d54db9a6ae8a6bf5ae22b0a
+        sha256: 18e96e169979861a54be5e5dccaa5d8bbfebc4527f1720731c91214670ce51b5
       - path: pkg/model/temporal.go
-        sha256: d1996a1d709e59c2c2a3c789f1290023cc8301713b91b8b3fc567146e3998564
+        sha256: 9863586deb0029cd3b281b616df368f0099e18c1b1e27c2a69a9ca7e58b5e6b4
       - path: pkg/mutation/detect.go
         sha256: be9f44e43e50de65523075ac911ac2f63d8230616a547d893f4189f302433b16
       - path: pkg/mutation/mutation.go
@@ -361,6 +365,12 @@ status:
         sha256: bd08f77864a7e1691166cc6f9b3fe09b6184662284485c2992b0210f6487b0be
       - path: pkg/summaries/summary.go
         sha256: c08fb16b3af87eeb408909e2972cda3f7f438e89dcc50d236c03935e2625e927
+      - path: pkg/watchmodel/mapping.go
+        sha256: 882a3981dda3a5be209c98dd9be16f46daeb5740bb80af6f2166434e825d0a1d
+      - path: pkg/watchmodel/model.go
+        sha256: da003884e70a218020084ce6c99b821bb125605d706494542096b9c603e5cfa2
+      - path: pkg/watchmodel/predicates.go
+        sha256: aba48be8d2eb50351f7355f1fb31e7b70aeb3f24fc213b361540c9534bc7c4f7
     tools:
       go: go1.26.8
       quint: 0.33.0

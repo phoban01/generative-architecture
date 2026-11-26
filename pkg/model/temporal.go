@@ -106,7 +106,7 @@ func (m *Compiled) TemporalModule(t Temporal, fair Fairness) (string, error) {
 	c := expr.Compiler{Records: m.spec.Records}
 	scope := map[string]expr.Symbol{"event": {Type: "string", Quint: "event"}}
 	for name, v := range m.spec.State {
-		scope[name] = expr.Symbol{Type: v.Type, Quint: name}
+		scope[name] = expr.Symbol{Type: v.Type, Quint: name, Domain: v.Domain}
 	}
 	for name := range m.spec.Domains {
 		scope[name] = expr.Symbol{Type: expr.Domain, Quint: name}
