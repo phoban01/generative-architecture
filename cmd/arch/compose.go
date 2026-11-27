@@ -246,6 +246,7 @@ func (c controllerModel) build() (model.Spec, []effect.Descriptor, error) {
 		spec.State[name] = v
 	}
 	actions := environmentActions(reads, writes, cached)
+	actions = append(actions, c.choiceActions()...)
 	actions = append(actions, runtime.Actions...)
 	spec.Actions = append(actions, spec.Actions...)
 	spec.Properties = runtime.Properties
@@ -646,4 +647,26 @@ func resourceByKind(abs abstraction.Abstraction, kind string) (abstraction.Resou
 		}
 	}
 	return abstraction.Resource{}, false
+}
+
+// choiceActions lets the environment set each local a choice binds to
+// every value of its type (ADR-0012): one action per value, enabled while
+// the local holds another value.
+func (c controllerModel) choiceActions() []model.Action {
+	locals := map[string]bool{}
+	for _, local := range c.decl.Choices {
+		locals[local] = true
+	}
+	var out []model.Action
+	for _, local := range slices.Sorted(maps.Keys(locals)) {
+		values, _ := c.abs.ChoiceValues(local)
+		for i, v := range values {
+			out = append(out, model.Action{
+				Name:    fmt.Sprintf("choose_%s_%d", local, i),
+				Guard:   expr.Expression(fmt.Sprintf("%s != %s", local, v)),
+				Updates: map[string]expr.Expression{local: expr.Expression(v)},
+			})
+		}
+	}
+	return out
 }

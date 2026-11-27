@@ -677,3 +677,64 @@ func TestGenerateList(t *testing.T) {
 		t.Fatalf("quint typecheck: %v\n%s", err, out)
 	}
 }
+
+// A decision on the clock is a declared choice: the bound expression lowers
+// to the local, the environment sets the local to each of its values, a
+// declared pure call may sit inside a log, and no adapter generates
+// (ADR-0012).
+func TestGenerateChoices(t *testing.T) {
+	out, err := generateTo(t, "testdata/timed/project.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var spec model.Spec
+	if _, err := krm.Read(filepath.Join(out, specFile), "TransitionModel", &spec); err != nil {
+		t.Fatal(err)
+	}
+	actions := map[string]model.Action{}
+	for _, a := range spec.Actions {
+		actions[a.Name] = a
+	}
+	if a, ok := actions["choose_late_1"]; !ok || a.Guard != "late != true" || a.Updates["late"] != "true" {
+		t.Fatalf("choice action %+v (%v): %v", a, ok, slices.Sorted(maps.Keys(actions)))
+	}
+	var branch bool
+	for _, a := range spec.Actions {
+		if strings.Contains(string(a.Updates[pcVariable]), "late && ") {
+			branch = true
+		}
+	}
+	if !branch {
+		t.Fatal("the decision does not branch on the chosen local")
+	}
+	if _, err := os.Stat(filepath.Join(out, adapterDir)); !os.IsNotExist(err) {
+		t.Fatalf("an adapter was generated for a controller with choices: %v", err)
+	}
+	// A choice on a local the abstraction does not declare fails closed.
+	// The copy stays inside the module so its packages resolve.
+	dir, err := os.MkdirTemp("testdata", "timed-bad-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	copyTree(t, "testdata/timed", dir)
+	project, err := os.ReadFile(filepath.Join(dir, "project.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "project.yaml"), bytes.Replace(project, []byte("r.Now().After(r.Deadline): late"), []byte("r.Now().After(r.Deadline): overdue"), 1), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	bad := t.TempDir()
+	var stdout, stderr bytes.Buffer
+	if err := run([]string{"--project", filepath.Join(dir, "project.yaml"), "--out", bad, "extract"}, &stdout, &stderr); err == nil {
+		t.Fatal("undeclared choice local accepted")
+	}
+	s, err := report.Read(filepath.Join(bad, supportFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(s.Unsupported) != 1 || !strings.Contains(s.Unsupported[0].Reason, "overdue, which is not an abstraction local with choosable values") {
+		t.Fatalf("unsupported %+v", s.Unsupported)
+	}
+}

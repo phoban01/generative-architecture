@@ -33,3 +33,20 @@ func TestLoggingHasNoEffect(t *testing.T) {
 		t.Fatalf("got %v, want a diagnostic on the call inside the log", err)
 	}
 }
+
+// A callee the options declare pure may appear inside a log argument: the
+// log is dropped with the call (ADR-0012).
+func TestDeclaredPureCallInsideLog(t *testing.T) {
+	opts := Options{
+		Scope:   map[string]expr.Symbol{"ready": {Type: "bool", Quint: "ready"}},
+		Returns: []Return{{Zero: true}, {Error: true}},
+		Pure:    map[Callee]bool{{Package: "github.com/phoban01/generative-architecture/pkg/goflow/testdata/kube", Receiver: "Reconciler", Method: "owner"}: true},
+	}
+	p, err := ExtractTyped(loadFixture(t, "./pkg/goflow/testdata/kube", "Reconciler", "LogCall"), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Nodes) != 1 || p.Nodes[p.Entry].Kind != "return" {
+		t.Fatalf("nodes %+v, want only the return", p.Nodes)
+	}
+}

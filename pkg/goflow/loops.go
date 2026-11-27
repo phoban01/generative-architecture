@@ -167,7 +167,8 @@ func (e *extractor) localAssign(x *ast.AssignStmt, next int) (int, bool, error) 
 	if !ok {
 		return 0, false, nil
 	}
-	if _, isCall := ast.Unparen(x.Rhs[0]).(*ast.CallExpr); isCall {
+	_, bound := e.opts.Bindings[Code(x.Rhs[0])]
+	if _, isCall := ast.Unparen(x.Rhs[0]).(*ast.CallExpr); isCall && !bound {
 		if _, builtin := e.info.Uses[rootIdent(ast.Unparen(x.Rhs[0]).(*ast.CallExpr).Fun)].(*types.Builtin); !builtin {
 			return 0, false, nil
 		}

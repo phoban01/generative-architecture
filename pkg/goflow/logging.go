@@ -44,7 +44,7 @@ func (e *extractor) logging(s ast.Stmt, call *ast.CallExpr, c Callee) (bool, err
 			return true, e.diagnose(x.Lhs[0], "assign", "logger local "+id.Name+" is a model symbol")
 		}
 	}
-	return true, e.innerCalls(call, loggingCallee, "a logging call", "the log")
+	return true, e.innerCalls(call, func(c Callee) bool { return loggingCallee(c) || e.pureCallee(c) }, "a logging call", "the log")
 }
 
 // innerCalls diagnoses a call inside call that allow rejects, and a call

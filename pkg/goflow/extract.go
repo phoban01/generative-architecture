@@ -112,8 +112,11 @@ type Options struct {
 	Targets                map[string]string
 	Returns                []Return
 	External               map[Callee]ir.Effect
-	Call                   func(Callee, *ast.CallExpr, Convert) (Node, bool, error)
-	Field                  func(root string, jsonPath []string) (expr.Expression, bool)
+	// Pure names callees with no model effect beyond the built-in pure
+	// helpers, such as a clock the controller reads (ADR-0012).
+	Pure  map[Callee]bool
+	Call  func(Callee, *ast.CallExpr, Convert) (Node, bool, error)
+	Field func(root string, jsonPath []string) (expr.Expression, bool)
 	// MapKeys names the selected keys of the map field at jsonPath of
 	// root. A map-literal assignment to that field replaces the whole map,
 	// so each selected key it omits takes its absent value. Without

@@ -40,6 +40,9 @@ func (gen generated) replayAdapter() (map[string][]byte, string, error) {
 		return nil, "a replay adapter covers a model of one controller without boundaries", nil
 	}
 	o := gen.controllers[0]
+	if len(o.decl.Choices) > 0 {
+		return nil, "a controller with choices reads a clock the replay does not inject yet (ADR-0012)", nil
+	}
 	objects := objectsOf(*gen.abs)
 	cached, written, read, listed := map[string]bool{}, map[string]bool{}, map[string]bool{}, map[string]bool{}
 	type effectNode struct {

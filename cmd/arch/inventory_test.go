@@ -94,7 +94,7 @@ func TestExtractReconcileWithAbstraction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	program, unsupported, unresolved := extractReconcile(p.Root, c, l, &abs, cat)
+	program, unsupported, unresolved := extractReconcile(p.Root, c, l, &abs, nil, cat)
 	if program == nil || len(unsupported) != 0 {
 		t.Fatalf("unsupported %+v", unsupported)
 	}
@@ -156,7 +156,7 @@ func TestInventoryRecordsListOptions(t *testing.T) {
 		return l
 	}
 	c := ir.Controller{ID: "lister", Package: "./cmd/arch/testdata/listing", Receiver: "Lister"}
-	program, unsupported, _ := extractReconcile(p.Root, c, load("Lister"), nil, cat)
+	program, unsupported, _ := extractReconcile(p.Root, c, load("Lister"), nil, nil, cat)
 	if program == nil || len(unsupported) != 0 {
 		t.Fatalf("unsupported %+v", unsupported)
 	}
@@ -170,7 +170,7 @@ func TestInventoryRecordsListOptions(t *testing.T) {
 		t.Fatalf("list node %+v", list)
 	}
 	c = ir.Controller{ID: "limited", Package: "./cmd/arch/testdata/listing", Receiver: "Limited"}
-	program, unsupported, _ = extractReconcile(p.Root, c, load("Limited"), nil, cat)
+	program, unsupported, _ = extractReconcile(p.Root, c, load("Limited"), nil, nil, cat)
 	if program != nil || len(unsupported) != 1 || unsupported[0].Kind != "option" || unsupported[0].Location.Line != 37 || !strings.Contains(unsupported[0].Reason, "unsupported List option") {
 		t.Fatalf("limited: program %v unsupported %+v", program, unsupported)
 	}

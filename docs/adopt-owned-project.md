@@ -296,6 +296,13 @@ spec:
   invocation. A `client.ObjectKey{...}` literal needs no
   declaration when its fields resolve to constants through the
   abstraction, such as another object's name.
+- `choices` binds the text of a Go expression, as `gofmt` prints it, to an
+  abstraction local the environment chooses: a decision the controller
+  takes on the clock, such as `missedRun.IsZero()`. The local is a `bool`,
+  or declares its `values` in the abstraction (ADR-0012).
+- `pure` lists callees with no model effect, such as a clock the
+  controller reads through an embedded interface. A pure call may sit
+  inside a log statement.
 - `initial` sets the initial value of each object's field.
 
 Write the properties the model must keep in the `constraints.yaml` that

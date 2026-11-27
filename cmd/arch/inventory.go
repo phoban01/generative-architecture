@@ -17,6 +17,7 @@ import (
 	"github.com/phoban01/generative-architecture/pkg/expr"
 	"github.com/phoban01/generative-architecture/pkg/goflow"
 	"github.com/phoban01/generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/project"
 	"github.com/phoban01/generative-architecture/pkg/report"
 )
 
@@ -76,7 +77,7 @@ type inventory struct {
 // the fields it selects on a local of an abstracted resource resolve, and
 // the map keys it selects complete each map literal; any other field is
 // unresolved.
-func extractReconcile(root string, c ir.Controller, l goflow.Loaded, abs *abstraction.Abstraction, cat *catalog.Catalog) (*goflow.Program, []report.Item, []report.Item) {
+func extractReconcile(root string, c ir.Controller, l goflow.Loaded, abs *abstraction.Abstraction, decl *project.Controller, cat *catalog.Catalog) (*goflow.Program, []report.Item, []report.Item) {
 	inv := &inventory{
 		fset: l.Package.Fset, info: l.Package.TypesInfo, pkg: l.Package, file: relative(root, l.Path),
 		scope: map[string]expr.Symbol{}, keys: map[string][]string{},
@@ -98,6 +99,14 @@ func extractReconcile(root string, c ir.Controller, l goflow.Loaded, abs *abstra
 		Call:    inv.clientCall,
 		Field:   inv.field,
 		MapKeys: inv.mapKeys,
+	}
+	if abs != nil && decl != nil {
+		// Declared choices and pure callees apply in the support pass too.
+		bindings, pure, err := declaredChoices(*abs, *decl)
+		if err != nil {
+			return nil, []report.Item{{Kind: "declaration", Construct: decl.Name, Reason: err.Error(), Location: report.Location{File: relative(root, l.Path)}}}, nil
+		}
+		opts.Bindings, opts.Pure = bindings, pure
 	}
 	program, err := goflow.ExtractTyped(l, opts)
 	if err != nil {

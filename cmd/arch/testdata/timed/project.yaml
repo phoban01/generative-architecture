@@ -1,0 +1,41 @@
+apiVersion: architecture.local/v1alpha1
+kind: Project
+metadata:
+  name: timed
+spec:
+  # A reconciler whose decision on the clock is a declared choice.
+  module: github.com/phoban01/generative-architecture
+  packages:
+    - ./cmd/arch/testdata/timed
+  catalog:
+    discovery:
+      - discovery.json
+  abstraction: abstraction.yaml
+  runtime:
+    profile: controller-runtime
+    maxTicks: 20
+  bounds:
+    maxObjectsPerResource: 2
+    maxInvocations: 3
+  controllers:
+    - receiver: Reconciler
+      name: timed
+      workers: 1
+      retryTicks: 2
+      key: source
+      effects:
+        - call: sigs.k8s.io/controller-runtime/pkg/client.Client.Get
+          effect: readSource
+        - call: sigs.k8s.io/controller-runtime/pkg/client.Reader.Get
+          effect: readTarget
+        - call: sigs.k8s.io/controller-runtime/pkg/client.Client.Update
+          effect: writeTarget
+      objectKeys:
+        github.com/phoban01/generative-architecture/cmd/arch/testdata/timed.Reconciler.Target: copy
+      choices:
+        r.Now().After(r.Deadline): late
+      pure:
+        - github.com/phoban01/generative-architecture/cmd/arch/testdata/timed.Reconciler.Now
+  initial:
+    source.data.value: '"a"'
+    copy.data.value: '""'

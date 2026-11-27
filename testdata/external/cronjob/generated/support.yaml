@@ -144,36 +144,6 @@ status:
       location:
         file: internal/controller/cronjob_controller.go
         line: 400
-    - kind: call
-      construct: r.Now()
-      reason: call to tutorial.kubebuilder.io/project/internal/controller.CronJobReconciler.Now inside a logging call; dropping the log would drop it
-      location:
-        file: internal/controller/cronjob_controller.go
-        line: 413
-    - kind: expression
-      construct: missedRun.IsZero()
-      reason: unsupported Go expression
-      location:
-        file: internal/controller/cronjob_controller.go
-        line: 420
-    - kind: assign
-      construct: tooLate := false
-      reason: unsupported Go statement
-      location:
-        file: internal/controller/cronjob_controller.go
-        line: 427
-    - kind: call
-      construct: tooLate = missedRun.Add(time.Duration(*cronJob.Spec.StartingDeadlineSeconds) * time.Second).Before(r.Now())
-      reason: unsummarized call to time.Time.Before; declare it as a client operation or an external effect
-      location:
-        file: internal/controller/cronjob_controller.go
-        line: 429
-    - kind: identifier
-      construct: tooLate
-      reason: unbound local variable tooLate
-      location:
-        file: internal/controller/cronjob_controller.go
-        line: 431
     - kind: identifier
       construct: activeJobs
       reason: unbound local variable activeJobs

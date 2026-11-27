@@ -192,3 +192,26 @@ func TestListLocal(t *testing.T) {
 		t.Fatalf("list field accepted: %v", err)
 	}
 }
+
+// A local's values are literals of its type; a bool chooses between true
+// and false without declaring them.
+func TestLocalValues(t *testing.T) {
+	a := valid()
+	a.Spec.Locals = append(a.Spec.Locals, Local{Name: "phase", Type: TypeString, Values: []string{`"due"`, `"late"`}}, Local{Name: "late", Type: TypeBool})
+	if err := a.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if v, ok := a.ChoiceValues("phase"); !ok || len(v) != 2 || v[1] != `"late"` {
+		t.Fatalf("phase values %v %v", v, ok)
+	}
+	if v, ok := a.ChoiceValues("late"); !ok || len(v) != 2 || v[0] != "false" {
+		t.Fatalf("late values %v %v", v, ok)
+	}
+	if _, ok := a.ChoiceValues("n"); ok {
+		t.Fatal("an int local without values has choice values")
+	}
+	a.Spec.Locals[1].Values = []string{"due"}
+	if err := a.Validate(); err == nil || !strings.Contains(err.Error(), "not a string literal") {
+		t.Fatalf("bare word accepted as a string value: %v", err)
+	}
+}

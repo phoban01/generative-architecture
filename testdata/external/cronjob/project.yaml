@@ -37,3 +37,10 @@ spec:
           effect: updateStatus
         - call: sigs.k8s.io/controller-runtime/pkg/client.Writer.Create
           effect: createJob
+      # Decisions on the clock are choices the environment makes, and the
+      # clock itself is pure (ADR-0012).
+      choices:
+        missedRun.IsZero(): noMissedRun
+        missedRun.Add(time.Duration(*cronJob.Spec.StartingDeadlineSeconds) * time.Second).Before(r.Now()): tooLate
+      pure:
+        - tutorial.kubebuilder.io/project/internal/controller.CronJobReconciler.Now

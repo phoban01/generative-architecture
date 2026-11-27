@@ -45,6 +45,12 @@ spec:
         # with controller true names the CronJob that owns the Job.
         - owner: true
           targetGVK: {group: batch.tutorial.kubebuilder.io, version: v1, kind: CronJob}
+  locals:
+    # Decisions the controller takes on the clock; the environment chooses
+    # them (ADR-0012). noMissedRun: no scheduled run is due. tooLate: the
+    # missed run is past its starting deadline.
+    - {name: noMissedRun, type: bool}
+    - {name: tooLate, type: bool}
   bounds:
     # One CronJob and the Jobs of two scheduled runs; four reconciles.
     maxObjectsPerResource: 2

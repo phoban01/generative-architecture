@@ -39,6 +39,10 @@ const metav1Package = "k8s.io/apimachinery/pkg/apis/meta/v1"
 // DeepCopyInto method writes its argument, so it is not one.
 var pureMethods = map[string]bool{"DeepCopy": true, "DeepCopyObject": true}
 
+// pureCallee reports whether c is a built-in pure helper; the extractor's
+// method also accepts the callees Options.Pure declares.
+func (e *extractor) pureCallee(c Callee) bool { return pureCallee(c) || e.opts.Pure[c] }
+
 // pureCallee reports whether c has no model effect.
 func pureCallee(c Callee) bool {
 	if purePackages[c.Package] || pureFunctions[c] {
@@ -58,8 +62,8 @@ func pureCallee(c Callee) bool {
 // builtin or a conversion is a diagnostic, because dropping the statement
 // would drop that call too.
 func (e *extractor) pure(s ast.Stmt, call *ast.CallExpr, c Callee) (bool, error) {
-	if _, ok := s.(*ast.ExprStmt); !ok || !pureCallee(c) {
+	if _, ok := s.(*ast.ExprStmt); !ok || !e.pureCallee(c) {
 		return false, nil
 	}
-	return true, e.innerCalls(call, pureCallee, "a pure helper call", "the statement")
+	return true, e.innerCalls(call, e.pureCallee, "a pure helper call", "the statement")
 }

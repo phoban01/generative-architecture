@@ -113,6 +113,9 @@ type Resource struct {
 type Local struct {
 	Name string `yaml:"name"`
 	Type string `yaml:"type"`
+	// Values lists the values a local takes when the environment chooses
+	// it (ADR-0012): CEL literals of its type. A bool local needs none.
+	Values []string `yaml:"values,omitempty"`
 }
 
 // Bounds limit the population and the run length of the model.
@@ -252,6 +255,14 @@ func (a Abstraction) Validate() error {
 		}
 		if seenVars[l.Name] {
 			return fmt.Errorf("abstraction %s: local %s collides with a derived variable", a.Name, l.Name)
+		}
+		for i, v := range l.Values {
+			if _, err := (expr.Compiler{}).Compile(expr.Expression(v), nil, l.Type); err != nil {
+				return fmt.Errorf("abstraction %s: local %s: value %q is not a %s literal: %v", a.Name, l.Name, v, l.Type, err)
+			}
+			if slices.Contains(l.Values[:i], v) {
+				return fmt.Errorf("abstraction %s: local %s: duplicate value %q", a.Name, l.Name, v)
+			}
 		}
 		seenVars[l.Name] = true
 	}
@@ -470,4 +481,20 @@ func (r Resource) Domain(f Field) []string {
 		out = append(out, v)
 	}
 	return out
+}
+
+// ChoiceValues lists the values the environment chooses for a local: true
+// and false for a bool, the declared values otherwise. It reports false
+// when the local is not declared or has no values.
+func (a Abstraction) ChoiceValues(name string) ([]string, bool) {
+	for _, l := range a.Spec.Locals {
+		if l.Name != name {
+			continue
+		}
+		if l.Type == TypeBool && len(l.Values) == 0 {
+			return []string{"false", "true"}, true
+		}
+		return slices.Clone(l.Values), len(l.Values) > 0
+	}
+	return nil, false
 }

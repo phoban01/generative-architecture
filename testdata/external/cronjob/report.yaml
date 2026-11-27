@@ -9,7 +9,7 @@ status:
     conformance: 0
     safety: 0
     tool: 0
-    unsupported: 29
+    unsupported: 24
   scope: 'no model: arch extract failed closed on the unmodified controller, so arch generate, check and replay did not run; no tool sampled or replayed anything'
   traces: 0
   transitions: 0
@@ -51,16 +51,6 @@ status:
     - category: unsupported
       message: 'arch extract: internal/controller/cronjob_controller.go:400: closure "missedRun": closure result local missedRun is not a model symbol'
     - category: unsupported
-      message: 'arch extract: internal/controller/cronjob_controller.go:413: call "r.Now()": call to tutorial.kubebuilder.io/project/internal/controller.CronJobReconciler.Now inside a logging call; dropping the log would drop it'
-    - category: unsupported
-      message: 'arch extract: internal/controller/cronjob_controller.go:420: expression "missedRun.IsZero()": unsupported Go expression'
-    - category: unsupported
-      message: 'arch extract: internal/controller/cronjob_controller.go:427: assign "tooLate := false": unsupported Go statement'
-    - category: unsupported
-      message: 'arch extract: internal/controller/cronjob_controller.go:429: call "tooLate = missedRun.Add(time.Duration(*cronJob.Spec.StartingDeadlineSeconds) * time.Second).Before(r.Now())": unsummarized call to time.Time.Before; declare it as a client operation or an external effect'
-    - category: unsupported
-      message: 'arch extract: internal/controller/cronjob_controller.go:431: identifier "tooLate": unbound local variable tooLate'
-    - category: unsupported
       message: 'arch extract: internal/controller/cronjob_controller.go:444: identifier "activeJobs": unbound local variable activeJobs'
     - category: unsupported
       message: 'arch extract: internal/controller/cronjob_controller.go:451: identifier "activeJobs": unbound local variable activeJobs'
@@ -73,10 +63,10 @@ status:
     - category: unsupported
       message: 'arch replay: not run: arch check sampled no traces'
   inputHashes:
-    abstraction.yaml: e6acebadbec9eb2adf6a5a4e5ca081e9f3393fc12b9cf2a74aba0177202de303
+    abstraction.yaml: 11a9c465ba121929fc4dfd12bc147d53f8f937fe21d358303742ccef240dc1b3
     catalog/batch-v1.json: a972f6b207e83e52f80baf5821e20d7b154c788b092a412945c2254566159d15
     config/crd/bases/batch.tutorial.kubebuilder.io_cronjobs.yaml: 4016e4984192bbd6ae9e460e5b39bda35a7fac44ed19a63efa60c16018e83630
     constraints.yaml: d65c2cebdb865f0f4234cfdd8470927640fb9aacf68e7d5f51e7ac7cc57657a4
-    generated/support.yaml: 78c4c8ac159a1c97c927d78e8be16b4a1ff14a6202bfe9016ca76838589fd574
+    generated/support.yaml: 344bb91794a06f9d61a6124e35fe4d63d4a7b4b118b0a57675bae382d4b9d76e
     internal/controller/cronjob_controller.go: b9bde9f751609f2661062c88b86e73e70125e4fd136475bb6e1eec37686db5aa
-    project.yaml: b964264e5f1f239bef530a8ed965b19c33baddd4f79e39dcae057b03f84dc2f5
+    project.yaml: a7702d7bc4824c3a7b0fb3b966e21de7b07b8e1f034b62231ea9a58b8afd5227

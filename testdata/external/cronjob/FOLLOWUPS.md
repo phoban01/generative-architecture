@@ -193,7 +193,7 @@ smallest extension that would support it.
 - Note: since #160 `len` of a list local lowers to its size. The line now
   reports `activeJobs` itself, which gap 18 covers.
 
-### 11. Time values and time arithmetic
+### 11. Time values and time arithmetic (partly closed by #145)
 
 - Construct: `missedRun.IsZero()` (420), the local `tooLate` from
   `missedRun.Add(...).Before(r.Now())` (427 to 431), and `r.Now()` through
@@ -204,6 +204,16 @@ smallest extension that would support it.
 - Smallest extension: let the author declare a time-dependent condition as
   an environment choice (a nondeterministic boolean). This needs a decision
   on how the model treats the clock.
+- Resolution: ADR-0012 makes time a declared choice. The pinned project
+  binds `missedRun.IsZero()` to the local `noMissedRun` and the deadline
+  test to `tooLate` under `choices`, and lists the reconciler's `Now` under
+  `pure`, so the log at 413 and lines 420 to 431 extract; the environment
+  sets each local to true and false. What stays open is the schedule
+  itself: `getNextSchedule(&cronJob, r.Now())` (400) parses a cron
+  expression and returns times, which the model does not hold, so its
+  result locals remain outside the model until the author declares the
+  decisions that depend on them. `mostRecentTime` (221 to 228) and the
+  `*metav1.Time` write are in the same position.
 
 ### 12. Optional and non-scalar fields (closed by #146; time and list fields stay open)
 

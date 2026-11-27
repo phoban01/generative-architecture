@@ -4,12 +4,15 @@ import (
 	"fmt"
 	"go/ast"
 	"go/types"
+	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/phoban01/generative-architecture/pkg/abstraction"
+	"github.com/phoban01/generative-architecture/pkg/expr"
 	"github.com/phoban01/generative-architecture/pkg/goflow"
 	"github.com/phoban01/generative-architecture/pkg/ir"
+	"github.com/phoban01/generative-architecture/pkg/project"
 )
 
 // A List call fills a list local (ADR-0011). The Go local is a list type
@@ -172,4 +175,43 @@ func (x *extraction) listCall(c goflow.Callee, call *ast.CallExpr, local string,
 		options = map[string]string{"namespace": namespace}
 	}
 	return goflow.Node{Kind: ir.OpList, Effect: e.Effect, Consistency: e.Consistency, Bindings: b, Options: options}, nil
+}
+
+// declaredChoices builds the frontend's expression bindings and pure
+// callees from a controller declaration (ADR-0012). A choice binds the Go
+// expression's text to an abstraction local the environment chooses; the
+// local must be declared with choosable values.
+func declaredChoices(abs abstraction.Abstraction, decl project.Controller) (map[string]expr.Expression, map[goflow.Callee]bool, error) {
+	var bindings map[string]expr.Expression
+	for _, expression := range sortedKeys(decl.Choices) {
+		local := decl.Choices[expression]
+		if _, ok := abs.ChoiceValues(local); !ok {
+			return nil, nil, fmt.Errorf("controller %s: choice %q maps to %s, which is not an abstraction local with choosable values (a bool, or a local with values)", decl.Name, expression, local)
+		}
+		if bindings == nil {
+			bindings = map[string]expr.Expression{}
+		}
+		bindings[expression] = expr.Expression(local)
+	}
+	var pure map[goflow.Callee]bool
+	for _, symbol := range decl.Pure {
+		pkg, receiver, method, err := project.PureSymbol(symbol)
+		if err != nil {
+			return nil, nil, fmt.Errorf("controller %s: %w", decl.Name, err)
+		}
+		if pure == nil {
+			pure = map[goflow.Callee]bool{}
+		}
+		pure[goflow.Callee{Package: pkg, Receiver: receiver, Method: method}] = true
+	}
+	return bindings, pure, nil
+}
+
+func sortedKeys(m map[string]string) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }

@@ -1,0 +1,27 @@
+apiVersion: architecture.local/v1alpha1
+kind: Abstraction
+metadata:
+  name: timed
+spec:
+  resources:
+    - gvk: {group: "", version: v1, kind: ConfigMap}
+      objects:
+        - {id: source, namespace: demo, name: source}
+        - {id: copy, namespace: demo, name: copy}
+      fields:
+        - {path: [data, value], type: string}
+      valueDomains:
+        data.value: ['"a"', '""']
+      identity:
+        - [metadata, name]
+  locals:
+    # The decision the controller takes on the clock; the environment
+    # chooses it (ADR-0012).
+    - {name: late, type: bool}
+  bounds:
+    maxObjectsPerResource: 2
+    maxInvocations: 3
+  excludes:
+    - delete
+    - list
+    - the clock; late is a choice

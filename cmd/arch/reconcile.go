@@ -205,6 +205,11 @@ func extractOptions(l goflow.Loaded, abs abstraction.Abstraction, decl project.C
 		return nil, goflow.Options{}, err
 	}
 	opts := goflow.Options{File: l.Path, Scope: scope, Returns: []goflow.Return{{Zero: true, Requeue: true}, {Error: true}}}
+	bindings, pure, err := declaredChoices(abs, decl)
+	if err != nil {
+		return nil, goflow.Options{}, err
+	}
+	opts.Bindings, opts.Pure = bindings, pure
 	opts.Call = x.call
 	opts.Field = x.field
 	opts.MapKeys = x.mapKeys

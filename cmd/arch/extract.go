@@ -146,7 +146,11 @@ func extractController(p project.Project, c ir.Controller, cat *catalog.Catalog,
 		}
 		doc.Watches = append(doc.Watches, watches...)
 	}
-	program, unsupported, unresolved := extractReconcile(p.Root, c, l, abs, cat)
+	var decl *project.Controller
+	if d, ok := p.Spec.Controller(c.Receiver); ok {
+		decl = &d
+	}
+	program, unsupported, unresolved := extractReconcile(p.Root, c, l, abs, decl, cat)
 	support.Unsupported = append(support.Unsupported, unsupported...)
 	support.Unresolved = append(support.Unresolved, unresolved...)
 	if program != nil {

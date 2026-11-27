@@ -42,6 +42,15 @@ type Controller struct {
 	// Locals keeps a selected field of a Go object local in a declared
 	// abstraction local: "<go local>.<json path>" maps to the local's name.
 	Locals map[string]string `yaml:"locals,omitempty"`
+	// Choices binds the text of a Go expression, as gofmt prints it, to
+	// an abstraction local the environment chooses: a decision the
+	// controller takes on time or on other values the model does not
+	// compute (ADR-0012).
+	Choices map[string]string `yaml:"choices,omitempty"`
+	// Pure lists callees, <package path>.<Receiver>.<Method> or <package
+	// path>.<Func>, that have no model effect, such as a clock the
+	// controller reads. A pure call may appear inside a log statement.
+	Pure []string `yaml:"pure,omitempty"`
 }
 
 // ClientEffect names the effect of one client method. Call is the method's
@@ -136,6 +145,16 @@ func (s Spec) validateModel() error {
 				return fmt.Errorf("%s: local %q must be <go local>.<json path> and map to an identifier, got %q", at, local, name)
 			}
 		}
+		for expression, local := range c.Choices {
+			if strings.TrimSpace(expression) == "" || !identifier.MatchString(local) {
+				return fmt.Errorf("%s: choice %q must be a Go expression and map to an identifier, got %q", at, expression, local)
+			}
+		}
+		for _, symbol := range c.Pure {
+			if _, _, _, err := PureSymbol(symbol); err != nil {
+				return fmt.Errorf("%s: %w", at, err)
+			}
+		}
 	}
 	for _, object := range sortedNames(s.Initial) {
 		if strings.TrimSpace(s.Initial[object]) == "" {
@@ -190,4 +209,18 @@ func sortedNames(m map[string]string) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// PureSymbol parses a pure callee: <package path>.<Receiver>.<Method> for a
+// method, <package path>.<Func> for a function (receiver empty).
+func PureSymbol(symbol string) (pkg, receiver, method string, err error) {
+	slash := strings.LastIndex(symbol, "/")
+	parts := strings.Split(symbol[slash+1:], ".")
+	switch {
+	case len(parts) == 3 && parts[0] != "" && identifier.MatchString(parts[1]) && identifier.MatchString(parts[2]):
+		return symbol[:slash+1] + parts[0], parts[1], parts[2], nil
+	case len(parts) == 2 && parts[0] != "" && identifier.MatchString(parts[1]):
+		return symbol[:slash+1] + parts[0], "", parts[1], nil
+	}
+	return "", "", "", fmt.Errorf("pure callee %q must be <package path>.<Receiver>.<Method> or <package path>.<Func>", symbol)
 }
