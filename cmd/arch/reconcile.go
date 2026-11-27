@@ -99,7 +99,10 @@ type extraction struct {
 	locals  map[string]abstraction.Resource // Go object local -> its resource
 	// lists marks the object locals that are list types; their Items are
 	// the model list listSymbol(local).
-	lists    map[string]bool
+	lists map[string]bool
+	// elements are the loop elements that range over a list of objects:
+	// identities of the resource (ADR-0011).
+	elements map[string]abstraction.Resource
 	resource map[ir.GVK]abstraction.Resource
 	pkg      *packages.Package // the package of Reconcile, for group-version lookups
 	// goTypes records the Go type of each resource the reconciler holds in
@@ -127,7 +130,7 @@ func extractOptions(l goflow.Loaded, abs abstraction.Abstraction, decl project.C
 	if err != nil {
 		return nil, goflow.Options{}, err
 	}
-	x := &extraction{decl: decl, effects: effects, keys: map[string]string{requestKey: decl.Key}, cat: cat, info: l.Package.TypesInfo, body: l.Func.Body, locals: map[string]abstraction.Resource{}, lists: map[string]bool{}, resource: map[ir.GVK]abstraction.Resource{}, pkg: l.Package, goTypes: map[ir.GVK]goType{}}
+	x := &extraction{decl: decl, effects: effects, keys: map[string]string{requestKey: decl.Key}, cat: cat, info: l.Package.TypesInfo, body: l.Func.Body, locals: map[string]abstraction.Resource{}, lists: map[string]bool{}, elements: map[string]abstraction.Resource{}, resource: map[ir.GVK]abstraction.Resource{}, pkg: l.Package, goTypes: map[ir.GVK]goType{}}
 	for symbol, object := range decl.ObjectKeys {
 		x.keys[symbol] = object
 	}
@@ -135,6 +138,11 @@ func extractOptions(l goflow.Loaded, abs abstraction.Abstraction, decl project.C
 		x.resource[r.GVK] = r
 	}
 	scope := map[string]expr.Symbol{}
+	// The abstraction's state variables are in scope for the reads a loop
+	// element lowers to (see elementField).
+	for name, v := range abs.StateVariables() {
+		scope[name] = expr.Symbol{Type: v.Type, Quint: name, Domain: v.Domain}
+	}
 	// A declared abstraction local is the model symbol of the Go local of
 	// the same name: a counter, or a list of identities a loop builds.
 	for _, local := range abs.Spec.Locals {
@@ -192,6 +200,12 @@ func extractOptions(l goflow.Loaded, abs abstraction.Abstraction, decl project.C
 			if id, ok := s.Lhs[0].(*ast.Ident); ok {
 				return declare(id)
 			}
+		case *ast.RangeStmt:
+			if id, ok := s.Value.(*ast.Ident); ok && id.Name != "_" {
+				if !x.declareElement(id, scope) {
+					return false
+				}
+			}
 		case *ast.ValueSpec:
 			for _, id := range s.Names {
 				if !declare(id) {
@@ -211,6 +225,7 @@ func extractOptions(l goflow.Loaded, abs abstraction.Abstraction, decl project.C
 	}
 	opts.Bindings, opts.Pure = bindings, pure
 	opts.Call = x.call
+	opts.ElementCall = x.elementCall
 	opts.Field = x.field
 	opts.MapKeys = x.mapKeys
 	return x, opts, nil
@@ -267,6 +282,9 @@ func (x *extraction) resourceOf(t types.Type) (ir.GVK, bool, error) {
 
 // field maps a selected field of a Go object local to its model variable.
 func (x *extraction) field(root string, fieldPath []string) (expr.Expression, bool) {
+	if r, ok := x.elements[root]; ok {
+		return x.elementField(root, r, fieldPath)
+	}
 	r, ok := x.locals[root]
 	if !ok {
 		return "", false
@@ -309,6 +327,20 @@ func (x *extraction) call(c goflow.Callee, call *ast.CallExpr, _ goflow.Convert)
 		}
 		objArg = call.Args[1]
 	}
+	elementArg := ast.Unparen(objArg)
+	if u, ok := elementArg.(*ast.UnaryExpr); ok {
+		elementArg = ast.Unparen(u.X)
+	}
+	if id, ok := elementArg.(*ast.Ident); ok {
+		if r, ok := x.elements[id.Name]; ok {
+			// A call on a loop element fans out over the element's objects.
+			ids := make([]string, 0, len(r.Objects))
+			for _, o := range r.Objects {
+				ids = append(ids, o.ID)
+			}
+			return goflow.Node{}, false, &goflow.FanOut{Root: id.Name, IDs: ids}
+		}
+	}
 	local, r, err := x.local(objArg)
 	if err != nil {
 		return goflow.Node{}, false, err
@@ -339,53 +371,8 @@ func (x *extraction) call(c goflow.Callee, call *ast.CallExpr, _ goflow.Convert)
 			return goflow.Node{}, false, err
 		}
 	}
-	if !hasObject(r, object) {
-		return goflow.Node{}, false, fmt.Errorf("%s: object %s is not an abstracted %s object", c, object, r.GVK.Kind)
-	}
-	// The summary placeholders that stand for the object's content bind one
-	// variable per selected field, in field order (see goflow.Node.Vectors).
-	values := make([]string, 0, len(r.Fields))
-	snapshots := make([]string, 0, len(r.Fields))
-	cachedValues := make([]string, 0, len(r.Fields))
-	for _, f := range r.Fields {
-		value := abstraction.FieldVariable(r.GVK.Kind, object, f)
-		values = append(values, value)
-		snapshots = append(snapshots, x.localVariable(local, f))
-		cachedValues = append(cachedValues, adaptergen.CachedVariable(value))
-	}
-	version := abstraction.VariableName(r.GVK.Kind, object, versionPath)
-	b := map[string]string{
-		"$exists":          abstraction.ExistsVariable(r.GVK.Kind, object),
-		"$snapshotVersion": x.localVariable(local, abstraction.Field{Path: versionPath}),
-	}
-	vectors := map[string][]string{}
-	switch {
-	case e.Operation == ir.OpGet && e.Consistency == ir.ConsistencyCached:
-		// Objects are neither created nor deleted while the model runs, so
-		// the cache's view of existence is the API server's.
-		b["$cacheVersion"] = adaptergen.CachedVariable(version)
-		vectors["$cache"], vectors["$snapshot"] = cachedValues, snapshots
-	case e.Operation == ir.OpGet:
-		b["$resourceVersion"] = version
-		vectors["$object"], vectors["$snapshot"] = values, snapshots
-	case e.Operation == ir.OpUpdate, e.Operation == ir.OpCreate:
-		b["$resourceVersion"] = version
-		vectors["$object"], vectors["$value"] = values, snapshots
-	case e.Operation == summaries.OperationKey(ir.OpUpdate, "status"), e.Operation == summaries.OperationKey(ir.OpPatch, "status"):
-		// A status update replaces the selected status fields with the
-		// local's status fields and leaves the other fields alone.
-		b["$resourceVersion"] = version
-		status, statusValues := statusFields(r, object, local, x)
-		if len(status) == 0 {
-			return goflow.Node{}, false, fmt.Errorf("%s: the abstraction selects no status field of %s", c, r.GVK.Kind)
-		}
-		vectors["$status"], vectors["$statusValue"] = status, statusValues
-	case e.Operation == ir.OpDelete:
-		// delete reads and clears the existence flag only.
-	default:
-		return goflow.Node{}, false, fmt.Errorf("%s: no bindings for operation %s", c, e.Operation)
-	}
-	return goflow.Node{Kind: e.Operation, Effect: e.Effect, Consistency: e.Consistency, Bindings: b, Vectors: vectors}, true, nil
+	n, err := x.bindings(c, e, r, object, local)
+	return n, err == nil, err
 }
 
 func hasObject(r abstraction.Resource, id string) bool {
@@ -697,4 +684,57 @@ func receiverFields(l goflow.Loaded, receiver string) []ir.Field {
 		}
 	}
 	return out
+}
+
+// bindings builds the node of a client call on object, read into or
+// written from the Go local, with the summary placeholders bound to the
+// object's variables.
+func (x *extraction) bindings(c goflow.Callee, e clientEffect, r abstraction.Resource, object, local string) (goflow.Node, error) {
+	if !hasObject(r, object) {
+		return goflow.Node{}, fmt.Errorf("%s: object %s is not an abstracted %s object", c, object, r.GVK.Kind)
+	}
+	// The summary placeholders that stand for the object's content bind one
+	// variable per selected field, in field order (see goflow.Node.Vectors).
+	values := make([]string, 0, len(r.Fields))
+	snapshots := make([]string, 0, len(r.Fields))
+	cachedValues := make([]string, 0, len(r.Fields))
+	for _, f := range r.Fields {
+		value := abstraction.FieldVariable(r.GVK.Kind, object, f)
+		values = append(values, value)
+		snapshots = append(snapshots, x.localVariable(local, f))
+		cachedValues = append(cachedValues, adaptergen.CachedVariable(value))
+	}
+	version := abstraction.VariableName(r.GVK.Kind, object, versionPath)
+	b := map[string]string{
+		"$exists":          abstraction.ExistsVariable(r.GVK.Kind, object),
+		"$snapshotVersion": x.localVariable(local, abstraction.Field{Path: versionPath}),
+	}
+	vectors := map[string][]string{}
+	switch {
+	case e.Operation == ir.OpGet && e.Consistency == ir.ConsistencyCached:
+		// Objects are neither created nor deleted while the model runs, so
+		// the cache's view of existence is the API server's.
+		b["$cacheVersion"] = adaptergen.CachedVariable(version)
+		vectors["$cache"], vectors["$snapshot"] = cachedValues, snapshots
+	case e.Operation == ir.OpGet:
+		b["$resourceVersion"] = version
+		vectors["$object"], vectors["$snapshot"] = values, snapshots
+	case e.Operation == ir.OpUpdate, e.Operation == ir.OpCreate:
+		b["$resourceVersion"] = version
+		vectors["$object"], vectors["$value"] = values, snapshots
+	case e.Operation == summaries.OperationKey(ir.OpUpdate, "status"), e.Operation == summaries.OperationKey(ir.OpPatch, "status"):
+		// A status update replaces the selected status fields with the
+		// local's status fields and leaves the other fields alone.
+		b["$resourceVersion"] = version
+		status, statusValues := statusFields(r, object, local, x)
+		if len(status) == 0 {
+			return goflow.Node{}, fmt.Errorf("%s: the abstraction selects no status field of %s", c, r.GVK.Kind)
+		}
+		vectors["$status"], vectors["$statusValue"] = status, statusValues
+	case e.Operation == ir.OpDelete:
+		// delete reads and clears the existence flag only.
+	default:
+		return goflow.Node{}, fmt.Errorf("%s: no bindings for operation %s", c, e.Operation)
+	}
+	return goflow.Node{Kind: e.Operation, Effect: e.Effect, Consistency: e.Consistency, Bindings: b, Vectors: vectors}, nil
 }

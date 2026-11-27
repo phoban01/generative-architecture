@@ -292,7 +292,9 @@ spec:
   abstraction objects and locals. A Go local of basic type with the name
   of a declared abstraction local is that local: a counter of type `int`,
   or a list of object identities of type `list(string)` that a `range`
-  loop walks (ADR-0011). Both are process locals, reset at each
+  loop walks; the loop element is an identity, so a field read through it
+  is a choice over the declared objects and a delete on it deletes the
+  object it names (ADR-0011). Both are process locals, reset at each
   invocation. A `client.ObjectKey{...}` literal needs no
   declaration when its fields resolve to constants through the
   abstraction, such as another object's name.

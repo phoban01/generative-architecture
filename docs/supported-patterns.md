@@ -120,6 +120,9 @@ branches, assignments, `switch` and early returns, the frontend reads:
 | `for i, x := range xs` over a list local, with `continue` and `break` | a loop in the process graph: an index local the frontend introduces, a head that tests it against the list's size, the element at the index, and an increment back to the head (ADR-0011) |
 | `len(xs)`, `append(xs, x)` and `xs[i]` on a list local | the list's size, the list with the element added, and the element at the index |
 | `r.List(ctx, list, client.InNamespace(ns), client.MatchingFields{...})` | a list operation that fills `<local>_items`, the list of the identities of the existing objects the options keep; `list.Items` is that list and `len(list.Items)` its size (ADR-0011) |
+| `job.Status.Succeeded` read through a loop element `job` that ranges over a list of objects | a choice over the resource's objects: the element's identity selects the object's variable, with the field's zero value when none matches (ADR-0011) |
+| `r.Delete(ctx, job)` on a loop element | one guarded delete per object of the resource; other operations on an element are not supported yet |
+| `int32(i)` and other conversions between integer types | the operand; the model has one integer type |
 | `*obj.Spec.Suspend`, `obj.Spec.Suspend != nil` on a field of pointer-to-basic type | the field's value, and a test of the value against the zero value of its type: the model reads nil as the zero value |
 | A Go expression the controller declaration binds under `choices`, such as `missedRun.IsZero()` | the abstraction local it names; the environment sets the local to each of its values (ADR-0012) |
 | A call the controller declaration lists under `pure`, such as `r.Now()` through an embedded `Clock` | no model effect; it may sit inside a log statement and as a statement adds no node |

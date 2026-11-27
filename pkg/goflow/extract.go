@@ -5,6 +5,7 @@ package goflow
 import (
 	"bytes"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"github.com/phoban01/generative-architecture/pkg/expr"
 	"github.com/phoban01/generative-architecture/pkg/ir"
@@ -114,9 +115,12 @@ type Options struct {
 	External               map[Callee]ir.Effect
 	// Pure names callees with no model effect beyond the built-in pure
 	// helpers, such as a clock the controller reads (ADR-0012).
-	Pure  map[Callee]bool
-	Call  func(Callee, *ast.CallExpr, Convert) (Node, bool, error)
-	Field func(root string, jsonPath []string) (expr.Expression, bool)
+	Pure map[Callee]bool
+	Call func(Callee, *ast.CallExpr, Convert) (Node, bool, error)
+	// ElementCall summarizes a call whose object is the loop element root
+	// for one of its identities, id (see FanOut).
+	ElementCall func(c Callee, call *ast.CallExpr, root, id string, convert Convert) (Node, bool, error)
+	Field       func(root string, jsonPath []string) (expr.Expression, bool)
 	// MapKeys names the selected keys of the map field at jsonPath of
 	// root. A map-literal assignment to that field replaces the whole map,
 	// so each selected key it omits takes its absent value. Without
@@ -232,6 +236,9 @@ func (e *extractor) translate(n ast.Expr) (expr.Expression, error) {
 		}
 	case *ast.CallExpr:
 		if e.info != nil {
+			if v, ok, err := e.conversion(x); ok || err != nil {
+				return v, err
+			}
 			if v, ok, err := e.builtinCall(x); ok || err != nil {
 				return v, err
 			}
@@ -344,6 +351,10 @@ func (e *extractor) statement(s ast.Stmt, next int) (int, error) {
 		if c, ok := e.callee(call); ok {
 			callee = &c
 			n, ok, err := e.summarizeCall(c, call)
+			var fan *FanOut
+			if errors.As(err, &fan) {
+				return e.fanOut(fan, c, call, s, next)
+			}
 			if err != nil {
 				return 0, err
 			}

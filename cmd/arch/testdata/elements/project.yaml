@@ -1,0 +1,34 @@
+apiVersion: architecture.local/v1alpha1
+kind: Project
+metadata:
+  name: elements
+spec:
+  # A reconciler that reads and deletes through a loop element.
+  module: github.com/phoban01/generative-architecture
+  packages:
+    - ./cmd/arch/testdata/elements
+  catalog:
+    discovery:
+      - discovery.json
+  abstraction: abstraction.yaml
+  runtime:
+    profile: controller-runtime
+    maxTicks: 20
+  bounds:
+    maxObjectsPerResource: 2
+    maxInvocations: 3
+  controllers:
+    - receiver: Reconciler
+      name: elements
+      workers: 1
+      retryTicks: 2
+      key: source
+      effects:
+        - call: sigs.k8s.io/controller-runtime/pkg/client.Client.List
+          effect: listMaps
+          consistency: cached
+        - call: sigs.k8s.io/controller-runtime/pkg/client.Client.Delete
+          effect: deleteMap
+  initial:
+    source.data.value: '"stale"'
+    copy.data.value: '""'

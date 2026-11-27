@@ -51,6 +51,11 @@ spec:
     # missed run is past its starting deadline.
     - {name: noMissedRun, type: bool}
     - {name: tooLate, type: bool}
+    # The Jobs sorted by state: lists of Job identities the loop over the
+    # listed Jobs builds (ADR-0011).
+    - {name: activeJobs, type: list(string)}
+    - {name: failedJobs, type: list(string)}
+    - {name: successfulJobs, type: list(string)}
   bounds:
     # One CronJob and the Jobs of two scheduled runs; four reconciles.
     maxObjectsPerResource: 2

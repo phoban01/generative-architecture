@@ -96,3 +96,19 @@ func TestListBuiltinsAndBreak(t *testing.T) {
 		t.Fatalf("expected a type diagnostic for the range, got %v", err)
 	}
 }
+
+// A conversion between integer types lowers to its operand.
+func TestIntegerConversionIsTransparent(t *testing.T) {
+	l := loadFixture(t, "./pkg/goflow/testdata/typed", "Controller", "Trim")
+	scope := map[string]expr.Symbol{"items": {Type: expr.ListOfString, Quint: "items"}, "limit": {Type: "int", Quint: "limit"}, "n": {Type: "int", Quint: "n"}, "i": {Type: "int", Quint: "i"}}
+	p, err := ExtractTyped(l, Options{Scope: scope, Returns: []Return{{Type: "int"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range p.Nodes {
+		if n.Kind == "branch" && n.Expression == "(i >= (size(items) - limit))" {
+			return
+		}
+	}
+	t.Fatalf("no branch on the converted comparison:\n%+v", p.Nodes)
+}

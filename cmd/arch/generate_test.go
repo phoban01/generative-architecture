@@ -738,3 +738,44 @@ func TestGenerateChoices(t *testing.T) {
 		t.Fatalf("unsupported %+v", s.Unsupported)
 	}
 }
+
+// A loop element is an object identity: a field read through it is a
+// choice over the population, and a delete on it fans out into one guarded
+// node per object (ADR-0011).
+func TestGenerateLoopElement(t *testing.T) {
+	out, err := generateTo(t, "testdata/elements/project.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var spec model.Spec
+	if _, err := krm.Read(filepath.Join(out, specFile), "TransitionModel", &spec); err != nil {
+		t.Fatal(err)
+	}
+	if v := spec.State["cm"]; v.Type != "string" {
+		t.Fatalf("the element is not a string local: %+v; state %v", v, slices.Sorted(maps.Keys(spec.State)))
+	}
+	var read bool
+	deletes := map[string]bool{}
+	for _, a := range spec.Actions {
+		if strings.Contains(string(a.Updates[pcVariable]), `((cm == "source") ? ConfigMap_source_data_value : ((cm == "copy") ? ConfigMap_copy_data_value : ""))`) {
+			read = true
+		}
+		if a.Effect == "deleteMap" {
+			for name, v := range a.Updates {
+				if strings.HasSuffix(name, "_exists") && v == "false" {
+					deletes[name] = true
+				}
+			}
+		}
+	}
+	if !read || !deletes["ConfigMap_source_exists"] || !deletes["ConfigMap_copy_exists"] {
+		t.Fatalf("read=%v deletes=%v", read, deletes)
+	}
+	quint := os.Getenv("QUINT_BIN")
+	if quint == "" {
+		t.Skip("QUINT_BIN not set; skipping Quint typecheck")
+	}
+	if out, err := exec.Command(quint, "typecheck", filepath.Join(out, "Model.qnt")).CombinedOutput(); err != nil {
+		t.Fatalf("quint typecheck: %v\n%s", err, out)
+	}
+}

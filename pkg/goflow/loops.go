@@ -220,3 +220,23 @@ func (e *extractor) listIndex(x *ast.IndexExpr) (expr.Expression, bool, error) {
 	}
 	return expr.Expression(string(base) + "[" + string(index) + "]"), true, nil
 }
+
+// conversion lowers a conversion between integer types, such as int32(i),
+// to the converted expression: the model has one integer type. It reports
+// false for any other call.
+func (e *extractor) conversion(call *ast.CallExpr) (expr.Expression, bool, error) {
+	tv, ok := e.info.Types[call.Fun]
+	if !ok || !tv.IsType() || len(call.Args) != 1 {
+		return "", false, nil
+	}
+	to, ok := types.Unalias(tv.Type).Underlying().(*types.Basic)
+	if !ok || to.Info()&types.IsInteger == 0 {
+		return "", false, nil
+	}
+	from, ok := types.Unalias(e.info.TypeOf(call.Args[0])).Underlying().(*types.Basic)
+	if !ok || from.Info()&types.IsInteger == 0 {
+		return "", false, nil
+	}
+	v, err := e.expression(call.Args[0], "int")
+	return v, true, err
+}

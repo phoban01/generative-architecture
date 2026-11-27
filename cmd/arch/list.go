@@ -215,3 +215,71 @@ func sortedKeys(m map[string]string) []string {
 	sort.Strings(keys)
 	return keys
 }
+
+// declareElement records the value variable of a range loop whose Go type
+// is an abstracted resource: a loop element, an identity of that resource
+// (ADR-0011). Its scope symbol is a string over the resource's object ids.
+// It reports false when the type is a resource the abstraction does not
+// select, after recording the diagnostic in x.declareErr.
+func (x *extraction) declareElement(id *ast.Ident, scope map[string]expr.Symbol) bool {
+	obj, ok := x.info.Defs[id].(*types.Var)
+	if !ok {
+		return true
+	}
+	gvk, ok, err := x.resourceOf(obj.Type())
+	if err != nil || !ok {
+		return true
+	}
+	r, ok := x.resource[gvk]
+	if !ok {
+		return true
+	}
+	x.elements[id.Name] = r
+	ids := make([]string, 0, len(r.Objects))
+	for _, o := range r.Objects {
+		ids = append(ids, o.ID)
+	}
+	scope[id.Name] = expr.Symbol{Type: abstraction.TypeString, Quint: id.Name, Domain: ids}
+	return true
+}
+
+// elementField reads a selected field through a loop element: a choice
+// over the resource's objects, the element's identity selecting the
+// object's variable, with the field's zero value when none matches.
+func (x *extraction) elementField(root string, r abstraction.Resource, fieldPath []string) (expr.Expression, bool) {
+	for _, f := range r.Fields {
+		if abstraction.PathKey(fieldPath) != abstraction.PathKey(abstraction.JSONPath(f.Path)) {
+			continue
+		}
+		v := abstraction.Initial(f.Type)
+		for i := len(r.Objects) - 1; i >= 0; i-- {
+			o := r.Objects[i]
+			v = "(" + root + " == " + strconv.Quote(o.ID) + " ? " + abstraction.FieldVariable(r.GVK.Kind, o.ID, f) + " : " + v + ")"
+		}
+		return expr.Expression(v), true
+	}
+	return "", false
+}
+
+// elementCall summarizes a client call on the loop element root for the
+// object id. Only a delete addresses an object without reading or writing
+// its fields through locals, so only a delete is supported.
+func (x *extraction) elementCall(c goflow.Callee, call *ast.CallExpr, root, id string, _ goflow.Convert) (goflow.Node, bool, error) {
+	declared, ok := x.effects[c]
+	if !ok {
+		return goflow.Node{}, false, nil
+	}
+	r, ok := x.elements[root]
+	if !ok {
+		return goflow.Node{}, false, fmt.Errorf("%s: %s is not a loop element", c, root)
+	}
+	e, ok := effectFor(declared, r.GVK.Kind)
+	if !ok {
+		return goflow.Node{}, false, fmt.Errorf("%s is called with a %s, but no effect is declared for that kind", c, r.GVK.Kind)
+	}
+	if e.Operation != ir.OpDelete {
+		return goflow.Node{}, false, fmt.Errorf("%s: only a delete is supported on the loop element %s; a %s needs the object's fields as locals", c, root, e.Operation)
+	}
+	n, err := x.bindings(c, e, r, id, root)
+	return n, err == nil, err
+}

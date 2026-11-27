@@ -26,3 +26,15 @@ func (c Controller) Keep(items []string, want string) int {
 	}
 	return len(kept)
 }
+
+// Trim counts how many items exceed a limit: integer conversions lower to
+// their operand.
+func (c Controller) Trim(items []string, limit int32) int {
+	n := 0
+	for i := range items {
+		if int32(i) >= int32(len(items))-limit {
+			n = n + 1
+		}
+	}
+	return n
+}

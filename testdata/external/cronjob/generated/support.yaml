@@ -34,26 +34,6 @@ status:
         line: 557
   unsupported:
     - kind: declaration
-      construct: |-
-        var activeJobs [ // find the active list of jobs
-        ]*kbatch.Job
-      reason: unsupported Go statement
-      location:
-        file: internal/controller/cronjob_controller.go
-        line: 163
-    - kind: declaration
-      construct: var successfulJobs []*kbatch.Job
-      reason: unsupported Go statement
-      location:
-        file: internal/controller/cronjob_controller.go
-        line: 164
-    - kind: declaration
-      construct: var failedJobs []*kbatch.Job
-      reason: unsupported Go statement
-      location:
-        file: internal/controller/cronjob_controller.go
-        line: 165
-    - kind: declaration
       construct: |
         var mostRecentTime *time.Time // find the last run so we can update the status
       reason: unsupported Go statement
@@ -120,42 +100,24 @@ status:
       location:
         file: internal/controller/cronjob_controller.go
         line: 232
-    - kind: identifier
-      construct: activeJobs
-      reason: unbound local variable activeJobs
+    - kind: call
+      construct: jobRef, err := ref.GetReference(r.Scheme, activeJob)
+      reason: unsummarized call to k8s.io/client-go/tools/reference.GetReference; declare it as a client operation or an external effect
       location:
         file: internal/controller/cronjob_controller.go
-        line: 233
-    - kind: identifier
-      construct: failedJobs
-      reason: unbound local variable failedJobs
+        line: 234
+    - kind: field
+      construct: cronJob.Status.Active
+      reason: unmapped field cronJob.status.active
       location:
         file: internal/controller/cronjob_controller.go
-        line: 283
-    - kind: identifier
-      construct: successfulJobs
-      reason: unbound local variable successfulJobs
-      location:
-        file: internal/controller/cronjob_controller.go
-        line: 302
+        line: 239
     - kind: closure
       construct: missedRun
       reason: closure result local missedRun is not a model symbol
       location:
         file: internal/controller/cronjob_controller.go
         line: 400
-    - kind: identifier
-      construct: activeJobs
-      reason: unbound local variable activeJobs
-      location:
-        file: internal/controller/cronjob_controller.go
-        line: 444
-    - kind: identifier
-      construct: activeJobs
-      reason: unbound local variable activeJobs
-      location:
-        file: internal/controller/cronjob_controller.go
-        line: 451
     - kind: closure
       construct: job
       reason: closure result local job is not a model symbol

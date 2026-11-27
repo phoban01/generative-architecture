@@ -9,17 +9,11 @@ status:
     conformance: 0
     safety: 0
     tool: 0
-    unsupported: 24
+    unsupported: 18
   scope: 'no model: arch extract failed closed on the unmodified controller, so arch generate, check and replay did not run; no tool sampled or replayed anything'
   traces: 0
   transitions: 0
   findings:
-    - category: unsupported
-      message: 'arch extract: internal/controller/cronjob_controller.go:163: declaration "var activeJobs [ // find the active list of jobs": unsupported Go statement'
-    - category: unsupported
-      message: 'arch extract: internal/controller/cronjob_controller.go:164: declaration "var successfulJobs []*kbatch.Job": unsupported Go statement'
-    - category: unsupported
-      message: 'arch extract: internal/controller/cronjob_controller.go:165: declaration "var failedJobs []*kbatch.Job": unsupported Go statement'
     - category: unsupported
       message: 'arch extract: internal/controller/cronjob_controller.go:166: declaration "var mostRecentTime *time.Time // find the last run so we can update the status": unsupported Go statement'
     - category: unsupported
@@ -43,17 +37,11 @@ status:
     - category: unsupported
       message: 'arch extract: internal/controller/cronjob_controller.go:232: field "cronJob.Status.Active": unmapped field cronJob.status.active'
     - category: unsupported
-      message: 'arch extract: internal/controller/cronjob_controller.go:233: identifier "activeJobs": unbound local variable activeJobs'
+      message: 'arch extract: internal/controller/cronjob_controller.go:234: call "jobRef, err := ref.GetReference(r.Scheme, activeJob)": unsummarized call to k8s.io/client-go/tools/reference.GetReference; declare it as a client operation or an external effect'
     - category: unsupported
-      message: 'arch extract: internal/controller/cronjob_controller.go:283: identifier "failedJobs": unbound local variable failedJobs'
-    - category: unsupported
-      message: 'arch extract: internal/controller/cronjob_controller.go:302: identifier "successfulJobs": unbound local variable successfulJobs'
+      message: 'arch extract: internal/controller/cronjob_controller.go:239: field "cronJob.Status.Active": unmapped field cronJob.status.active'
     - category: unsupported
       message: 'arch extract: internal/controller/cronjob_controller.go:400: closure "missedRun": closure result local missedRun is not a model symbol'
-    - category: unsupported
-      message: 'arch extract: internal/controller/cronjob_controller.go:444: identifier "activeJobs": unbound local variable activeJobs'
-    - category: unsupported
-      message: 'arch extract: internal/controller/cronjob_controller.go:451: identifier "activeJobs": unbound local variable activeJobs'
     - category: unsupported
       message: 'arch extract: internal/controller/cronjob_controller.go:504: closure "job": closure result local job is not a model symbol'
     - category: unsupported
@@ -63,10 +51,10 @@ status:
     - category: unsupported
       message: 'arch replay: not run: arch check sampled no traces'
   inputHashes:
-    abstraction.yaml: 11a9c465ba121929fc4dfd12bc147d53f8f937fe21d358303742ccef240dc1b3
+    abstraction.yaml: 0c110685371bbf3219a73ee0cc0df55f0acdd869ccef183a7c125fa0c5b5dbe2
     catalog/batch-v1.json: a972f6b207e83e52f80baf5821e20d7b154c788b092a412945c2254566159d15
     config/crd/bases/batch.tutorial.kubebuilder.io_cronjobs.yaml: 4016e4984192bbd6ae9e460e5b39bda35a7fac44ed19a63efa60c16018e83630
     constraints.yaml: d65c2cebdb865f0f4234cfdd8470927640fb9aacf68e7d5f51e7ac7cc57657a4
-    generated/support.yaml: 344bb91794a06f9d61a6124e35fe4d63d4a7b4b118b0a57675bae382d4b9d76e
+    generated/support.yaml: ae155d8f7152d185be679e9facf87b4bd5334672412eb9e3b730a4878340875a
     internal/controller/cronjob_controller.go: b9bde9f751609f2661062c88b86e73e70125e4fd136475bb6e1eec37686db5aa
     project.yaml: a7702d7bc4824c3a7b0fb3b966e21de7b07b8e1f034b62231ea9a58b8afd5227

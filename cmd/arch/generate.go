@@ -17,6 +17,7 @@ import (
 	"github.com/phoban01/generative-architecture/pkg/composition"
 	cr "github.com/phoban01/generative-architecture/pkg/controllerruntime"
 	"github.com/phoban01/generative-architecture/pkg/effect"
+	"github.com/phoban01/generative-architecture/pkg/expr"
 	"github.com/phoban01/generative-architecture/pkg/goflow"
 	"github.com/phoban01/generative-architecture/pkg/ir"
 	"github.com/phoban01/generative-architecture/pkg/krm"
@@ -218,6 +219,14 @@ func generateController(projectPath string, p project.Project, c ir.Controller, 
 	program, err := goflow.ExtractTyped(l, opts)
 	if err != nil {
 		return controllerOutput{}, located(p.Root, err)
+	}
+	// Loop elements are process locals the generator declared in scope
+	// rather than the frontend, so they are introduced here (ADR-0011).
+	for name := range x.elements {
+		if program.Locals == nil {
+			program.Locals = map[string]expr.Symbol{}
+		}
+		program.Locals[name] = expr.Symbol{Type: abstraction.TypeString, Quint: name}
 	}
 	cm := controllerModel{name: modelName(p.Name), abs: abs, decl: decl, initial: p.Spec.Initial, maxTicks: p.Spec.Runtime.MaxTicks, program: *program, scope: program.Symbols}
 	spec, effects, err := cm.build()

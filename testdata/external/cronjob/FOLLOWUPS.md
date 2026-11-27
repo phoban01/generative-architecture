@@ -340,7 +340,7 @@ documents keep what an adopter would write.
   takes the initial values as `<object>.<field key>`. The next gap on the
   CronJob controller is 16, the client operations generate supports.
 
-### 18. No list, pointer or time types in the abstraction
+### 18. No list, pointer or time types in the abstraction (partly closed by #146 and #160)
 
 - Construct: `status.active` (a list of object references),
   `spec.suspend` (a `*bool`), `status.lastScheduleTime` (a `*metav1.Time`)
@@ -350,6 +350,15 @@ documents keep what an adopter would write.
   hand or leaves them out.
 - Smallest extension: an optional marker on a basic field (gap 12), and a
   bounded set type whose elements are declared objects.
+- Resolution so far: a local of type `list(string)` holds identities of
+  declared objects (ADR-0011); the pinned abstraction declares
+  `activeJobs`, `failedJobs` and `successfulJobs` as such, and the loops
+  over them read each Job's fields as a choice over the two declared Jobs
+  and delete each as one guarded delete per Job. A pointer to a basic type
+  reads as its basic type (#146). What stays open is a list field such as
+  `status.active`, the Job conditions (a list of structs), the time fields,
+  and `ref.GetReference`, which turns an element into an object reference
+  the model does not hold.
 
 ### 19. Owner references have no form (closed by #153)
 
