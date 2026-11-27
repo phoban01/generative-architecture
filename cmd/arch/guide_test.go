@@ -322,12 +322,16 @@ func TestUpstreamProjectGuideWalk(t *testing.T) {
 	// SetupWithManager and Reconcile and lists every gap, including the
 	// setup preamble and the first Reconcile statement.
 	_, _, err = w.arch("arch extract")
-	wantErr(err, "arch extract: unsupported constructs: 25 found, listed in generated/support.yaml")
+	wantErr(err, "arch extract: unsupported constructs: 21 found, listed in generated/support.yaml")
 	s, err := report.Read(filepath.Join(generatedDir, supportFile))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(s.Unsupported) != 25 || len(s.Unresolved) != 1 || s.Unresolved[0].Construct != "cronJob.spec.concurrencyPolicy" {
+	unresolved := map[string]bool{}
+	for _, item := range s.Unresolved {
+		unresolved[item.Construct] = true
+	}
+	if len(s.Unsupported) != 21 || len(s.Unresolved) != 5 || !unresolved["cronJob.spec.concurrencyPolicy"] || !unresolved["cronJob.spec.suspend"] {
 		t.Fatalf("report without a catalog: %d unsupported, unresolved %+v", len(s.Unsupported), s.Unresolved)
 	}
 	if _, err := os.Stat(filepath.Join(generatedDir, irFile)); !os.IsNotExist(err) {
@@ -361,7 +365,7 @@ func TestUpstreamProjectGuideWalk(t *testing.T) {
 		copyTree(t, filepath.Join(src, name), filepath.Join(dir, name))
 	}
 	_, _, err = w.arch("arch --strict extract")
-	wantErr(err, "arch extract: unsupported constructs: 30 found, listed in generated/support.yaml")
+	wantErr(err, "arch extract: unsupported constructs: 26 found, listed in generated/support.yaml")
 	got, err := os.ReadFile(filepath.Join(generatedDir, supportFile))
 	if err != nil {
 		t.Fatal(err)
@@ -374,7 +378,7 @@ func TestUpstreamProjectGuideWalk(t *testing.T) {
 		t.Fatalf("the report with the committed project differs from the committed one:\n%s", got)
 	}
 	for _, c := range []struct{ command, msg string }{
-		{"arch generate", "arch generate: generated/ir.yaml not found; arch extract failed closed on 30 unsupported constructs, listed in generated/support.yaml; first: declaration var activeJobs [ // find the active list of jobs at internal/controller/cronjob_controller.go:163"},
+		{"arch generate", "arch generate: generated/ir.yaml not found; arch extract failed closed on 26 unsupported constructs, listed in generated/support.yaml; first: declaration var activeJobs [ // find the active list of jobs at internal/controller/cronjob_controller.go:163"},
 		{"arch check", "arch check: generated/ir.yaml not found; run arch extract and arch generate first"},
 		{"arch replay", "arch replay: no traces match generated/traces/*.itf.json; run arch check first or pass --traces"},
 		{"arch render", "arch render: no workspace in generated/likec4; run arch generate first"},

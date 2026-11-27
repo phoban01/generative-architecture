@@ -195,7 +195,9 @@ For each resource, declare:
 
 - `gvk`: it must be in the catalog.
 - `objects`: a fixed, small population with fixed names.
-- `fields`: JSON paths of type `string`, `bool` or `int` (`list(string)` is
+- `fields`: JSON paths of type `string`, `bool` or `int`; a Go field of
+  pointer-to-basic type selects as its basic type, and the model reads nil
+  as the zero value (`list(string)` is
   for `locals` only). Path elements are
   identifiers. Only the key after `metadata.annotations` or
   `metadata.labels` may be any string, and such a field needs a `name`.

@@ -120,6 +120,7 @@ branches, assignments, `switch` and early returns, the frontend reads:
 | `for i, x := range xs` over a list local, with `continue` and `break` | a loop in the process graph: an index local the frontend introduces, a head that tests it against the list's size, the element at the index, and an increment back to the head (ADR-0011) |
 | `len(xs)`, `append(xs, x)` and `xs[i]` on a list local | the list's size, the list with the element added, and the element at the index |
 | `r.List(ctx, list, client.InNamespace(ns), client.MatchingFields{...})` | a list operation that fills `<local>_items`, the list of the identities of the existing objects the options keep; `list.Items` is that list and `len(list.Items)` its size (ADR-0011) |
+| `*obj.Spec.Suspend`, `obj.Spec.Suspend != nil` on a field of pointer-to-basic type | the field's value, and a test of the value against the zero value of its type: the model reads nil as the zero value |
 | `resource.MustParse("10")` and `resource.NewQuantity` with constant arguments | an opaque quantity value |
 | `"db" + "-credentials"` with constant operands | a string constant |
 | A slice or struct literal assigned to a field that no abstraction selects, such as a Job's containers | a write without a model value |

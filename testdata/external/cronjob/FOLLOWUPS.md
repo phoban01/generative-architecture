@@ -205,7 +205,7 @@ smallest extension that would support it.
   an environment choice (a nondeterministic boolean). This needs a decision
   on how the model treats the clock.
 
-### 12. Optional and non-scalar fields
+### 12. Optional and non-scalar fields (closed by #146; time and list fields stay open)
 
 - Construct: `cronJob.Spec.Suspend != nil && *cronJob.Spec.Suspend` (a
   `*bool`), `cronJob.Status.LastScheduleTime = &metav1.Time{...}` (a
@@ -219,6 +219,15 @@ smallest extension that would support it.
   pointer field still need support.
 - Smallest extension: map a pointer to a basic type to an optional model
   value. Lower `p != nil` to "is set" and `*p` to its value.
+- Resolution: since #146 a field of pointer-to-basic type is an optional
+  value of its basic type. `*p` lowers to the value and `p != nil` to a
+  test of the value against the zero value of its type, so the model reads
+  nil as the zero value, which is what the abstraction declares for
+  `spec.suspend`. Line 321 extracts. The `*int32` history limits and
+  `startingDeadlineSeconds` now report that the abstraction does not
+  select them, which is the abstraction author's choice. The
+  `*metav1.Time` write (228) is gap 11 and the `status.active` list
+  (232) is gap 18.
 
 ### 13. Zero-value var declarations of objects (closed by #147)
 

@@ -393,6 +393,10 @@ func basicModelType(t types.Type) (string, bool) {
 	if t == nil {
 		return "", false
 	}
+	// A pointer to a basic type is an optional value of that type.
+	if p, ok := types.Unalias(t).(*types.Pointer); ok {
+		t = p.Elem()
+	}
 	b, ok := types.Unalias(t).Underlying().(*types.Basic)
 	switch {
 	case !ok:

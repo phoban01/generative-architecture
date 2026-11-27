@@ -17,6 +17,9 @@ type TypeMeta struct {
 
 type DatabaseSpec struct {
 	Size int `json:"size"`
+	// Optional fields: nil reads as the zero value.
+	Suspend  *bool  `json:"suspend,omitempty"`
+	Deadline *int64 `json:"deadline,omitempty"`
 }
 
 // ConfigMap carries a map field, which has no path lowering.
@@ -46,4 +49,16 @@ func (r *Reconciler) Exists(ctx context.Context, key string) (bool, error) {
 		return false, err
 	}
 	return true, nil
+}
+
+// Paused reads two optional fields: a nil test and a dereference of a
+// *bool, and a nil test and a dereference of an *int64.
+func (r *Reconciler) Paused(db *Database) bool {
+	if db.Spec.Suspend != nil && *db.Spec.Suspend {
+		return true
+	}
+	if db.Spec.Deadline == nil {
+		return false
+	}
+	return *db.Spec.Deadline > 3
 }

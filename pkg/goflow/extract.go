@@ -236,6 +236,12 @@ func (e *extractor) translate(n ast.Expr) (expr.Expression, error) {
 				return v, err
 			}
 		}
+	case *ast.StarExpr:
+		if e.info != nil {
+			if v, ok, err := e.deref(x); ok || err != nil {
+				return v, err
+			}
+		}
 	case *ast.UnaryExpr:
 		if x.Op == token.AND {
 			// Taking the address of a model value changes nothing.
@@ -260,6 +266,15 @@ func (e *extractor) translate(n ast.Expr) (expr.Expression, error) {
 			}
 			if err != nil {
 				return "", err
+			}
+			if !ok && e.info != nil {
+				v, ok, err = e.nilTest(x)
+				if err != nil {
+					return "", err
+				}
+				if ok {
+					return v, nil
+				}
 			}
 			if ok {
 				if x.Op == token.EQL {

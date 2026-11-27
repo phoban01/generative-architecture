@@ -9,7 +9,7 @@ status:
     conformance: 0
     safety: 0
     tool: 0
-    unsupported: 33
+    unsupported: 29
   scope: 'no model: arch extract failed closed on the unmodified controller, so arch generate, check and replay did not run; no tool sampled or replayed anything'
   traces: 0
   transitions: 0
@@ -45,15 +45,9 @@ status:
     - category: unsupported
       message: 'arch extract: internal/controller/cronjob_controller.go:233: identifier "activeJobs": unbound local variable activeJobs'
     - category: unsupported
-      message: 'arch extract: internal/controller/cronjob_controller.go:276: field "cronJob.Spec.FailedJobsHistoryLimit": unmapped field cronJob.spec.failedJobsHistoryLimit'
-    - category: unsupported
       message: 'arch extract: internal/controller/cronjob_controller.go:283: identifier "failedJobs": unbound local variable failedJobs'
     - category: unsupported
-      message: 'arch extract: internal/controller/cronjob_controller.go:295: field "cronJob.Spec.SuccessfulJobsHistoryLimit": unmapped field cronJob.spec.successfulJobsHistoryLimit'
-    - category: unsupported
       message: 'arch extract: internal/controller/cronjob_controller.go:302: identifier "successfulJobs": unbound local variable successfulJobs'
-    - category: unsupported
-      message: 'arch extract: internal/controller/cronjob_controller.go:321: expression "nil": unsupported Go expression'
     - category: unsupported
       message: 'arch extract: internal/controller/cronjob_controller.go:400: closure "missedRun": closure result local missedRun is not a model symbol'
     - category: unsupported
@@ -62,8 +56,6 @@ status:
       message: 'arch extract: internal/controller/cronjob_controller.go:420: expression "missedRun.IsZero()": unsupported Go expression'
     - category: unsupported
       message: 'arch extract: internal/controller/cronjob_controller.go:427: assign "tooLate := false": unsupported Go statement'
-    - category: unsupported
-      message: 'arch extract: internal/controller/cronjob_controller.go:428: field "cronJob.Spec.StartingDeadlineSeconds": unmapped field cronJob.spec.startingDeadlineSeconds'
     - category: unsupported
       message: 'arch extract: internal/controller/cronjob_controller.go:429: call "tooLate = missedRun.Add(time.Duration(*cronJob.Spec.StartingDeadlineSeconds) * time.Second).Before(r.Now())": unsummarized call to time.Time.Before; declare it as a client operation or an external effect'
     - category: unsupported
@@ -85,6 +77,6 @@ status:
     catalog/batch-v1.json: a972f6b207e83e52f80baf5821e20d7b154c788b092a412945c2254566159d15
     config/crd/bases/batch.tutorial.kubebuilder.io_cronjobs.yaml: 4016e4984192bbd6ae9e460e5b39bda35a7fac44ed19a63efa60c16018e83630
     constraints.yaml: d65c2cebdb865f0f4234cfdd8470927640fb9aacf68e7d5f51e7ac7cc57657a4
-    generated/support.yaml: 4f1961ef2ca5ec0536f5198ff216caddae8d549b4643208543cb09528a8796b6
+    generated/support.yaml: 78c4c8ac159a1c97c927d78e8be16b4a1ff14a6202bfe9016ca76838589fd574
     internal/controller/cronjob_controller.go: b9bde9f751609f2661062c88b86e73e70125e4fd136475bb6e1eec37686db5aa
     project.yaml: b964264e5f1f239bef530a8ed965b19c33baddd4f79e39dcae057b03f84dc2f5

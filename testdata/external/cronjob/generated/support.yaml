@@ -126,36 +126,18 @@ status:
       location:
         file: internal/controller/cronjob_controller.go
         line: 233
-    - kind: field
-      construct: cronJob.Spec.FailedJobsHistoryLimit
-      reason: unmapped field cronJob.spec.failedJobsHistoryLimit
-      location:
-        file: internal/controller/cronjob_controller.go
-        line: 276
     - kind: identifier
       construct: failedJobs
       reason: unbound local variable failedJobs
       location:
         file: internal/controller/cronjob_controller.go
         line: 283
-    - kind: field
-      construct: cronJob.Spec.SuccessfulJobsHistoryLimit
-      reason: unmapped field cronJob.spec.successfulJobsHistoryLimit
-      location:
-        file: internal/controller/cronjob_controller.go
-        line: 295
     - kind: identifier
       construct: successfulJobs
       reason: unbound local variable successfulJobs
       location:
         file: internal/controller/cronjob_controller.go
         line: 302
-    - kind: expression
-      construct: nil
-      reason: unsupported Go expression
-      location:
-        file: internal/controller/cronjob_controller.go
-        line: 321
     - kind: closure
       construct: missedRun
       reason: closure result local missedRun is not a model symbol
@@ -180,12 +162,6 @@ status:
       location:
         file: internal/controller/cronjob_controller.go
         line: 427
-    - kind: field
-      construct: cronJob.Spec.StartingDeadlineSeconds
-      reason: unmapped field cronJob.spec.startingDeadlineSeconds
-      location:
-        file: internal/controller/cronjob_controller.go
-        line: 428
     - kind: call
       construct: tooLate = missedRun.Add(time.Duration(*cronJob.Spec.StartingDeadlineSeconds) * time.Second).Before(r.Now())
       reason: unsummarized call to time.Time.Before; declare it as a client operation or an external effect
@@ -217,6 +193,24 @@ status:
         file: internal/controller/cronjob_controller.go
         line: 504
   unresolved:
+    - kind: field
+      construct: cronJob.spec.failedJobsHistoryLimit
+      reason: the abstraction does not select this field
+      location:
+        file: internal/controller/cronjob_controller.go
+        line: 276
+    - kind: field
+      construct: cronJob.spec.successfulJobsHistoryLimit
+      reason: the abstraction does not select this field
+      location:
+        file: internal/controller/cronjob_controller.go
+        line: 295
+    - kind: field
+      construct: cronJob.spec.startingDeadlineSeconds
+      reason: the abstraction does not select this field
+      location:
+        file: internal/controller/cronjob_controller.go
+        line: 359
     - kind: field
       construct: cronJob.spec.concurrencyPolicy
       reason: the abstraction does not select this field
