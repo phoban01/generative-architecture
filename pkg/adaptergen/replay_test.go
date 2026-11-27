@@ -81,7 +81,7 @@ func TestGenerateReplayMain(t *testing.T) {
 		`observer.Client(cr.SplitClient(api, cache), "cached")`,
 		`observer.Reader(api, "direct")`,
 		`client.ObjectKey{Namespace: "demo", Name: "copy"}`,
-		`scheme.AddKnownTypes(gv, &p1.ConfigMap{})`,
+		`scheme.AddKnownTypes(gv, &p1.ConfigMap{}, &p1.ConfigMapList{})`,
 		`unstructured.SetNestedField(obj.Object, "a", "data", "value")`,
 		`cache = append(cache, obj.DeepCopy())`,
 	} {

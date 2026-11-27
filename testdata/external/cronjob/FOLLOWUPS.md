@@ -178,8 +178,8 @@ smallest extension that would support it.
   back to the head. `continue`, `break`, `len` and `append` lower too. The
   abstraction declares the list locals as `locals` of type `list(string)`.
   The five loops no longer appear. What remains at their lines is the
-  list each loop ranges over: `childJobs.Items` (202) waits for the List
-  summary to bind `$items` to a list local, and `activeJobs`, `failedJobs`
+  list each loop ranges over: `childJobs.Items` (202) is now the model list
+  a `List` fills (gap 16), and `activeJobs`, `failedJobs`
   and `successfulJobs` (233, 283, 302, 444, 451) are lists of `*Job`,
   which gap 18 covers.
 
@@ -280,7 +280,7 @@ ran `arch generate` on it. Each finding below was removed in a scratch copy
 of `project.yaml` or `abstraction.yaml` to find the next one. The committed
 documents keep what an adopter would write.
 
-### 16. arch generate supports Get and Update only (closed by #150; List stays out)
+### 16. arch generate supports Get and Update only (closed by #150 and #160)
 
 - Construct: the declared effects for `client.Reader.List`,
   `client.Writer.Delete` and `client.Writer.Create`.
@@ -293,12 +293,18 @@ documents keep what an adopter would write.
   an object the reconciler read first, through the built-in create and
   delete summaries, and `spec.initial` may set `<object>.exists: false` so
   a created object starts absent.
-- Remaining: `List` binds a filtered catalog list and stays unsupported by
+- Remaining after #150: `List` bound a filtered catalog list and stayed unsupported by
   generate. `Status().Update` and `Status().Patch` with `client.Merge`
   generate through the status summaries over the selected status fields. A
   read keyed by a `client.ObjectKey` literal resolves through the
   abstraction, and `kind` on an effect declaration lets one method serve
   several kinds; the reference system composes from its declarations.
+- Resolution (List): since #160 `arch generate` accepts `List`. The call
+  fills the list local with the identities of the existing objects its
+  options keep: `InNamespace(req.Namespace)` is the key object's namespace
+  and `MatchingFields{jobOwnerKey: req.Name}` is the owner index, which
+  keeps the Jobs because the abstraction declares their owner reference to
+  the CronJob. `childJobs.Items` is now a model list.
 
 ### 17. arch generate takes one field per resource (closed by #151)
 

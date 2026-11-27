@@ -293,7 +293,19 @@ func (inv *inventory) selectFields(info *types.Info, body *ast.BlockStmt, abs ab
 		if !ok {
 			return true
 		}
-		gvk, ok, _ := x.resourceOf(v.Type())
+		t := v.Type()
+		if item, list := listItem(t); list {
+			// A list local's Items are the model list of identities.
+			if gvk, ok, _ := x.resourceOf(item); ok {
+				if _, ok := resources[gvk]; ok {
+					name := symbolOf(id.Name, []string{"items"})
+					inv.scope[name] = expr.Symbol{Type: abstraction.TypeList, Quint: name}
+					inv.selected[name] = true
+				}
+			}
+			return true
+		}
+		gvk, ok, _ := x.resourceOf(t)
 		if !ok {
 			return true
 		}

@@ -1,0 +1,42 @@
+apiVersion: architecture.local/v1alpha1
+kind: Project
+metadata:
+  name: listed
+spec:
+  # A reconciler that lists a namespace and reads the list's size.
+  module: github.com/phoban01/generative-architecture
+  packages:
+    - ./cmd/arch/testdata/listed
+  catalog:
+    discovery:
+      - discovery.json
+  abstraction: abstraction.yaml
+  runtime:
+    profile: controller-runtime
+    maxTicks: 20
+  bounds:
+    maxObjectsPerResource: 3
+    maxInvocations: 3
+  controllers:
+    - receiver: Reconciler
+      name: listed
+      workers: 1
+      retryTicks: 2
+      key: source
+      effects:
+        - call: sigs.k8s.io/controller-runtime/pkg/client.Client.Get
+          effect: readSource
+          consistency: cached
+        - call: sigs.k8s.io/controller-runtime/pkg/client.Client.List
+          effect: listMaps
+          consistency: cached
+        - call: sigs.k8s.io/controller-runtime/pkg/client.Reader.Get
+          effect: readTarget
+        - call: sigs.k8s.io/controller-runtime/pkg/client.Client.Update
+          effect: writeTarget
+      objectKeys:
+        github.com/phoban01/generative-architecture/cmd/arch/testdata/listed.Reconciler.Target: copy
+  initial:
+    source.data.value: '"a"'
+    copy.data.value: '""'
+    other.data.value: '""'

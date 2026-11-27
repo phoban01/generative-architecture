@@ -280,6 +280,10 @@ spec:
   controller-runtime v0.23) or `fifo` for client-go's rate-limited queue.
 - `effects` names the effect of each client method the reconciler calls,
   as `<package path>.<interface>.<method>`.
+- A `List` effect fills the Go list local: its `Items` are the identities of
+  the existing objects that `InNamespace` and an owner `MatchingFields`
+  keep (ADR-0011). Calls through the manager's client need
+  `consistency: cached` to replay through the generated adapter.
 - `kind` restricts an effect to calls made with that kind, so a method that
   reads several kinds declares one effect per kind.
 - `objectKeys` and `locals` map Go key fields and object locals to

@@ -9,7 +9,7 @@ status:
     conformance: 0
     safety: 0
     tool: 0
-    unsupported: 28
+    unsupported: 33
   scope: 'no model: arch extract failed closed on the unmodified controller, so arch generate, check and replay did not run; no tool sampled or replayed anything'
   traces: 0
   transitions: 0
@@ -23,11 +23,21 @@ status:
     - category: unsupported
       message: 'arch extract: internal/controller/cronjob_controller.go:166: declaration "var mostRecentTime *time.Time // find the last run so we can update the status": unsupported Go statement'
     - category: unsupported
-      message: 'arch extract: internal/controller/cronjob_controller.go:202: field "childJobs.Items": unmapped field childJobs.items'
+      message: 'arch extract: internal/controller/cronjob_controller.go:203: closure "finishedType": closure result local finishedType is not a model symbol'
+    - category: unsupported
+      message: 'arch extract: internal/controller/cronjob_controller.go:204: identifier "finishedType": unbound local variable finishedType'
+    - category: unsupported
+      message: 'arch extract: internal/controller/cronjob_controller.go:215: closure "scheduledTimeForJob": closure result local scheduledTimeForJob is not a model symbol'
+    - category: unsupported
+      message: 'arch extract: internal/controller/cronjob_controller.go:220: identifier "scheduledTimeForJob": unbound local variable scheduledTimeForJob'
+    - category: unsupported
+      message: 'arch extract: internal/controller/cronjob_controller.go:221: identifier "mostRecentTime": unbound local variable mostRecentTime'
+    - category: unsupported
+      message: 'arch extract: internal/controller/cronjob_controller.go:222: assign "mostRecentTime = scheduledTimeForJob": unsupported Go statement'
     - category: unsupported
       message: 'arch extract: internal/controller/cronjob_controller.go:227: identifier "mostRecentTime": unbound local variable mostRecentTime'
     - category: unsupported
-      message: 'arch extract: internal/controller/cronjob_controller.go:228: expression "&metav1.Time{Time: *mostRecentTime}": unsupported Go expression'
+      message: 'arch extract: internal/controller/cronjob_controller.go:228: expression "metav1.Time{Time: *mostRecentTime}": unsupported Go expression'
     - category: unsupported
       message: 'arch extract: internal/controller/cronjob_controller.go:230: expression "nil": unsupported Go expression'
     - category: unsupported
@@ -75,6 +85,6 @@ status:
     catalog/batch-v1.json: a972f6b207e83e52f80baf5821e20d7b154c788b092a412945c2254566159d15
     config/crd/bases/batch.tutorial.kubebuilder.io_cronjobs.yaml: 4016e4984192bbd6ae9e460e5b39bda35a7fac44ed19a63efa60c16018e83630
     constraints.yaml: d65c2cebdb865f0f4234cfdd8470927640fb9aacf68e7d5f51e7ac7cc57657a4
-    generated/support.yaml: ee76c57d8bded5647a7dd3eea7abd2302403fcf811a5ba510bd44fc1594f9d42
+    generated/support.yaml: 4f1961ef2ca5ec0536f5198ff216caddae8d549b4643208543cb09528a8796b6
     internal/controller/cronjob_controller.go: b9bde9f751609f2661062c88b86e73e70125e4fd136475bb6e1eec37686db5aa
     project.yaml: b964264e5f1f239bef530a8ed965b19c33baddd4f79e39dcae057b03f84dc2f5

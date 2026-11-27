@@ -361,7 +361,7 @@ func TestUpstreamProjectGuideWalk(t *testing.T) {
 		copyTree(t, filepath.Join(src, name), filepath.Join(dir, name))
 	}
 	_, _, err = w.arch("arch --strict extract")
-	wantErr(err, "arch extract: unsupported constructs: 25 found, listed in generated/support.yaml")
+	wantErr(err, "arch extract: unsupported constructs: 30 found, listed in generated/support.yaml")
 	got, err := os.ReadFile(filepath.Join(generatedDir, supportFile))
 	if err != nil {
 		t.Fatal(err)
@@ -374,7 +374,7 @@ func TestUpstreamProjectGuideWalk(t *testing.T) {
 		t.Fatalf("the report with the committed project differs from the committed one:\n%s", got)
 	}
 	for _, c := range []struct{ command, msg string }{
-		{"arch generate", "arch generate: generated/ir.yaml not found; arch extract failed closed on 25 unsupported constructs, listed in generated/support.yaml; first: declaration var activeJobs [ // find the active list of jobs at internal/controller/cronjob_controller.go:163"},
+		{"arch generate", "arch generate: generated/ir.yaml not found; arch extract failed closed on 30 unsupported constructs, listed in generated/support.yaml; first: declaration var activeJobs [ // find the active list of jobs at internal/controller/cronjob_controller.go:163"},
 		{"arch check", "arch check: generated/ir.yaml not found; run arch extract and arch generate first"},
 		{"arch replay", "arch replay: no traces match generated/traces/*.itf.json; run arch check first or pass --traces"},
 		{"arch render", "arch render: no workspace in generated/likec4; run arch generate first"},

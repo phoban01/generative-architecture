@@ -6,24 +6,11 @@ import (
 	"github.com/phoban01/generative-architecture/pkg/ir"
 )
 
+// A list binds the caller's list local to the catalog the generator
+// lowers: the identities of the existing objects that match the call's
+// options. The summary itself filters nothing (ADR-0011).
 func TestBuiltinList(t *testing.T) {
 	r := Builtin()
-	catalog := []any{
-		map[string]any{"name": "a", "namespace": "one", "labels": map[string]any{"tier": "x", "app": "p"}},
-		map[string]any{"name": "b", "namespace": "one", "labels": map[string]any{"tier": "y"}},
-		map[string]any{"name": "c", "namespace": "two", "labels": map[string]any{"tier": "x"}},
-	}
-	cases := []struct {
-		name    string
-		options map[string]any
-		want    int64
-	}{
-		{"whole domain", map[string]any{}, 3},
-		{"namespace", map[string]any{"namespace": "one"}, 2},
-		{"equality selector", map[string]any{"labelSelector": map[string]any{"tier": "x"}}, 2},
-		{"namespace and selector", map[string]any{"namespace": "one", "labelSelector": map[string]any{"tier": "x", "app": "p"}}, 1},
-		{"missing label", map[string]any{"labelSelector": map[string]any{"app": "q"}}, 0},
-	}
 	for _, consistency := range []string{ir.ConsistencyDirect, ir.ConsistencyCached} {
 		t.Run(consistency, func(t *testing.T) {
 			s, err := r.Lookup(ir.OpList, consistency)
@@ -33,18 +20,17 @@ func TestBuiltinList(t *testing.T) {
 			if !equalNames(outcomeNames(s), "ok", "error") || s.Outcomes[0].Guard != "true" || s.Outcomes[1].Error != ErrorTransient {
 				t.Fatalf("outcomes %+v", s.Outcomes)
 			}
-			items, ok := s.Outcomes[0].Updates["$items"]
-			if !ok || len(s.Outcomes[0].Updates) != 1 {
-				t.Fatalf("ok must bind only $items: %+v", s.Outcomes[0].Updates)
+			if items := s.Outcomes[0].Updates["$items"]; items != "$catalog" || len(s.Outcomes[0].Updates) != 1 {
+				t.Fatalf("ok must bind $items to $catalog: %+v", s.Outcomes[0].Updates)
+			}
+			if !equalNames(s.Bindings, "$items", "$catalog") {
+				t.Fatalf("bindings %v", s.Bindings)
 			}
 			b := bareBindings(s)
-			for _, c := range cases {
-				vars := map[string]any{"catalog": catalog, "items": []any{}, "options": c.options}
-				guardsParse(t, s, vars)
-				// The result is a finite subset of the catalog.
-				if got := evalTemplate(t, "size("+items+")", b, vars); got != c.want {
-					t.Fatalf("%s: %d items, want %d", c.name, got, c.want)
-				}
+			vars := map[string]any{"catalog": []any{"a", "b"}, "items": []any{}}
+			guardsParse(t, s, vars)
+			if got := evalTemplate(t, "size("+s.Outcomes[0].Updates["$items"]+")", b, vars); got != int64(2) {
+				t.Fatalf("items %v", got)
 			}
 		})
 	}

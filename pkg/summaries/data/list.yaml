@@ -4,35 +4,32 @@ metadata:
   name: list
 spec:
   summaries:
-    # A list binds $items to the catalog objects matching the call's
-    # namespace and equality label selector. The catalog is the model's
-    # finite object domain, so the result is always bounded; at cached
-    # consistency it is the informer cache's view of that domain.
+    # A list binds $items, the caller's list local, to $catalog: the
+    # identities of the objects of the listed kind that exist and match the
+    # call's options, in the order the abstraction declares them. The
+    # generator lowers the catalog from the model's finite object domain,
+    # so the result is always bounded (ADR-0011); at cached consistency it
+    # is the informer cache's view of that domain, which shares the API
+    # server's view of existence.
     - operation: list
       consistency: direct
-      bindings: [$items, $catalog, $options]
+      bindings: [$items, $catalog]
       outcomes:
         - name: ok
           guard: 'true'
           updates:
-            $items: >-
-              $catalog.filter(o,
-                (!has($options.namespace) || o.namespace == $options.namespace) &&
-                (!has($options.labelSelector) || $options.labelSelector.all(k, k in o.labels && o.labels[k] == $options.labelSelector[k])))
+            $items: $catalog
         - name: error
           guard: 'true'
           error: transient
     - operation: list
       consistency: cached
-      bindings: [$items, $catalog, $options]
+      bindings: [$items, $catalog]
       outcomes:
         - name: ok
           guard: 'true'
           updates:
-            $items: >-
-              $catalog.filter(o,
-                (!has($options.namespace) || o.namespace == $options.namespace) &&
-                (!has($options.labelSelector) || $options.labelSelector.all(k, k in o.labels && o.labels[k] == $options.labelSelector[k])))
+            $items: $catalog
         - name: error
           guard: 'true'
           error: transient

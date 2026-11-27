@@ -637,3 +637,43 @@ func TestGenerateRangeLoop(t *testing.T) {
 		t.Fatalf("quint typecheck: %v\n%s", err, out)
 	}
 }
+
+// A List call fills a list local with the identities of the existing
+// objects of the namespace the call names; len reads its size (ADR-0011).
+func TestGenerateList(t *testing.T) {
+	out, err := generateTo(t, "testdata/listed/project.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var spec model.Spec
+	if _, err := krm.Read(filepath.Join(out, specFile), "TransitionModel", &spec); err != nil {
+		t.Fatal(err)
+	}
+	if v := spec.State["maps_items"]; v.Type != "list(string)" || v.Initial != "[]" {
+		t.Fatalf("list local %+v; state %v", v, slices.Sorted(maps.Keys(spec.State)))
+	}
+	var listed, sized bool
+	for _, a := range spec.Actions {
+		if a.Effect == "listMaps" && a.Updates["maps_items"] == `(ConfigMap_source_exists ? ["source"] : []) + (ConfigMap_copy_exists ? ["copy"] : [])` {
+			listed = true
+		}
+		if strings.Contains(string(a.Updates[pcVariable]), "size(maps_items) > 1") {
+			sized = true
+		}
+	}
+	if !listed || !sized {
+		for _, a := range spec.Actions {
+			if a.Effect == "listMaps" {
+				t.Logf("%s: %v", a.Name, a.Updates["maps_items"])
+			}
+		}
+		t.Fatalf("listed=%v sized=%v", listed, sized)
+	}
+	quint := os.Getenv("QUINT_BIN")
+	if quint == "" {
+		t.Skip("QUINT_BIN not set; skipping Quint typecheck")
+	}
+	if out, err := exec.Command(quint, "typecheck", filepath.Join(out, "Model.qnt")).CombinedOutput(); err != nil {
+		t.Fatalf("quint typecheck: %v\n%s", err, out)
+	}
+}

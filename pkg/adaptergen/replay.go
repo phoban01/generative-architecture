@@ -19,13 +19,18 @@ type ReplayType struct {
 // ReplayObject is a fixture object that exists before a replay starts, with
 // the initial value of each selected field. Cached marks an object the
 // controller reads through its informer cache: the replay keeps a copy in a
-// separate cache that only environment deliveries update.
+// separate cache that only environment deliveries update. Listed marks an
+// object that is in that cache only because a cached List returns it.
 type ReplayObject struct {
 	Resource  ir.GVK
 	Namespace string
 	Name      string
 	Fields    []ReplayValue
 	Cached    bool
+	// Listed marks an object a cached List returns: the replay keeps a copy
+	// in the cache so the list sees it, but nothing projects or delivers
+	// that copy, as the model reads only its existence (ADR-0011).
+	Listed bool
 }
 
 // ReplayValue is the initial value of one field: a Go literal of Type
@@ -88,6 +93,7 @@ type replayObject struct {
 	Namespace, Name string
 	Fields          []ReplayValue
 	Cached          bool
+	Listed          bool
 	Variable        string
 }
 
@@ -157,8 +163,10 @@ func GenerateReplayMain(pkg string, r ReplayMain) ([]byte, error) {
 		}
 		seen[t.Resource] = true
 		d.Types = append(d.Types, struct{ GV, Expr string }{
-			GV:   fmt.Sprintf("schema.GroupVersion{Group: %s, Version: %s}", strconv.Quote(t.Resource.Group), strconv.Quote(t.Resource.Version)),
-			Expr: "&" + alias(t.Import) + "." + t.Name + "{}",
+			GV: fmt.Sprintf("schema.GroupVersion{Group: %s, Version: %s}", strconv.Quote(t.Resource.Group), strconv.Quote(t.Resource.Version)),
+			// The list type is registered with the kind, so a List of the
+			// kind resolves through the scheme (ADR-0011).
+			Expr: "&" + alias(t.Import) + "." + t.Name + "{}, &" + alias(t.Import) + "." + t.Name + "List{}",
 		})
 	}
 	for i, o := range r.Objects {
@@ -180,8 +188,8 @@ func GenerateReplayMain(pkg string, r ReplayMain) ([]byte, error) {
 			}
 			fields = append(fields, f)
 		}
-		d.Cache = d.Cache || o.Cached
-		d.Objects = append(d.Objects, replayObject{Resource: o.Resource, Namespace: o.Namespace, Name: o.Name, Fields: fields, Cached: o.Cached, Variable: fmt.Sprintf("object%d", i)})
+		d.Cache = d.Cache || o.Cached || o.Listed
+		d.Objects = append(d.Objects, replayObject{Resource: o.Resource, Namespace: o.Namespace, Name: o.Name, Fields: fields, Cached: o.Cached, Listed: o.Listed, Variable: fmt.Sprintf("object%d", i)})
 	}
 	for _, f := range r.Reconciler.Fields {
 		value := ""
@@ -374,7 +382,7 @@ func fixtures() ([]client.Object, []client.Object, error) {
 			return nil, nil, err
 		}
 {{end}}		api = append(api, obj)
-{{if .Cached}}		cache = append(cache, obj.DeepCopy())
+{{if or .Cached .Listed}}		cache = append(cache, obj.DeepCopy())
 {{end}}	}
 {{end}}	return api, cache, nil
 }

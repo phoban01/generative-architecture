@@ -1,0 +1,175 @@
+package main
+
+import (
+	"fmt"
+	"go/ast"
+	"go/types"
+	"strconv"
+	"strings"
+
+	"github.com/phoban01/generative-architecture/pkg/abstraction"
+	"github.com/phoban01/generative-architecture/pkg/goflow"
+	"github.com/phoban01/generative-architecture/pkg/ir"
+)
+
+// A List call fills a list local (ADR-0011). The Go local is a list type
+// such as *corev1.ConfigMapList; its Items field is the model's list of
+// the identities of the listed objects, the symbol <local>_items. The
+// summary binds $items to that symbol and $catalog to the identities of
+// the abstracted objects that exist and match the call's options, in the
+// order the abstraction declares them.
+
+// listSymbol is the model symbol of the Items of a list local.
+func listSymbol(local string) string { return local + "_items" }
+
+// listItem returns the element type of a Kubernetes list type: a struct
+// (or pointer to one) with an Items field of slice type. It reports false
+// for any other type.
+func listItem(t types.Type) (types.Type, bool) {
+	if p, ok := types.Unalias(t).(*types.Pointer); ok {
+		t = p.Elem()
+	}
+	st, ok := types.Unalias(t).Underlying().(*types.Struct)
+	if !ok {
+		return nil, false
+	}
+	for i := 0; i < st.NumFields(); i++ {
+		f := st.Field(i)
+		if f.Name() != "Items" {
+			continue
+		}
+		s, ok := types.Unalias(f.Type()).Underlying().(*types.Slice)
+		if !ok {
+			return nil, false
+		}
+		return s.Elem(), true
+	}
+	return nil, false
+}
+
+// keyObject is the abstracted object the controller's key addresses.
+func (x *extraction) keyObject() (abstraction.Resource, abstraction.Object, bool) {
+	for _, r := range x.resource {
+		for _, o := range r.Objects {
+			if o.ID == x.decl.Key {
+				return r, o, true
+			}
+		}
+	}
+	return abstraction.Resource{}, abstraction.Object{}, false
+}
+
+// requestField reports the field of the reconcile request that v selects,
+// Name or Namespace, through any embedding.
+func (x *extraction) requestField(v ast.Expr) (string, bool) {
+	sel, ok := ast.Unparen(v).(*ast.SelectorExpr)
+	if !ok {
+		return "", false
+	}
+	s, ok := x.info.Selections[sel]
+	if !ok || s.Kind() != types.FieldVal {
+		return "", false
+	}
+	root := sel.X
+	for {
+		inner, ok := ast.Unparen(root).(*ast.SelectorExpr)
+		if !ok {
+			break
+		}
+		root = inner.X
+	}
+	id, ok := ast.Unparen(root).(*ast.Ident)
+	if !ok {
+		return "", false
+	}
+	obj, ok := x.info.Uses[id].(*types.Var)
+	if !ok {
+		return "", false
+	}
+	if n, ok := types.Unalias(obj.Type()).(*types.Named); !ok || n.Obj().Pkg() == nil || n.Obj().Pkg().Path()+"."+n.Obj().Name() != requestType {
+		return "", false
+	}
+	name := s.Obj().Name()
+	if name != "Name" && name != "Namespace" {
+		return "", false
+	}
+	return name, true
+}
+
+// requestType is the type of the reconcile request.
+const requestType = "sigs.k8s.io/controller-runtime/pkg/reconcile.Request"
+
+// listCall binds a List call of the list local to the summary: $items to
+// the local's list symbol and $catalog to the existing objects of r that
+// the options keep. InNamespace keeps the objects of a namespace the
+// abstraction fixes: a constant, the request's namespace (the key
+// object's) or a field of an object local. MatchingFields with the
+// request's name keeps every object of a resource whose owner reference
+// targets the key's kind: the model's objects of that kind are the
+// controller's own. Any other option is an error.
+func (x *extraction) listCall(c goflow.Callee, call *ast.CallExpr, local string, r abstraction.Resource, e clientEffect) (goflow.Node, error) {
+	namespace := ""
+	for _, arg := range call.Args[2:] {
+		t := x.info.TypeOf(arg)
+		name := ""
+		if t != nil {
+			name = types.TypeString(t, nil)
+		}
+		switch name {
+		case clientPackage + ".InNamespace":
+			conv, ok := ast.Unparen(arg).(*ast.CallExpr)
+			if !ok || len(conv.Args) != 1 {
+				return goflow.Node{}, fmt.Errorf("%s: InNamespace must be a conversion of one expression", c)
+			}
+			v, err := x.keyValue(conv.Args[0])
+			if err != nil {
+				return goflow.Node{}, fmt.Errorf("%s: InNamespace: %v", c, err)
+			}
+			namespace = v
+		case clientPackage + ".MatchingFields":
+			lit, ok := ast.Unparen(arg).(*ast.CompositeLit)
+			if !ok || len(lit.Elts) != 1 {
+				return goflow.Node{}, fmt.Errorf("%s: MatchingFields must be a literal with one field", c)
+			}
+			kv, ok := lit.Elts[0].(*ast.KeyValueExpr)
+			if !ok {
+				return goflow.Node{}, fmt.Errorf("%s: MatchingFields must be a literal with one field", c)
+			}
+			if field, ok := x.requestField(kv.Value); !ok || field != "Name" {
+				return goflow.Node{}, fmt.Errorf("%s: MatchingFields selects on %s; only an index on the request's name, an owner index, is supported", c, goflow.Code(kv.Value))
+			}
+			keyResource, _, ok := x.keyObject()
+			if !ok {
+				return goflow.Node{}, fmt.Errorf("%s: the controller's key is not an abstracted object", c)
+			}
+			owned := false
+			for _, ref := range r.References {
+				if ref.Owner && ref.TargetGVK == keyResource.GVK {
+					owned = true
+				}
+			}
+			if !owned {
+				return goflow.Node{}, fmt.Errorf("%s: MatchingFields indexes %s by the request's name, but the abstraction declares no owner reference from %s to %s", c, r.GVK.Kind, r.GVK.Kind, keyResource.GVK.Kind)
+			}
+		default:
+			return goflow.Node{}, fmt.Errorf("%s: unsupported List option %s; only InNamespace and MatchingFields are supported", c, goflow.Code(arg))
+		}
+	}
+	parts := []string{}
+	for _, o := range r.Objects {
+		if namespace != "" && o.Namespace != namespace {
+			continue
+		}
+		parts = append(parts, "("+abstraction.ExistsVariable(r.GVK.Kind, o.ID)+" ? ["+strconv.Quote(o.ID)+"] : [])")
+	}
+	catalog := "[]"
+	if len(parts) > 0 {
+		catalog = strings.Join(parts, " + ")
+	}
+	b := map[string]string{"$items": listSymbol(local), "$catalog": catalog, "$resource": r.GVK.Kind}
+	var options map[string]string
+	if namespace != "" {
+		options = map[string]string{"namespace": namespace}
+	}
+	return goflow.Node{Kind: ir.OpList, Effect: e.Effect, Consistency: e.Consistency, Bindings: b, Options: options}, nil
+}

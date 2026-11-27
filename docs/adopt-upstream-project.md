@@ -105,7 +105,7 @@ arch extract
 It prints:
 
 ```text
-arch extract: unsupported constructs: 25 found, listed in generated/support.yaml
+arch extract: unsupported constructs: 30 found, listed in generated/support.yaml
 ```
 
 `arch extract` writes `generated/support.yaml` and no `ir.yaml`, because a
@@ -167,7 +167,7 @@ arch --strict extract
 ```
 
 ```text
-arch extract: unsupported constructs: 25 found, listed in generated/support.yaml
+arch extract: unsupported constructs: 30 found, listed in generated/support.yaml
 ```
 
 Without an IR, the later commands refuse to run:
@@ -180,7 +180,7 @@ arch render
 ```
 
 ```text
-arch generate: generated/ir.yaml not found; arch extract failed closed on 25 unsupported constructs, listed in generated/support.yaml; first: declaration var activeJobs [ // find the active list of jobs at internal/controller/cronjob_controller.go:163
+arch generate: generated/ir.yaml not found; arch extract failed closed on 30 unsupported constructs, listed in generated/support.yaml; first: declaration var activeJobs [ // find the active list of jobs at internal/controller/cronjob_controller.go:163
 arch check: generated/ir.yaml not found; run arch extract and arch generate first
 arch replay: no traces match generated/traces/*.itf.json; run arch check first or pass --traces
 arch render: no workspace in generated/likec4; run arch generate first

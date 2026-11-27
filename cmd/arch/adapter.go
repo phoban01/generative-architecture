@@ -41,7 +41,7 @@ func (gen generated) replayAdapter() (map[string][]byte, string, error) {
 	}
 	o := gen.controllers[0]
 	objects := objectsOf(*gen.abs)
-	cached, written, read := map[string]bool{}, map[string]bool{}, map[string]bool{}
+	cached, written, read, listed := map[string]bool{}, map[string]bool{}, map[string]bool{}, map[string]bool{}
 	type effectNode struct {
 		id, operation, consistency string
 		object                     abstraction.Object
@@ -52,6 +52,22 @@ func (gen generated) replayAdapter() (map[string][]byte, string, error) {
 			continue
 		}
 		obj, ok := objects[n.Bindings["$exists"]]
+		if !ok && n.Kind == ir.OpList {
+			// A list addresses a resource; the gate matches the call by its
+			// effect alone and the proxy records the namespace.
+			if n.Consistency == ir.ConsistencyCached {
+				// The cache must hold the objects the list returns.
+				if r, ok := resourceByKind(*gen.abs, n.Bindings["$resource"]); ok {
+					for _, obj := range r.Objects {
+						if ns := n.Options["namespace"]; ns == "" || obj.Namespace == ns {
+							listed[obj.ID] = true
+						}
+					}
+				}
+			}
+			effects = append(effects, effectNode{id: n.Effect, operation: n.Kind, consistency: n.Consistency})
+			continue
+		}
 		if !ok {
 			return nil, "", fmt.Errorf("effect %s addresses no abstracted object", n.Effect)
 		}
@@ -103,7 +119,9 @@ func (gen generated) replayAdapter() (map[string][]byte, string, error) {
 				events = append(events, adaptergen.BoundaryEvent{Name: e.id + "_" + out.Name, Effect: e.id, Error: true})
 			}
 		}
-		targets[e.id] = ir.ObjectRef{Namespace: e.object.Namespace, Name: e.object.Name}
+		if e.object.Name != "" {
+			targets[e.id] = ir.ObjectRef{Namespace: e.object.Namespace, Name: e.object.Name}
+		}
 	}
 	if files["gating_generated.go"], err = adaptergen.GenerateBoundaryGating(pkg, o.process, events, targets); err != nil {
 		return nil, "gating: " + err.Error(), nil
@@ -127,7 +145,7 @@ func (gen generated) replayAdapter() (map[string][]byte, string, error) {
 	if files["runtime_generated.go"], err = adaptergen.GenerateRuntime(pkg, g, binding); err != nil {
 		return nil, "runtime: " + err.Error(), nil
 	}
-	main, reason, err := gen.replayMain(o, cached)
+	main, reason, err := gen.replayMain(o, cached, listed)
 	if err != nil || reason != "" {
 		return nil, reason, err
 	}
@@ -144,7 +162,7 @@ func (gen generated) replayAdapter() (map[string][]byte, string, error) {
 // replayMain describes the replay program: the scheme from the Go types
 // the reconciler holds, the fixtures from the abstraction's objects and
 // their initial values, and the reconciler's fields.
-func (gen generated) replayMain(o controllerOutput, cached map[string]bool) (adaptergen.ReplayMain, string, error) {
+func (gen generated) replayMain(o controllerOutput, cached, listed map[string]bool) (adaptergen.ReplayMain, string, error) {
 	var r adaptergen.ReplayMain
 	r.Reconciler.Import, r.Reconciler.Name = o.controller.Package, o.controller.Receiver
 	r.RetryTicks = o.decl.RetryTicks
@@ -162,7 +180,7 @@ func (gen generated) replayMain(o controllerOutput, cached map[string]bool) (ada
 			if exists == "false" {
 				continue
 			}
-			fixture := adaptergen.ReplayObject{Resource: res.GVK, Namespace: obj.Namespace, Name: obj.Name, Cached: cached[obj.ID]}
+			fixture := adaptergen.ReplayObject{Resource: res.GVK, Namespace: obj.Namespace, Name: obj.Name, Cached: cached[obj.ID], Listed: listed[obj.ID] && !cached[obj.ID]}
 			for _, f := range res.Fields {
 				literal, ok := initialValue(gen.project.Spec.Initial, res, obj.ID, f)
 				if !ok {

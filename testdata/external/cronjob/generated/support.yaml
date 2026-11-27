@@ -60,12 +60,42 @@ status:
       location:
         file: internal/controller/cronjob_controller.go
         line: 166
-    - kind: field
-      construct: childJobs.Items
-      reason: unmapped field childJobs.items
+    - kind: closure
+      construct: finishedType
+      reason: closure result local finishedType is not a model symbol
       location:
         file: internal/controller/cronjob_controller.go
-        line: 202
+        line: 203
+    - kind: identifier
+      construct: finishedType
+      reason: unbound local variable finishedType
+      location:
+        file: internal/controller/cronjob_controller.go
+        line: 204
+    - kind: closure
+      construct: scheduledTimeForJob
+      reason: closure result local scheduledTimeForJob is not a model symbol
+      location:
+        file: internal/controller/cronjob_controller.go
+        line: 215
+    - kind: identifier
+      construct: scheduledTimeForJob
+      reason: unbound local variable scheduledTimeForJob
+      location:
+        file: internal/controller/cronjob_controller.go
+        line: 220
+    - kind: identifier
+      construct: mostRecentTime
+      reason: unbound local variable mostRecentTime
+      location:
+        file: internal/controller/cronjob_controller.go
+        line: 221
+    - kind: assign
+      construct: mostRecentTime = scheduledTimeForJob
+      reason: unsupported Go statement
+      location:
+        file: internal/controller/cronjob_controller.go
+        line: 222
     - kind: identifier
       construct: mostRecentTime
       reason: unbound local variable mostRecentTime
@@ -73,7 +103,7 @@ status:
         file: internal/controller/cronjob_controller.go
         line: 227
     - kind: expression
-      construct: '&metav1.Time{Time: *mostRecentTime}'
+      construct: 'metav1.Time{Time: *mostRecentTime}'
       reason: unsupported Go expression
       location:
         file: internal/controller/cronjob_controller.go

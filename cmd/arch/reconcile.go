@@ -45,7 +45,7 @@ type clientEffect struct {
 // operations maps a client method name to its operation key in the summary
 // library. Only operations with summary bindings are listed; other methods
 // are unsupported and fail with the callee named.
-var operations = map[string]string{"Get": ir.OpGet, "Update": ir.OpUpdate, "Create": ir.OpCreate, "Delete": ir.OpDelete, "Patch": ir.OpPatch}
+var operations = map[string]string{"Get": ir.OpGet, "List": ir.OpList, "Update": ir.OpUpdate, "Create": ir.OpCreate, "Delete": ir.OpDelete, "Patch": ir.OpPatch}
 
 // statusWriters are the receivers of a call through Client.Status().
 var statusWriters = map[string]bool{"SubResourceWriter": true, "StatusWriter": true}
@@ -64,7 +64,7 @@ func clientEffects(decl project.Controller) (map[goflow.Callee][]clientEffect, e
 		}
 		op, ok := operations[method]
 		if !ok {
-			return nil, fmt.Errorf("controller %s: %s: method %s is not supported; supported methods are Get, Update, Create, Delete, Status().Update and Status().Patch", decl.Name, e.Call, method)
+			return nil, fmt.Errorf("controller %s: %s: method %s is not supported; supported methods are Get, List, Update, Create, Delete, Status().Update and Status().Patch", decl.Name, e.Call, method)
 		}
 		if op == ir.OpPatch && !statusWriters[receiver] {
 			return nil, fmt.Errorf("controller %s: %s: Patch is supported on the status subresource only", decl.Name, e.Call)
@@ -90,13 +90,16 @@ func clientEffects(decl project.Controller) (map[goflow.Callee][]clientEffect, e
 
 // extraction holds the model names extraction binds Go objects to.
 type extraction struct {
-	decl     project.Controller
-	effects  map[goflow.Callee][]clientEffect
-	keys     map[string]string // key field symbol -> abstraction object
-	cat      *catalog.Catalog
-	info     *types.Info
-	body     *ast.BlockStmt
-	locals   map[string]abstraction.Resource // Go object local -> its resource
+	decl    project.Controller
+	effects map[goflow.Callee][]clientEffect
+	keys    map[string]string // key field symbol -> abstraction object
+	cat     *catalog.Catalog
+	info    *types.Info
+	body    *ast.BlockStmt
+	locals  map[string]abstraction.Resource // Go object local -> its resource
+	// lists marks the object locals that are list types; their Items are
+	// the model list listSymbol(local).
+	lists    map[string]bool
 	resource map[ir.GVK]abstraction.Resource
 	pkg      *packages.Package // the package of Reconcile, for group-version lookups
 	// goTypes records the Go type of each resource the reconciler holds in
@@ -124,7 +127,7 @@ func extractOptions(l goflow.Loaded, abs abstraction.Abstraction, decl project.C
 	if err != nil {
 		return nil, goflow.Options{}, err
 	}
-	x := &extraction{decl: decl, effects: effects, keys: map[string]string{requestKey: decl.Key}, cat: cat, info: l.Package.TypesInfo, body: l.Func.Body, locals: map[string]abstraction.Resource{}, resource: map[ir.GVK]abstraction.Resource{}, pkg: l.Package, goTypes: map[ir.GVK]goType{}}
+	x := &extraction{decl: decl, effects: effects, keys: map[string]string{requestKey: decl.Key}, cat: cat, info: l.Package.TypesInfo, body: l.Func.Body, locals: map[string]abstraction.Resource{}, lists: map[string]bool{}, resource: map[ir.GVK]abstraction.Resource{}, pkg: l.Package, goTypes: map[ir.GVK]goType{}}
 	for symbol, object := range decl.ObjectKeys {
 		x.keys[symbol] = object
 	}
@@ -137,20 +140,19 @@ func extractOptions(l goflow.Loaded, abs abstraction.Abstraction, decl project.C
 	for _, local := range abs.Spec.Locals {
 		scope[local.Name] = expr.Symbol{Type: local.Type, Quint: local.Name}
 	}
-	ast.Inspect(l.Func.Body, func(n ast.Node) bool {
-		a, ok := n.(*ast.AssignStmt)
-		if !ok || err != nil || len(a.Lhs) != 1 {
-			return true
-		}
-		id, ok := a.Lhs[0].(*ast.Ident)
-		if !ok {
-			return true
-		}
+	// declare records a Go local of an abstracted resource type, or of
+	// the list type of one, and puts its selected fields in scope.
+	declare := func(id *ast.Ident) bool {
 		obj, ok := x.info.Defs[id].(*types.Var)
 		if !ok {
 			return true
 		}
-		gvk, ok, gvErr := x.resourceOf(obj.Type())
+		t := obj.Type()
+		item, list := listItem(t)
+		if list {
+			t = item
+		}
+		gvk, ok, gvErr := x.resourceOf(t)
 		if gvErr != nil {
 			err = goflow.NewDiagnostic(l.Package.Fset, id, "group-version", gvErr.Error())
 			return false
@@ -164,12 +166,38 @@ func extractOptions(l goflow.Loaded, abs abstraction.Abstraction, decl project.C
 			return false
 		}
 		x.locals[id.Name] = r
-		if t, ok := namedType(obj.Type()); ok {
-			x.goTypes[gvk] = t
+		if gt, ok := namedType(t); ok {
+			x.goTypes[gvk] = gt
+		}
+		if list {
+			x.lists[id.Name] = true
+			scope[listSymbol(id.Name)] = expr.Symbol{Type: abstraction.TypeList, Quint: listSymbol(id.Name)}
+			return true
 		}
 		for _, f := range r.Fields {
 			v := x.localVariable(id.Name, f)
 			scope[v] = expr.Symbol{Type: f.Type, Quint: v, Domain: r.Domain(f)}
+		}
+		return true
+	}
+	ast.Inspect(l.Func.Body, func(n ast.Node) bool {
+		if err != nil {
+			return false
+		}
+		switch s := n.(type) {
+		case *ast.AssignStmt:
+			if len(s.Lhs) != 1 {
+				return true
+			}
+			if id, ok := s.Lhs[0].(*ast.Ident); ok {
+				return declare(id)
+			}
+		case *ast.ValueSpec:
+			for _, id := range s.Names {
+				if !declare(id) {
+					return false
+				}
+			}
 		}
 		return true
 	})
@@ -238,6 +266,12 @@ func (x *extraction) field(root string, fieldPath []string) (expr.Expression, bo
 	if !ok {
 		return "", false
 	}
+	if x.lists[root] {
+		if abstraction.PathKey(fieldPath) == "items" {
+			return expr.Expression(listSymbol(root)), true
+		}
+		return "", false
+	}
 	for _, f := range r.Fields {
 		if abstraction.PathKey(fieldPath) == abstraction.PathKey(abstraction.JSONPath(f.Path)) {
 			return expr.Expression(x.localVariable(root, f)), true
@@ -258,6 +292,10 @@ func (x *extraction) call(c goflow.Callee, call *ast.CallExpr, _ goflow.Convert)
 		return goflow.Node{}, false, fmt.Errorf("%s: unexpected arity", c)
 	}
 	objArg := call.Args[len(call.Args)-1]
+	if declared[0].Operation == ir.OpList {
+		// List(ctx, list, opts...): the options follow the list.
+		objArg = call.Args[1]
+	}
 	if declared[0].Operation == summaries.OperationKey(ir.OpPatch, "status") {
 		// Patch(ctx, obj, patch): the summary covers client.Merge, the
 		// whole-object merge patch, which carries the object's version.
@@ -273,6 +311,16 @@ func (x *extraction) call(c goflow.Callee, call *ast.CallExpr, _ goflow.Convert)
 	e, ok := effectFor(declared, r.GVK.Kind)
 	if !ok {
 		return goflow.Node{}, false, fmt.Errorf("%s is called with a %s, but no effect is declared for that kind", c, r.GVK.Kind)
+	}
+	if e.Operation == ir.OpList {
+		if !x.lists[local] {
+			return goflow.Node{}, false, fmt.Errorf("%s: %s is not a list local", c, local)
+		}
+		n, err := x.listCall(c, call, local, r, e)
+		return n, err == nil, err
+	}
+	if x.lists[local] {
+		return goflow.Node{}, false, fmt.Errorf("%s: %s is a list local; only List takes one", c, local)
 	}
 	var object string
 	switch e.Operation {
@@ -445,6 +493,17 @@ func (x *extraction) keyLiteral(lit *ast.CompositeLit, r abstraction.Resource) (
 // and namespace come from the object; any other field must have a value
 // domain of one value.
 func (x *extraction) keyValue(v ast.Expr) (string, error) {
+	if field, ok := x.requestField(v); ok {
+		// The request names the controller's key object.
+		_, o, found := x.keyObject()
+		if !found {
+			return "", fmt.Errorf("the controller's key %s is not an abstracted object", x.decl.Key)
+		}
+		if field == "Name" {
+			return o.Name, nil
+		}
+		return o.Namespace, nil
+	}
 	if tv, ok := x.info.Types[v]; ok && tv.Value != nil && tv.Value.Kind() == constant.String {
 		return constant.StringVal(tv.Value), nil
 	}

@@ -144,8 +144,21 @@ func (c controllerModel) build() (model.Spec, []effect.Descriptor, error) {
 			continue
 		}
 		o, ok := objects[n.Bindings["$exists"]]
+		if !ok && n.Kind == ir.OpList {
+			ok = true
+		}
 		if !ok {
 			return model.Spec{}, nil, fmt.Errorf("effect %s addresses no abstracted object", n.Effect)
+		}
+		if n.Kind == ir.OpList {
+			// A list addresses a resource, not one object; its local is a
+			// list of identities (ADR-0011).
+			r, ok := resourceByKind(c.abs, n.Bindings["$resource"])
+			if !ok {
+				return model.Spec{}, nil, fmt.Errorf("effect %s lists no abstracted resource", n.Effect)
+			}
+			o = objectInfo{resource: r}
+			locals[n.Bindings["$items"]] = model.Variable{Type: abstraction.TypeList, Initial: "[]"}
 		}
 		d := effect.Descriptor{ID: n.Effect, Resource: effect.Resource{Group: o.resource.GVK.Group, Version: o.resource.GVK.Version, Kind: o.resource.GVK.Kind}, Operation: n.Kind, Consistency: n.Consistency}
 		if prior, seen := seenEffects[n.Effect]; !seen {
@@ -624,3 +637,13 @@ type part struct {
 }
 
 func (p part) name() string { return p.id }
+
+// resourceByKind finds the abstracted resource of a kind.
+func resourceByKind(abs abstraction.Abstraction, kind string) (abstraction.Resource, bool) {
+	for _, r := range abs.Spec.Resources {
+		if r.GVK.Kind == kind {
+			return r, true
+		}
+	}
+	return abstraction.Resource{}, false
+}

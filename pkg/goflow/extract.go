@@ -237,6 +237,10 @@ func (e *extractor) translate(n ast.Expr) (expr.Expression, error) {
 			}
 		}
 	case *ast.UnaryExpr:
+		if x.Op == token.AND {
+			// Taking the address of a model value changes nothing.
+			return e.translate(x.X)
+		}
 		if x.Op == token.NOT || x.Op == token.SUB {
 			v, err := e.translate(x.X)
 			return expr.Expression(x.Op.String()) + "(" + v + ")", err
